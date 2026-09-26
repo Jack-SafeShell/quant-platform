@@ -34,18 +34,6 @@ const { t } = useI18n()
  **/
 const remainingRouter: AppRouteRecordRaw[] = [
   {
-    path: '/quant',
-    component: Layout,
-    name: 'QuantRoot',
-    meta: { title: '量化研究', icon: 'ep:data-analysis' },
-    children: [{
-      path: 'backtest',
-      name: 'QuantBacktest',
-      component: () => import('@/views/quant/backtest/index.vue'),
-      meta: { title: '历史回测', noCache: true }
-    }]
-  },
-  {
     path: '/redirect',
     component: Layout,
     name: 'RedirectRoot',

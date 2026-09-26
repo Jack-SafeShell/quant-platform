@@ -1,4 +1,4 @@
-"""Apply only this project's additive quant schema, using existing local master credentials.
+"""Apply this project's additive quant schema and admin menu, using local master credentials.
 
 Requires existing PyYAML and PyMySQL. Does not import upstream demo data or modify other schemas.
 """
@@ -16,16 +16,19 @@ if url.path != '/quant-platform':
 conn = pymysql.connect(host=url.hostname, port=url.port or 3306, user=cfg['username'], password=str(cfg['password']),
                        database='quant-platform', charset='utf8mb4', connect_timeout=10)
 try:
-    sql = (root / 'sql/quant/001_backtest.sql').read_text(encoding='utf-8')
-    sql = '\n'.join(line for line in sql.splitlines() if not line.lstrip().startswith('--'))
     cursor = conn.cursor()
-    for statement in sql.split(';'):
-        if not statement.strip():
-            continue
-        if not statement.strip().startswith('CREATE TABLE IF NOT EXISTS quant_'):
-            raise RuntimeError('Unexpected migration statement')
-        cursor.execute(statement)
+    for migration in ('001_backtest.sql', '002_backtest_menu.sql'):
+        sql = (root / 'sql/quant' / migration).read_text(encoding='utf-8')
+        sql = '\n'.join(line for line in sql.splitlines() if not line.lstrip().startswith('--'))
+        for statement in sql.split(';'):
+            statement = statement.strip()
+            if not statement:
+                continue
+            if not (statement.startswith('CREATE TABLE IF NOT EXISTS quant_')
+                    or statement.startswith('INSERT INTO system_menu')):
+                raise RuntimeError(f'Unexpected migration statement in {migration}')
+            cursor.execute(statement)
     conn.commit()
-    print('QUANT_SCHEMA_OK (5 additive tables)')
+    print('QUANT_MIGRATIONS_OK (5 tables, 3 menu records)')
 finally:
     conn.close()

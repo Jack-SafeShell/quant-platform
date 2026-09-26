@@ -162,6 +162,7 @@
   </ContentWrap>
 </template>
 <script lang="ts" setup>
+import { ElMessageBox } from 'element-plus'
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import * as LeaveApi from '@/api/bpm/leave'

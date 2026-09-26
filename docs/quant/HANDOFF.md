@@ -16,8 +16,8 @@
 
 - Java 25.0.4 / Maven 3.9.9；新增模块后单体 package 成功。
 - 11 项量化单元/集成测试（H2、真实服务与仓储、引擎结果解析）通过：并发幂等、租户/用户隔离、摘要篡改拒绝、覆盖/预热拒绝、原子结果提交、重启中断、只回测命令与真实版本证据。
-- 1 项单体配置导入测试通过；另有 1 项实际 MySQL + Docker Freqtrade 回测测试通过。不是完整后台登录的端到端测试。
-- 前端 build:local 成功；全量 ts:check 仍为原有 11 条错误，量化新增代码未新增报错。错误涉及旧 AI/BPM/IoT/MES/PMS 自动声明与 FMS 两处类型。
+- 1 项单体配置导入测试通过；另有 1 项实际 MySQL + Docker Freqtrade 回测测试通过。
+- 管理后台已完成登录、动态菜单、页面和成功任务列表的浏览器验收；前端 `build:local` 与全量 `ts:check` 均通过。
 - RDS 仅本项目 quant-platform；Redis 既有基线 healthy/PONG，本轮没有更改 Redis 配置。
 - 真实任务与结果记录保留在本项目数据库，失败的开发烟测也保留，没有伪造 SUCCEEDED。早期一个 smoke 样本结果已按精确任务 ID 转为最终统一结果协议，没有改其他数据。
 
@@ -34,19 +34,19 @@
 
 ## 当前限制
 
-1. **RDS 尚无芋道 system/infra 基础表，包括 system_users/system_menu。** 因此尚不能通过管理后台登录使用页面。本轮没有导入上游整套演示数据，也没有绕过认证。实际验证覆盖内部生产服务 → Docker 引擎 → MySQL，不声称完成浏览器登录后的验收。
-2. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
-3. 固定策略、BTC/USDT 现货 1h，无策略编辑、参数优化、模拟交易、用户取消、自动重试或实盘。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
-4. 现有 11 条前端类型错误未扩展修复；根 Spring Boot 4.1.0 / BOM 4.1.1 原样保留。
-5. application-local.yaml 已跟踪、前端 .env.local 已暂存，ignore 无法从索引排除；现有测试 RDS useSSL=false、local mock-enable=true 未修改。正式环境前需另行治理。
-6. main 的 origin/main 本地显示 gone，仅记录，未访问上游或修改跟踪。
+1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与 quant 表。量化动态菜单迁移已应用，管理员登录后可见“量化研究 / 历史回测”。
+2. 2026-09-27 浏览器验收已覆盖登录、动态菜单、历史回测页面、配置启用状态和已有成功任务列表。浏览器自动化未新增任务：Element Plus 日期范围控件的自动化文本输入未提交 Vue 范围模型，因此没有把该尝试计入成功证据。
+3. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
+4. 固定策略、BTC/USDT 现货 1h，无策略编辑、参数优化、模拟交易、用户取消、自动重试或实盘。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
+5. 根 Spring Boot 4.1.0 / BOM 4.1.1 原样保留。聚合 package 后各 server 模块会生成可执行 JAR；本地启动需先以 `-Dspring-boot.repackage.skip=true clean install` 安装普通模块 JAR，再从 `yudao-server` 执行 `spring-boot:run`。
+6. application-local.yaml 与前端 .env.local 为既有跟踪配置；现有测试 RDS useSSL=false、local mock-enable=true 未修改。正式环境前需另行治理。
 
 ## Git 和操作边界
 
-仍在 main，HEAD 8b779690b。本轮不 commit、不 push、不 fetch/pull/merge/rebase。origin 唯一可推送，yudao-cloud 仅用户安排时读取。
-现有暂存区保持原样；原有 application-local.yaml、前端锁文件、pnpm-workspace.yaml、README 及其他用户内容保留。前端 remaining.ts 只增加量化路由，未格式化整文件。文档及主 POM/单体配置的修改均为本轮明确范围。
+仍在 main；本阶段完成后提交并显式推送 `origin main`。origin 是唯一推送目标，yudao-cloud 未访问。
+原有用户内容保留。前端量化入口已改为数据库动态菜单，不再依赖 remaining.ts 静态路由。
 Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，回测容器无凭据、无端口、无真实交易命令。
 
 ## 下一步唯一推荐任务
 
-**初始化芋道单体所需的最小 system/infra 基础库与管理员/权限配置，完成登录后通过页面提交并查看回测的端到端验收。** 使用本项目库、增量可复核方案，不盲目执行含 DROP/DELETE 的完整上游 SQL，不关闭鉴权。先补齐这一已确认的运行前置条件，再扩展策略版本管理。
+**实现策略与不可变策略版本管理，并让历史回测任务显式引用策略版本。** 继续保持固定策略、历史回测和 `dry_run=true` 边界，暂不扩展模拟盘或实盘。

@@ -6,7 +6,7 @@
 
 `yudao-module-quant-api` 定义请求与状态；`yudao-module-quant-server` 提供控制器、服务、JDBC 持久化、单线程持久队列及 Freqtrade CLI 适配器。根 Maven reactor 和 `yudao-server/pom.xml` 均已接入。不是独立微服务，无新 Nacos 配置。
 
-前端 `/quant/backtest` 提供提交、列表、详情和成交结果。API 使用芋道既有认证及 `quant:backtest:create` / `quant:backtest:query` 权限；操作只可读取当前租户、当前用户的任务。首版面向个人超级管理员，普通角色的权限菜单配置尚待随基础库初始化接入，不提供匿名或免鉴权入口。
+前端 `/quant/backtest` 提供提交、列表、详情和成交结果。API 使用芋道既有认证及 `quant:backtest:create` / `quant:backtest:query` 权限；操作只可读取当前租户、当前用户的任务。`sql/quant/002_backtest_menu.sql` 以幂等方式注册“量化研究 / 历史回测”动态菜单和权限按钮；普通角色仍需由管理员分配菜单权限，不提供匿名或免鉴权入口。
 
 范围限定：OKX/Binance、BTC/USDT 现货、1h、固定 QuantEmaBaseline 策略。当前自动数据准备脚本接 OKX；Binance 数据集可按相同清单格式准备，但本轮没有 Binance 实测。策略 EMA20/EMA60、止损 2%、ROI 4%、只做多，240 根预热。只能调整区间、初始资金、单笔投入、单边手续费。不是盈利策略推荐。
 
@@ -27,7 +27,7 @@ java -jar yudao-server/target/yudao-server.jar
 
 支持 QUANT_DOCKER_EXECUTABLE、QUANT_FREQTRADE_IMAGE、QUANT_BACKTEST_TIMEOUT。镜像要求官方仓库 sha256 摘要固定，当前为已实测 Freqtrade 2026.8；超时默认 600 秒，范围 30..3600 秒。运行账户需要本机 Docker 权限。Docker Engine 与该应用必须在同一台主机，工作目录使用绝对路径。
 
-**当前 RDS 缺少芋道 system/infra 基础表，因此不能把本轮回测验证称为已完成管理后台登录和页面端到端验收。** 本轮只创建五张 quant 表，未导入整套上游演示库。不要为了启动而关闭认证或租户校验。当前 mock-enable 是用户原本的 local 配置，本轮未改变；正式环境须关闭。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用五张 quant 表及三条量化菜单记录。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。当前 mock-enable 是用户原本的 local 配置，本轮未改变；正式环境须关闭。
 
 ## 数据与迁移
 
@@ -36,7 +36,7 @@ python script/quant/migrate.py
 python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --end 2026-09-01
 ```
 
-迁移脚本只执行 `sql/quant/001_backtest.sql` 的 CREATE TABLE IF NOT EXISTS quant_*，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
+迁移脚本只执行 `sql/quant/001_backtest.sql` 的 `CREATE TABLE IF NOT EXISTS quant_*` 和 `sql/quant/002_backtest_menu.sql` 的幂等菜单插入，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
 
 数据脚本仅需 Python 标准库，下载公开且已确认的小时 K 线；包含 240 根预热，校验时间连续性、OHLCV 数值及价格关系。存在的数据集 ID 拒绝覆盖，重新下载需新 ID。本轮已存在 `okx-btc-202608`，不要重复执行同一 ID。
 
