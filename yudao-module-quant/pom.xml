@@ -1,0 +1,6 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>cn.iocoder.cloud</groupId><artifactId>yudao</artifactId><version>${revision}</version></parent>
+  <artifactId>yudao-module-quant</artifactId><packaging>pom</packaging>
+  <modules><module>yudao-module-quant-api</module><module>yudao-module-quant-server</module></modules>
+</project>

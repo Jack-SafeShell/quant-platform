@@ -1,0 +1,13 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>cn.iocoder.cloud</groupId><artifactId>yudao-module-quant</artifactId><version>${revision}</version></parent>
+  <artifactId>yudao-module-quant-server</artifactId>
+  <dependencies>
+    <dependency><groupId>cn.iocoder.cloud</groupId><artifactId>yudao-module-quant-api</artifactId><version>${revision}</version></dependency>
+    <dependency><groupId>cn.iocoder.cloud</groupId><artifactId>yudao-spring-boot-starter-security</artifactId></dependency>
+    <dependency><groupId>cn.iocoder.cloud</groupId><artifactId>yudao-spring-boot-starter-biz-tenant</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,25 @@
+name: quant-platform
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: quant-platform-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${QUANT_REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+volumes:
+  redis-data:
+    name: quant-platform-redis-data
+networks:
+  local:
+    name: quant-platform-local
