@@ -17,7 +17,7 @@ class FreqtradeEngineTest {
     @Test void commandHasNoTradingOrUserSuppliedExecutable() {
         var props = new QuantProperties();
         var engine = new FreqtradeBacktestEngine(props);
-        var req = new BacktestRequest("key", "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        var req = new BacktestRequest("key", UUID.randomUUID().toString(), "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         var data = new DatasetRegistry.Dataset("test", "okx", "hash", "test", root, 0, 0, 300);
         var input = new BacktestEngine.Input(UUID.randomUUID().toString(), req, data, "source", "hash");
         var args = engine.command(input, root);

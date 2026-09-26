@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 /** Fixed strategy, BTC/USDT spot, 1h. Dates are UTC; end is exclusive. */
 public record BacktestRequest(
         @NotBlank @Pattern(regexp = "[A-Za-z0-9_-]{1,64}") String requestKey,
+        @NotBlank @Pattern(regexp = "[0-9a-f-]{36}") String strategyVersionId,
         @NotBlank @Pattern(regexp = "[A-Za-z0-9_-]{1,64}") String datasetId,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String startDate,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String endDate,

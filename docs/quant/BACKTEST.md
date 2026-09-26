@@ -52,16 +52,17 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/list`：当前用户最近 100 条，不含大结果正文。
 - GET `/quant/backtest/get?id=...`：参数、策略/行情摘要、状态与结果。
 - GET `/quant/backtest/capabilities`：当前开关与固定能力。
+- GET `/quant/backtest/strategy-versions`：当前租户、当前用户可用的不可变策略版本。
 
 请求示例（不含认证信息）：
 
 ```json
-{"requestKey":"research-202608-001","datasetId":"okx-btc-202608","startDate":"2026-08-01","endDate":"2026-09-01","startingBalance":1000,"stakeAmount":100,"fee":0.001}
+{"requestKey":"research-202608-001","strategyVersionId":"<UUID>","datasetId":"okx-btc-202608","startDate":"2026-08-01","endDate":"2026-09-01","startingBalance":1000,"stakeAmount":100,"fee":0.001}
 ```
 
 UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/requestKey 的相同请求返回原 ID，不重跑；不同参数使用同一键会拒绝。失败后使用新键，不覆盖旧实验。每用户提交前检查最多 10 个待处理任务；该检查不作为严格的全局并发配额。
 
-数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。首版每个实验保存独立不可变策略快照，尚无策略库编辑或版本复用 UI。结果和 SUCCEEDED 状态在同一事务提交。
+数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。内置策略按源码摘要注册并复用不可变版本；页面必须显式选择版本，服务端校验租户、用户归属及源码摘要。当前不开放任意 Python 源码编辑。结果和 SUCCEEDED 状态在同一事务提交。
 
 状态：QUEUED → RUNNING → SUCCEEDED/FAILED。单线程 worker 从 DB 领取，CAS 防止重复领取；应用重启时先停止已知专属容器，将中断任务标失败，不自动重试。当前只支持单个应用实例及固定共享工作目录，文件锁防止同目录并行启动；不支持多个主机/多个工作目录同时消费同一数据库。取消、分布式租约、自动重试和归档清理不在首版范围。
 

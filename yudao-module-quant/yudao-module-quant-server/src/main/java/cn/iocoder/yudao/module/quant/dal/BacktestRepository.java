@@ -17,10 +17,12 @@ public class BacktestRepository {
           t.engine_image AS engineImage, t.error_message AS errorMessage, t.created_at AS createdAt,
           t.started_at AS startedAt, t.finished_at AS finishedAt, t.request_hash AS requestHash,
           t.tenant_id AS tenantId, t.owner_id AS ownerId,
+          t.strategy_version_id AS strategyVersionId, s.name AS strategyName,
           v.source_hash AS strategyHash, v.source_code AS strategySource, p.parameters_json AS parametersJson,
           r.engine_version AS engineVersion, r.artifact_hash AS artifactHash, r.result_json AS resultJson
         FROM quant_backtest_task t
         JOIN quant_strategy_version v ON v.id=t.strategy_version_id
+        JOIN quant_strategy s ON s.id=v.strategy_id
         JOIN quant_parameter_set p ON p.id=t.parameter_set_id
         LEFT JOIN quant_backtest_result r ON r.task_id=t.id
         """;
@@ -37,11 +39,9 @@ public class BacktestRepository {
         return jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task WHERE tenant_id=? AND owner_id=? AND status IN ('QUEUED','RUNNING')", Integer.class, tenant, owner);
     }
     public void insert(String id, long tenant, long owner, String key, String requestHash, String params,
-                       String source, DatasetRegistry.Dataset dataset, String image) {
-        String strategy = UUID.randomUUID().toString(), version = UUID.randomUUID().toString(), parameter = UUID.randomUUID().toString();
+                       String version, DatasetRegistry.Dataset dataset, String image) {
+        String parameter = UUID.randomUUID().toString();
         long now = System.currentTimeMillis();
-        jdbc.update("INSERT INTO quant_strategy (id,name,tenant_id,owner_id,created_at) VALUES (?,?,?,?,?)", strategy, "QuantEmaBaseline", tenant, owner, now);
-        jdbc.update("INSERT INTO quant_strategy_version (id,strategy_id,source_code,source_hash) VALUES (?,?,?,?)", version, strategy, source, DatasetRegistry.hash(source.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         jdbc.update("INSERT INTO quant_parameter_set (id,parameters_json,parameters_hash) VALUES (?,?,?)", parameter, params, requestHash);
         jdbc.update("""
             INSERT INTO quant_backtest_task
@@ -49,6 +49,33 @@ public class BacktestRepository {
              dataset_hash,dataset_source,exchange_name,engine_image,status,created_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, id, tenant, owner, key, requestHash, version, parameter, dataset.id(), dataset.sha256(), dataset.source(), dataset.exchange(), image, "QUEUED", now);
+    }
+    public Map<String, Object> findVersion(long tenant, long owner, String id) {
+        return first(jdbc.queryForList("""
+            SELECT v.id, v.strategy_id AS strategyId, s.name AS strategyName,
+              v.source_code AS sourceCode, v.source_hash AS sourceHash
+            FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id
+            WHERE s.tenant_id=? AND s.owner_id=? AND v.id=?
+            """, tenant, owner, id));
+    }
+    public List<Map<String, Object>> listVersions(long tenant, long owner) {
+        return jdbc.queryForList("""
+            SELECT v.id, v.strategy_id AS strategyId, s.name AS strategyName, v.source_hash AS sourceHash
+            FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id
+            WHERE s.tenant_id=? AND s.owner_id=? ORDER BY s.created_at, v.id
+            """, tenant, owner);
+    }
+    public String ensureVersion(long tenant, long owner, String name, String source, String hash) {
+        List<String> ids = jdbc.queryForList("""
+            SELECT v.id FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id
+            WHERE s.tenant_id=? AND s.owner_id=? AND s.name=? AND v.source_hash=? LIMIT 1
+            """, String.class, tenant, owner, name, hash);
+        if (!ids.isEmpty()) return ids.getFirst();
+        String strategy = UUID.randomUUID().toString(), version = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+        jdbc.update("INSERT INTO quant_strategy (id,name,tenant_id,owner_id,created_at) VALUES (?,?,?,?,?)", strategy, name, tenant, owner, now);
+        jdbc.update("INSERT INTO quant_strategy_version (id,strategy_id,source_code,source_hash) VALUES (?,?,?,?)", version, strategy, source, hash);
+        return version;
     }
     public Map<String, Object> next() {
         return first(jdbc.queryForList(VIEW + " WHERE t.status='QUEUED' ORDER BY t.created_at,t.id LIMIT 1"));

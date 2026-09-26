@@ -36,6 +36,11 @@ public class BacktestController {
     public CommonResult<Map<String, Object>> capabilities() {
         return success(Map.of("enabled", properties.isEnabled(), "strategy", "QuantEmaBaseline", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot"));
     }
+    @GetMapping("/strategy-versions")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String, Object>>> strategyVersions() throws Exception {
+        return success(service.listStrategyVersions(tenant(), owner()));
+    }
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
     private static long owner() { return Objects.requireNonNull(SecurityFrameworkUtils.getLoginUserId(), "用户上下文缺失"); }
     @ExceptionHandler(IllegalArgumentException.class)

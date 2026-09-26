@@ -37,12 +37,16 @@ public class BacktestService {
         DatasetRegistry.Dataset dataset;
         try { dataset = datasets.load(request.datasetId(), start, end); }
         catch (java.nio.file.NoSuchFileException e) { throw new IllegalArgumentException("数据集尚未准备，请先运行数据准备脚本"); }
-        String source = new ClassPathResource("quant/QuantEmaBaseline.py").getContentAsString(StandardCharsets.UTF_8);
+        Map<String, Object> version = repository.findVersion(tenant, owner, request.strategyVersionId());
+        if (version == null) throw new IllegalArgumentException("策略版本不存在或无权访问");
+        String source = (String) version.get("sourceCode");
+        String sourceHash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        if (!sourceHash.equals(version.get("sourceHash"))) throw new IllegalArgumentException("策略版本摘要不符");
         String id = UUID.randomUUID().toString();
         try {
             transaction.executeWithoutResult(status -> {
                 if (repository.pending(tenant, owner) >= 10) throw new IllegalArgumentException("待处理任务过多，请等待现有任务完成");
-                repository.insert(id, tenant, owner, request.requestKey(), digest, params, source, dataset, properties.getImage());
+                repository.insert(id, tenant, owner, request.requestKey(), digest, params, request.strategyVersionId(), dataset, properties.getImage());
             });
             return id;
         } catch (DuplicateKeyException e) {
@@ -50,6 +54,12 @@ public class BacktestService {
             if (existing == null) throw e;
             return sameRequest(existing, digest);
         }
+    }
+    public List<Map<String, Object>> listStrategyVersions(long tenant, long owner) throws Exception {
+        String source = new ClassPathResource("quant/QuantEmaBaseline.py").getContentAsString(StandardCharsets.UTF_8);
+        String hash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        transaction.executeWithoutResult(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));
+        return repository.listVersions(tenant, owner);
     }
     private static String sameRequest(Map<String, Object> existing, String hash) {
         if (!hash.equals(existing.get("requestHash"))) throw new IllegalArgumentException("同一请求标识已用于不同参数");
@@ -68,7 +78,7 @@ public class BacktestService {
         // Explicit whitelist also normalizes JDBC drivers that fold column-label case.
         for (String key : List.of("id", "status", "requestKey", "datasetId", "datasetHash", "datasetSource",
                 "exchangeName", "engineImage", "errorMessage", "createdAt", "startedAt", "finishedAt",
-                "strategyHash", "parametersJson", "engineVersion", "artifactHash")) result.put(key, task.get(key));
+                "strategyVersionId", "strategyName", "strategyHash", "parametersJson", "engineVersion", "artifactHash")) result.put(key, task.get(key));
         if (detail) result.put("resultJson", task.get("resultJson"));
         return result;
     }

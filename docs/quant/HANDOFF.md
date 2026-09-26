@@ -1,6 +1,6 @@
 # 项目交接
 
-更新：2026-09-27（Asia/Shanghai）。路线已确定：Freqtrade + Spring Boot 单体；不再单独做选型或设计评审。本轮已实现并验证首个固定策略历史回测闭环。
+更新：2026-09-27（Asia/Shanghai）。路线已确定：Freqtrade + Spring Boot 单体；首个固定策略历史回测闭环及不可变策略版本引用已实现。
 
 ## 已落地
 
@@ -10,6 +10,7 @@
 - 五张独立表：quant_strategy、quant_strategy_version、quant_parameter_set、quant_backtest_task、quant_backtest_result。已在项目 RDS 实际执行增量建表，无 DROP、删库或其他库操作。
 - 持久队列、同键幂等、原子领取、事务结果提交、数据覆盖/摘要验证、重启中断处理与专属 Docker 容器回测。
 - 前端 /quant/backtest：提交、刷新/轮询、实验摘要、统一结果和模拟成交查看。
+- 内置策略按源码摘要注册并复用不可变版本；回测显式引用版本，前端可选择版本，后端校验租户、用户和摘要。
 - 新增数据准备、迁移与实际烟测脚本，详见 [BACKTEST](BACKTEST.md)。未导入 PoC 文件或操作其服务。
 
 ## 验证结果
@@ -49,4 +50,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**实现策略与不可变策略版本管理，并让历史回测任务显式引用策略版本。** 继续保持固定策略、历史回测和 `dry_run=true` 边界，暂不扩展模拟盘或实盘。
+**实现参数集复用与历史回测实验对比。** 继续保持固定策略、历史回测和 `dry_run=true` 边界，暂不扩展模拟盘或实盘。

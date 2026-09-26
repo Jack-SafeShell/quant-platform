@@ -4,6 +4,7 @@
     <p class="text-gray-500">用于验证研究流程。止损 2%、止盈 4%，包含 240 根预热；日期按 UTC，结束日不包含在区间内。</p>
     <el-alert v-if="!enabled" title="回测尚未启用。请先完成数据准备，并在 yudao-server 中启用量化回测配置。" type="warning" :closable="false" />
     <el-form :model="form" label-width="110px" class="mt-4" @submit.prevent="submit">
+      <el-form-item label="策略版本"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="请选择不可变策略版本"><el-option v-for="item in strategyVersions" :key="item.id" :label="`${item.strategyName} · ${item.sourceHash.slice(0, 12)}`" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="数据集编号"><el-input v-model="form.datasetId" placeholder="例如 okx-btc-202608" maxlength="64" /></el-form-item>
       <el-form-item label="UTC 日期区间"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /></el-form-item>
       <el-form-item label="初始资金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
@@ -29,6 +30,7 @@
         <el-descriptions-item label="任务编号">{{ selected.id }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ statusLabel(selected.status) }}</el-descriptions-item>
         <el-descriptions-item label="策略 SHA-256">{{ selected.strategyHash }}</el-descriptions-item>
+        <el-descriptions-item label="策略版本">{{ selected.strategyName }} / {{ selected.strategyVersionId }}</el-descriptions-item>
         <el-descriptions-item label="行情 SHA-256">{{ selected.datasetHash }}</el-descriptions-item>
         <el-descriptions-item label="数据来源">{{ selected.datasetSource }}</el-descriptions-item>
         <el-descriptions-item label="引擎版本">{{ selected.engineVersion || '尚未完成' }}</el-descriptions-item>
@@ -57,8 +59,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities } from '@/api/quant/backtest'
-import type { BacktestTask } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions } from '@/api/quant/backtest'
+import type { BacktestTask, StrategyVersion } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
 interface Result {
@@ -68,7 +70,8 @@ interface Result {
   maxDrawdownRatio: number
   trades: Array<{ instrument: string; openedAt: string; closedAt: string; netProfit: number; exitReason: string }>
 }
-const form = reactive({ datasetId: '', startingBalance: 1000, stakeAmount: 100, fee: 0.001 })
+const form = reactive({ strategyVersionId: '', datasetId: '', startingBalance: 1000, stakeAmount: 100, fee: 0.001 })
+const strategyVersions = ref<StrategyVersion[]>([])
 const dates = ref<string[]>([])
 const tasks = ref<BacktestTask[]>([])
 const selected = ref<BacktestTask>()
@@ -84,8 +87,8 @@ let lastPayload = ''
 let requestKey = ''
 async function submit() {
   if (submitting.value) return
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
-    ElMessage.warning('请填写有效数据集编号和日期区间')
+  if (!form.strategyVersionId || !/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
+    ElMessage.warning('请选择策略版本并填写有效数据集编号和日期区间')
     return
   }
   const params = { ...form, startDate: dates.value[0], endDate: dates.value[1] }
@@ -111,6 +114,8 @@ async function showDetail(id: string) { selected.value = await getBacktest(id); 
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(async () => {
   enabled.value = (await getCapabilities()).enabled
+  strategyVersions.value = await listStrategyVersions()
+  if (strategyVersions.value.length) form.strategyVersionId = strategyVersions.value[0].id
   await refresh()
   timer = setInterval(() => { if (tasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status))) void refresh().catch(() => {}) }, 5000)
 })

@@ -27,6 +27,7 @@ class QuantBacktestTest {
     BacktestService service;
     DataSourceTransactionManager transactions;
     JdbcTemplate jdbc;
+    String versionId;
     @BeforeEach void setup() throws Exception {
         properties = new QuantProperties(); properties.setWorkspace(root.toString()); properties.setEnabled(true);
         DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", "sa", "");
@@ -35,6 +36,7 @@ class QuantBacktestTest {
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
         writeDataset();
+        versionId = (String) service.listStrategyVersions(1, 10).getFirst().get("id");
     }
     void writeDataset() throws Exception {
         Path dir = root.resolve("datasets/test"); Files.createDirectories(dir);
@@ -45,8 +47,8 @@ class QuantBacktestTest {
         Files.write(dir.resolve("BTC_USDT-1h.json"), content);
         Files.writeString(dir.resolve("manifest.json"), JsonUtils.toJsonString(Map.of("exchange", "okx", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "sha256", DatasetRegistry.hash(content), "source", "synthetic test fixture")));
     }
-    static BacktestRequest request(String key) {
-        return new BacktestRequest(key, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+    BacktestRequest request(String key) {
+        return new BacktestRequest(key, versionId, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
     }
     @Test void idempotencyAndOwnerIsolation() throws Exception {
         String id = service.create(1, 10, request("same"));
@@ -55,9 +57,11 @@ class QuantBacktestTest {
         assertThrows(IllegalArgumentException.class, () -> service.get(2, 10, id));
         assertThrows(IllegalArgumentException.class, () -> service.get(1, 11, id));
         assertTrue(service.list(2, 10).isEmpty());
-        var changed = new BacktestRequest("same", "test", "2025-01-11", "2025-01-12", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        var changed = new BacktestRequest("same", versionId, "test", "2025-01-11", "2025-01-12", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         assertThrows(IllegalArgumentException.class, () -> service.create(1, 10, changed));
-        assertNotEquals(id, service.create(2, 10, request("same")));
+        String otherVersion = (String) service.listStrategyVersions(2, 10).getFirst().get("id");
+        var otherRequest = new BacktestRequest("same", otherVersion, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        assertNotEquals(id, service.create(2, 10, otherRequest));
     }
     @Test void durableQueueCompletesExactlyOnceAndPersistsResult() throws Exception {
         AtomicInteger calls = new AtomicInteger();
@@ -94,6 +98,16 @@ class QuantBacktestTest {
         properties.setEnabled(false);
         assertThrows(IllegalArgumentException.class, () -> service.create(1, 1, request("disabled")));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task", Integer.class));
+    }
+    @Test void strategyVersionIsExplicitImmutableAndOwnerScoped() throws Exception {
+        var versions = service.listStrategyVersions(1, 10);
+        assertEquals(versionId, versions.getFirst().get("id"));
+        assertThrows(IllegalArgumentException.class, () -> service.create(1, 11, request("foreign-version")));
+        String id = service.create(1, 10, request("versioned"));
+        var task = service.get(1, 10, id);
+        assertEquals(versionId, task.get("strategyVersionId"));
+        assertEquals("QuantEmaBaseline", task.get("strategyName"));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM quant_strategy_version", Integer.class));
     }
     @Test void resultAndStateCommitAtomically() throws Exception {
         String id = service.create(1, 10, request("tx"));

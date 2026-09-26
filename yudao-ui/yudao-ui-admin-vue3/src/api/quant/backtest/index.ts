@@ -2,6 +2,7 @@ import request from '@/config/axios'
 
 export interface BacktestRequest {
   requestKey: string
+  strategyVersionId: string
   datasetId: string
   startDate: string
   endDate: string
@@ -18,6 +19,8 @@ export interface BacktestTask {
   datasetSource: string
   exchangeName: string
   strategyHash: string
+  strategyVersionId: string
+  strategyName: string
   engineImage: string
   engineVersion?: string
   artifactHash?: string
@@ -35,3 +38,11 @@ export const getBacktest = (id: string): Promise<BacktestTask> =>
   request.get({ url: '/quant/backtest/get', params: { id } })
 export const getCapabilities = (): Promise<{ enabled: boolean }> =>
   request.get({ url: '/quant/backtest/capabilities' })
+export interface StrategyVersion {
+  id: string
+  strategyId: string
+  strategyName: string
+  sourceHash: string
+}
+export const listStrategyVersions = (): Promise<StrategyVersion[]> =>
+  request.get({ url: '/quant/backtest/strategy-versions' })
