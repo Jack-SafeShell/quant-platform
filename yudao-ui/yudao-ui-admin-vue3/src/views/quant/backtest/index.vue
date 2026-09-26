@@ -6,13 +6,16 @@
     <el-form :model="form" label-width="110px" class="mt-4" @submit.prevent="submit">
       <el-form-item label="策略版本"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="请选择不可变策略版本"><el-option v-for="item in strategyVersions" :key="item.id" :label="`${item.strategyName} · ${item.sourceHash.slice(0, 12)}`" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="参数集"><el-select v-model="form.parameterSetId" class="w-70%" placeholder="请选择参数集" @change="applyParameterSet"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select><el-button class="ml-2" @click="saveParameterSet">保存当前参数</el-button></el-form-item>
-      <el-form-item label="数据集编号"><el-input v-model="form.datasetId" placeholder="例如 okx-btc-202608" maxlength="64" /></el-form-item>
+      <el-form-item label="数据集"><el-select v-model="form.datasetId" class="w-100%" placeholder="请选择质量校验通过的数据集"><el-option v-for="item in datasets.filter(value => value.status === 'VALID')" :key="item.id" :label="`${item.id} · ${item.exchange} · ${item.candles} 根`" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="UTC 日期区间"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /></el-form-item>
       <el-form-item label="初始资金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
       <el-form-item label="单笔投入"><el-input-number v-model="form.stakeAmount" :min="10" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
       <el-form-item label="单边费率"><el-input-number v-model="form.fee" :min="0" :max="0.01" :step="0.0001" :precision="4" /><span class="ml-2">0.001 = 0.1%</span></el-form-item>
       <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">提交历史回测</el-button></el-form-item>
     </el-form>
+  </ContentWrap>
+  <ContentWrap title="行情数据集与质量报告">
+    <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
   </ContentWrap>
   <ContentWrap title="我的回测任务（最近 100 条）">
     <el-button :loading="loading" @click="refresh">刷新</el-button>
@@ -65,8 +68,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests } from '@/api/quant/backtest'
-import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets } from '@/api/quant/backtest'
+import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
 interface Result {
@@ -82,6 +85,7 @@ const parameterSets = ref<ParameterSet[]>([])
 const selectedIds = ref<string[]>([])
 const comparisons = ref<BacktestComparison[]>([])
 const compareVisible = ref(false)
+const datasets = ref<DatasetQuality[]>([])
 const dates = ref<string[]>([])
 const tasks = ref<BacktestTask[]>([])
 const selected = ref<BacktestTask>()
@@ -133,6 +137,8 @@ onMounted(async () => {
   if (strategyVersions.value.length) form.strategyVersionId = strategyVersions.value[0].id
   parameterSets.value = await listParameterSets()
   if (parameterSets.value.length) { form.parameterSetId = parameterSets.value[0].id; applyParameterSet(form.parameterSetId) }
+  datasets.value = await listDatasets()
+  if (datasets.value.some(item => item.status === 'VALID')) form.datasetId = datasets.value.find(item => item.status === 'VALID')!.id
   await refresh()
   timer = setInterval(() => { if (tasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status))) void refresh().catch(() => {}) }, 5000)
 })

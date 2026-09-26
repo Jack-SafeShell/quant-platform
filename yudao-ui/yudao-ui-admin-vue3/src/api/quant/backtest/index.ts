@@ -61,6 +61,22 @@ export interface BacktestComparison {
   returnRatio: number
   maxDrawdownRatio: number
 }
+export interface DatasetQuality {
+  id: string
+  status: 'VALID' | 'INVALID'
+  exchange: string
+  pair: string
+  timeframe: string
+  tradingMode: string
+  sha256: string
+  source: string
+  firstTimestamp: number
+  lastTimestamp: number
+  candles: number
+  gaps: number
+  error?: string
+}
 export const listParameterSets = (): Promise<ParameterSet[]> => request.get({ url: '/quant/backtest/parameter-sets' })
 export const createParameterSet = (data: Pick<BacktestRequest, 'startingBalance' | 'stakeAmount' | 'fee'>): Promise<string> => request.post({ url: '/quant/backtest/parameter-set/create', data })
 export const compareBacktests = (data: string[]): Promise<BacktestComparison[]> => request.post({ url: '/quant/backtest/compare', data })
+export const listDatasets = (): Promise<DatasetQuality[]> => request.get({ url: '/quant/backtest/datasets' })

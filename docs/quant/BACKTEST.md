@@ -55,6 +55,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/strategy-versions`：当前租户、当前用户可用的不可变策略版本。
 - GET `/quant/backtest/parameter-sets`、POST `/quant/backtest/parameter-set/create`：列出或按内容摘要复用当前用户参数集。
 - POST `/quant/backtest/compare`：对比当前用户 2 至 5 个已完成实验的成交、收益和回撤。
+- GET `/quant/backtest/datasets`：扫描本地受控数据目录，返回格式、摘要、连续性、覆盖时间和 K 线数量质量报告。
 
 请求示例（不含认证信息）：
 
@@ -64,7 +65,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 
 UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/requestKey 的相同请求返回原 ID，不重跑；不同参数使用同一键会拒绝。失败后使用新键，不覆盖旧实验。每用户提交前检查最多 10 个待处理任务；该检查不作为严格的全局并发配额。
 
-数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。内置策略按源码摘要注册并复用不可变版本；参数集按租户、用户和内容摘要复用。页面必须显式选择两者，服务端校验归属、摘要及参数一致性。当前不开放任意 Python 源码编辑。结果和 SUCCEEDED 状态在同一事务提交。
+数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。内置策略按源码摘要注册并复用不可变版本；参数集按租户、用户和内容摘要复用。页面必须显式选择策略、参数集和质量校验通过的数据集，服务端仍在执行前重新校验文件摘要、OHLCV、小时连续性、240 根预热和目标区间覆盖。当前不开放任意 Python 源码编辑。结果和 SUCCEEDED 状态在同一事务提交。
 
 状态：QUEUED → RUNNING → SUCCEEDED/FAILED。单线程 worker 从 DB 领取，CAS 防止重复领取；应用重启时先停止已知专属容器，将中断任务标失败，不自动重试。当前只支持单个应用实例及固定共享工作目录，文件锁防止同目录并行启动；不支持多个主机/多个工作目录同时消费同一数据库。取消、分布式租约、自动重试和归档清理不在首版范围。
 

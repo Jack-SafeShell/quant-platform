@@ -55,6 +55,11 @@ public class BacktestController {
     public CommonResult<List<Map<String, Object>>> compare(@RequestBody List<String> ids) throws Exception {
         return success(service.compare(tenant(), owner(), ids));
     }
+    @GetMapping("/datasets")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<cn.iocoder.yudao.module.quant.engine.DatasetRegistry.DatasetQuality>> datasets() throws Exception {
+        return success(service.listDatasets());
+    }
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
     private static long owner() { return Objects.requireNonNull(SecurityFrameworkUtils.getLoginUserId(), "用户上下文缺失"); }
     @ExceptionHandler(IllegalArgumentException.class)

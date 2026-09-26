@@ -94,6 +94,7 @@ public class BacktestService {
         }
         return comparison;
     }
+    public List<DatasetRegistry.DatasetQuality> listDatasets() throws Exception { return datasets.list(); }
     private static String parameterJson(java.math.BigDecimal balance, java.math.BigDecimal stake, java.math.BigDecimal fee) {
         return JsonUtils.toJsonString(new TreeMap<>(Map.of("fee", fee, "stakeAmount", stake, "startingBalance", balance)));
     }

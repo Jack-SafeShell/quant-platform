@@ -13,6 +13,9 @@ import java.util.*;
 public class DatasetRegistry {
     public record Dataset(String id, String exchange, String sha256, String source,
                           Path directory, long firstTimestamp, long lastTimestamp, int candles) { }
+    public record DatasetQuality(String id, String status, String exchange, String pair, String timeframe,
+                                 String tradingMode, String sha256, String source, long firstTimestamp,
+                                 long lastTimestamp, int candles, int gaps, String error) { }
     private final QuantProperties properties;
     public DatasetRegistry(QuantProperties properties) { this.properties = properties; }
     public static String hash(byte[] content) {
@@ -24,6 +27,27 @@ public class DatasetRegistry {
         Path root = Path.of(properties.getWorkspace()).toAbsolutePath().resolve("datasets").toRealPath();
         Path dir = root.resolve(id).toRealPath();
         if (!dir.startsWith(root)) throw new IllegalArgumentException("数据集路径越界");
+        DatasetQuality quality = inspect(dir);
+        if (!"VALID".equals(quality.status())) throw new IllegalArgumentException(quality.error());
+        long from = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+        long to = end.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+        if (quality.firstTimestamp() > from - 240L * 3600000 || quality.lastTimestamp() < to - 3600000 || to > Instant.now().toEpochMilli())
+            throw new IllegalArgumentException("数据未覆盖预热或完整回测区间");
+        return new Dataset(id, quality.exchange(), quality.sha256(), quality.source(), dir,
+                quality.firstTimestamp(), quality.lastTimestamp(), quality.candles());
+    }
+    public List<DatasetQuality> list() throws Exception {
+        Path root = Path.of(properties.getWorkspace()).toAbsolutePath().resolve("datasets");
+        if (!Files.isDirectory(root)) return List.of();
+        try (var directories = Files.list(root)) {
+            return directories.filter(Files::isDirectory).sorted().limit(100).map(dir -> {
+                try { return inspect(dir.toRealPath()); }
+                catch (Exception e) { return new DatasetQuality(dir.getFileName().toString(), "INVALID", "", "", "", "", "", "", 0, 0, 0, 0, e.getMessage()); }
+            }).toList();
+        }
+    }
+    private DatasetQuality inspect(Path dir) throws Exception {
+        String id = dir.getFileName().toString();
         Path manifest = dir.resolve("manifest.json").toRealPath();
         Path data = dir.resolve("BTC_USDT-1h.json").toRealPath();
         if (!manifest.startsWith(dir) || !data.startsWith(dir)) throw new IllegalArgumentException("数据文件路径越界");
@@ -39,10 +63,11 @@ public class DatasetRegistry {
         JsonNode rows = JsonUtils.getObjectMapper().readTree(content);
         if (!rows.isArray() || rows.size() < 241) throw new IllegalArgumentException("行情不足，须包含 240 根预热");
         long previous = -1;
+        int gaps = 0;
         for (JsonNode row : rows) {
             if (!row.isArray() || row.size() != 6 || !row.get(0).isIntegralNumber()) throw new IllegalArgumentException("OHLCV 格式错误");
             long ts = row.get(0).asLong();
-            if (ts % 3600000 != 0 || (previous >= 0 && ts != previous + 3600000)) throw new IllegalArgumentException("行情时间缺口或重复");
+            if (ts % 3600000 != 0 || (previous >= 0 && ts != previous + 3600000)) { gaps++; throw new IllegalArgumentException("行情时间缺口或重复"); }
             for (int i = 1; i < 6; i++) if (!row.get(i).isNumber() || !Double.isFinite(row.get(i).asDouble())
                     || row.get(i).asDouble() < 0 || (i < 5 && row.get(i).asDouble() == 0)) throw new IllegalArgumentException("OHLCV 数值无效");
             double high = row.get(2).asDouble(), low = row.get(3).asDouble();
@@ -51,10 +76,7 @@ public class DatasetRegistry {
             previous = ts;
         }
         long first = rows.get(0).get(0).asLong();
-        long from = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-        long to = end.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-        if (first > from - 240L * 3600000 || previous < to - 3600000 || to > Instant.now().toEpochMilli())
-            throw new IllegalArgumentException("数据未覆盖预热或完整回测区间");
-        return new Dataset(id, exchange, digest, meta.path("source").asText(), dir, first, previous, rows.size());
+        return new DatasetQuality(id, "VALID", exchange, meta.path("pair").asText(), meta.path("timeframe").asText(),
+                meta.path("tradingMode").asText(), digest, meta.path("source").asText(), first, previous, rows.size(), gaps, null);
     }
 }

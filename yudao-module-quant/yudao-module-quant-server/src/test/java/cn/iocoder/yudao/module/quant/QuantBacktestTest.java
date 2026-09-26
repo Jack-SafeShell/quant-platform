@@ -97,6 +97,17 @@ class QuantBacktestTest {
         assertThrows(IllegalArgumentException.class, () -> datasets.load("test", LocalDate.of(2025,1,10), LocalDate.of(2025,1,13)));
         assertThrows(IllegalArgumentException.class, () -> datasets.load("test", LocalDate.of(2025,1,11), LocalDate.of(2025,1,14)));
     }
+    @Test void datasetQualityReportIncludesValidAndInvalidDirectories() throws Exception {
+        Files.createDirectories(root.resolve("datasets/broken"));
+        var reports = datasets.list();
+        var valid = reports.stream().filter(item -> item.id().equals("test")).findFirst().orElseThrow();
+        var invalid = reports.stream().filter(item -> item.id().equals("broken")).findFirst().orElseThrow();
+        assertEquals("VALID", valid.status());
+        assertEquals(288, valid.candles());
+        assertEquals(0, valid.gaps());
+        assertEquals("INVALID", invalid.status());
+        assertNotNull(invalid.error());
+    }
     @Test void disabledFeatureAndInvalidRangeCreateNoRecords() {
         properties.setEnabled(false);
         assertThrows(IllegalArgumentException.class, () -> service.create(1, 1, request("disabled")));
