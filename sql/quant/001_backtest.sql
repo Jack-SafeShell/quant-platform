@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS quant_strategy_version (
 );
 CREATE TABLE IF NOT EXISTS quant_parameter_set (
   id VARCHAR(36) PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
   parameters_json TEXT NOT NULL,
   parameters_hash VARCHAR(64) NOT NULL
 );
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS quant_backtest_task (
   owner_id BIGINT NOT NULL,
   request_key VARCHAR(64) NOT NULL,
   request_hash VARCHAR(64) NOT NULL,
+  request_json TEXT NOT NULL,
   strategy_version_id VARCHAR(36) NOT NULL,
   parameter_set_id VARCHAR(36) NOT NULL,
   dataset_id VARCHAR(64) NOT NULL,

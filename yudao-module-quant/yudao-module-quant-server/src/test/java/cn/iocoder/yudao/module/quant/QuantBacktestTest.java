@@ -28,6 +28,7 @@ class QuantBacktestTest {
     DataSourceTransactionManager transactions;
     JdbcTemplate jdbc;
     String versionId;
+    String parameterSetId;
     @BeforeEach void setup() throws Exception {
         properties = new QuantProperties(); properties.setWorkspace(root.toString()); properties.setEnabled(true);
         DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", "sa", "");
@@ -37,6 +38,7 @@ class QuantBacktestTest {
         service = new BacktestService(repository, datasets, properties, transactions);
         writeDataset();
         versionId = (String) service.listStrategyVersions(1, 10).getFirst().get("id");
+        parameterSetId = (String) service.listParameterSets(1, 10).getFirst().get("id");
     }
     void writeDataset() throws Exception {
         Path dir = root.resolve("datasets/test"); Files.createDirectories(dir);
@@ -48,7 +50,7 @@ class QuantBacktestTest {
         Files.writeString(dir.resolve("manifest.json"), JsonUtils.toJsonString(Map.of("exchange", "okx", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "sha256", DatasetRegistry.hash(content), "source", "synthetic test fixture")));
     }
     BacktestRequest request(String key) {
-        return new BacktestRequest(key, versionId, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        return new BacktestRequest(key, versionId, parameterSetId, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
     }
     @Test void idempotencyAndOwnerIsolation() throws Exception {
         String id = service.create(1, 10, request("same"));
@@ -57,10 +59,11 @@ class QuantBacktestTest {
         assertThrows(IllegalArgumentException.class, () -> service.get(2, 10, id));
         assertThrows(IllegalArgumentException.class, () -> service.get(1, 11, id));
         assertTrue(service.list(2, 10).isEmpty());
-        var changed = new BacktestRequest("same", versionId, "test", "2025-01-11", "2025-01-12", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        var changed = new BacktestRequest("same", versionId, parameterSetId, "test", "2025-01-11", "2025-01-12", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         assertThrows(IllegalArgumentException.class, () -> service.create(1, 10, changed));
         String otherVersion = (String) service.listStrategyVersions(2, 10).getFirst().get("id");
-        var otherRequest = new BacktestRequest("same", otherVersion, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
+        String otherParameter = (String) service.listParameterSets(2, 10).getFirst().get("id");
+        var otherRequest = new BacktestRequest("same", otherVersion, otherParameter, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         assertNotEquals(id, service.create(2, 10, otherRequest));
     }
     @Test void durableQueueCompletesExactlyOnceAndPersistsResult() throws Exception {
@@ -108,6 +111,26 @@ class QuantBacktestTest {
         assertEquals(versionId, task.get("strategyVersionId"));
         assertEquals("QuantEmaBaseline", task.get("strategyName"));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM quant_strategy_version", Integer.class));
+    }
+    @Test void parameterSetIsReusedAndMustMatchRequest() throws Exception {
+        String id = service.create(1, 10, request("parameters"));
+        assertEquals(parameterSetId, jdbc.queryForObject("SELECT parameter_set_id FROM quant_backtest_task WHERE id=?", String.class, id));
+        var mismatched = new BacktestRequest("mismatch", versionId, parameterSetId, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("200"), new BigDecimal("0.001"));
+        assertThrows(IllegalArgumentException.class, () -> service.create(1, 10, mismatched));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM quant_parameter_set", Integer.class));
+    }
+    @Test void comparesOnlyOwnedSuccessfulExperiments() throws Exception {
+        String first = service.create(1, 10, request("compare-1"));
+        String second = service.create(1, 10, request("compare-2"));
+        for (String id : List.of(first, second)) {
+            assertTrue(repository.claim(id));
+            repository.complete(id, new BacktestEngine.Output("test", "{\"totalTrades\":4,\"netProfit\":1.5,\"returnRatio\":0.0015,\"maxDrawdownRatio\":0.002}", "hash-" + id));
+        }
+        var comparison = service.compare(1, 10, List.of(first, second));
+        assertEquals(2, comparison.size());
+        assertEquals(4, comparison.getFirst().get("totalTrades"));
+        assertThrows(IllegalArgumentException.class, () -> service.compare(1, 11, List.of(first, second)));
+        assertThrows(IllegalArgumentException.class, () -> service.compare(1, 10, List.of(first)));
     }
     @Test void resultAndStateCommitAtomically() throws Exception {
         String id = service.create(1, 10, request("tx"));

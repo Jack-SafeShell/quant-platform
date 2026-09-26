@@ -3,6 +3,7 @@ import request from '@/config/axios'
 export interface BacktestRequest {
   requestKey: string
   strategyVersionId: string
+  parameterSetId: string
   datasetId: string
   startDate: string
   endDate: string
@@ -46,3 +47,20 @@ export interface StrategyVersion {
 }
 export const listStrategyVersions = (): Promise<StrategyVersion[]> =>
   request.get({ url: '/quant/backtest/strategy-versions' })
+export interface ParameterSet {
+  id: string
+  parametersJson: string
+  parametersHash: string
+}
+export interface BacktestComparison {
+  id: string
+  strategyName: string
+  datasetId: string
+  totalTrades: number
+  netProfit: number
+  returnRatio: number
+  maxDrawdownRatio: number
+}
+export const listParameterSets = (): Promise<ParameterSet[]> => request.get({ url: '/quant/backtest/parameter-sets' })
+export const createParameterSet = (data: Pick<BacktestRequest, 'startingBalance' | 'stakeAmount' | 'fee'>): Promise<string> => request.post({ url: '/quant/backtest/parameter-set/create', data })
+export const compareBacktests = (data: string[]): Promise<BacktestComparison[]> => request.post({ url: '/quant/backtest/compare', data })

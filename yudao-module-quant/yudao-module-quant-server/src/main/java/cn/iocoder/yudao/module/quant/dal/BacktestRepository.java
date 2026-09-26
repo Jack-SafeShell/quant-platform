@@ -18,7 +18,7 @@ public class BacktestRepository {
           t.started_at AS startedAt, t.finished_at AS finishedAt, t.request_hash AS requestHash,
           t.tenant_id AS tenantId, t.owner_id AS ownerId,
           t.strategy_version_id AS strategyVersionId, s.name AS strategyName,
-          v.source_hash AS strategyHash, v.source_code AS strategySource, p.parameters_json AS parametersJson,
+          v.source_hash AS strategyHash, v.source_code AS strategySource, t.request_json AS parametersJson,
           r.engine_version AS engineVersion, r.artifact_hash AS artifactHash, r.result_json AS resultJson
         FROM quant_backtest_task t
         JOIN quant_strategy_version v ON v.id=t.strategy_version_id
@@ -39,16 +39,30 @@ public class BacktestRepository {
         return jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task WHERE tenant_id=? AND owner_id=? AND status IN ('QUEUED','RUNNING')", Integer.class, tenant, owner);
     }
     public void insert(String id, long tenant, long owner, String key, String requestHash, String params,
-                       String version, DatasetRegistry.Dataset dataset, String image) {
-        String parameter = UUID.randomUUID().toString();
+                       String version, String parameter, DatasetRegistry.Dataset dataset, String image) {
         long now = System.currentTimeMillis();
-        jdbc.update("INSERT INTO quant_parameter_set (id,parameters_json,parameters_hash) VALUES (?,?,?)", parameter, params, requestHash);
         jdbc.update("""
             INSERT INTO quant_backtest_task
-            (id,tenant_id,owner_id,request_key,request_hash,strategy_version_id,parameter_set_id,dataset_id,
+            (id,tenant_id,owner_id,request_key,request_hash,request_json,strategy_version_id,parameter_set_id,dataset_id,
              dataset_hash,dataset_source,exchange_name,engine_image,status,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, id, tenant, owner, key, requestHash, version, parameter, dataset.id(), dataset.sha256(), dataset.source(), dataset.exchange(), image, "QUEUED", now);
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, id, tenant, owner, key, requestHash, params, version, parameter, dataset.id(), dataset.sha256(), dataset.source(), dataset.exchange(), image, "QUEUED", now);
+    }
+    public Map<String, Object> findParameterSet(long tenant, long owner, String id) {
+        return first(jdbc.queryForList("SELECT id,parameters_json AS parametersJson,parameters_hash AS parametersHash FROM quant_parameter_set WHERE tenant_id=? AND owner_id=? AND id=?", tenant, owner, id));
+    }
+    public List<Map<String, Object>> listParameterSets(long tenant, long owner) {
+        return jdbc.queryForList("""
+            SELECT p.id,p.parameters_json AS parametersJson,p.parameters_hash AS parametersHash
+            FROM quant_parameter_set p WHERE p.tenant_id=? AND p.owner_id=? AND p.parameters_json NOT LIKE '%\"requestKey\"%' ORDER BY p.id
+            """, tenant, owner);
+    }
+    public String ensureParameterSet(long tenant, long owner, String json, String hash) {
+        List<String> ids = jdbc.queryForList("SELECT id FROM quant_parameter_set WHERE tenant_id=? AND owner_id=? AND parameters_hash=? AND parameters_json=? LIMIT 1", String.class, tenant, owner, hash, json);
+        if (!ids.isEmpty()) return ids.getFirst();
+        String id = UUID.randomUUID().toString();
+        jdbc.update("INSERT INTO quant_parameter_set (id,tenant_id,owner_id,parameters_json,parameters_hash) VALUES (?,?,?,?,?)", id, tenant, owner, json, hash);
+        return id;
     }
     public Map<String, Object> findVersion(long tenant, long owner, String id) {
         return first(jdbc.queryForList("""

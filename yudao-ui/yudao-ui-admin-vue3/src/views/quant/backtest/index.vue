@@ -5,6 +5,7 @@
     <el-alert v-if="!enabled" title="回测尚未启用。请先完成数据准备，并在 yudao-server 中启用量化回测配置。" type="warning" :closable="false" />
     <el-form :model="form" label-width="110px" class="mt-4" @submit.prevent="submit">
       <el-form-item label="策略版本"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="请选择不可变策略版本"><el-option v-for="item in strategyVersions" :key="item.id" :label="`${item.strategyName} · ${item.sourceHash.slice(0, 12)}`" :value="item.id" /></el-select></el-form-item>
+      <el-form-item label="参数集"><el-select v-model="form.parameterSetId" class="w-70%" placeholder="请选择参数集" @change="applyParameterSet"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select><el-button class="ml-2" @click="saveParameterSet">保存当前参数</el-button></el-form-item>
       <el-form-item label="数据集编号"><el-input v-model="form.datasetId" placeholder="例如 okx-btc-202608" maxlength="64" /></el-form-item>
       <el-form-item label="UTC 日期区间"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /></el-form-item>
       <el-form-item label="初始资金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
@@ -15,7 +16,9 @@
   </ContentWrap>
   <ContentWrap title="我的回测任务（最近 100 条）">
     <el-button :loading="loading" @click="refresh">刷新</el-button>
-    <el-table :data="tasks" class="mt-3" v-loading="loading">
+    <el-button class="ml-2" :disabled="selectedIds.length < 2 || selectedIds.length > 5" @click="compare">对比所选</el-button>
+    <el-table :data="tasks" class="mt-3" v-loading="loading" @selection-change="rows => selectedIds = rows.map((row: BacktestTask) => row.id)">
+      <el-table-column type="selection" width="45" :selectable="row => row.status === 'SUCCEEDED'" />
       <el-table-column prop="datasetId" label="数据集" min-width="160" />
       <el-table-column prop="exchangeName" label="交易所" width="100" />
       <el-table-column label="状态" width="130"><template #default="scope"><el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag></template></el-table-column>
@@ -54,13 +57,16 @@
       </template>
     </template>
   </el-dialog>
+  <el-dialog v-model="compareVisible" title="回测实验对比" width="75%">
+    <el-table :data="comparisons"><el-table-column prop="strategyName" label="策略" /><el-table-column prop="datasetId" label="数据集" /><el-table-column prop="totalTrades" label="成交数" /><el-table-column label="净收益"><template #default="s">{{ Number(s.row.netProfit).toFixed(4) }}</template></el-table-column><el-table-column label="收益率"><template #default="s">{{ (Number(s.row.returnRatio) * 100).toFixed(3) }}%</template></el-table-column><el-table-column label="最大回撤"><template #default="s">{{ (Number(s.row.maxDrawdownRatio) * 100).toFixed(3) }}%</template></el-table-column></el-table>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions } from '@/api/quant/backtest'
-import type { BacktestTask, StrategyVersion } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests } from '@/api/quant/backtest'
+import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
 interface Result {
@@ -70,8 +76,12 @@ interface Result {
   maxDrawdownRatio: number
   trades: Array<{ instrument: string; openedAt: string; closedAt: string; netProfit: number; exitReason: string }>
 }
-const form = reactive({ strategyVersionId: '', datasetId: '', startingBalance: 1000, stakeAmount: 100, fee: 0.001 })
+const form = reactive({ strategyVersionId: '', parameterSetId: '', datasetId: '', startingBalance: 1000, stakeAmount: 100, fee: 0.001 })
 const strategyVersions = ref<StrategyVersion[]>([])
+const parameterSets = ref<ParameterSet[]>([])
+const selectedIds = ref<string[]>([])
+const comparisons = ref<BacktestComparison[]>([])
+const compareVisible = ref(false)
 const dates = ref<string[]>([])
 const tasks = ref<BacktestTask[]>([])
 const selected = ref<BacktestTask>()
@@ -87,8 +97,8 @@ let lastPayload = ''
 let requestKey = ''
 async function submit() {
   if (submitting.value) return
-  if (!form.strategyVersionId || !/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
-    ElMessage.warning('请选择策略版本并填写有效数据集编号和日期区间')
+  if (!form.strategyVersionId || !form.parameterSetId || !/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
+    ElMessage.warning('请选择策略版本、参数集并填写有效数据集编号和日期区间')
     return
   }
   const params = { ...form, startDate: dates.value[0], endDate: dates.value[1] }
@@ -111,11 +121,18 @@ async function refresh() {
   } finally { loading.value = false }
 }
 async function showDetail(id: string) { selected.value = await getBacktest(id); detailVisible.value = true }
+const parseParameters = (item: ParameterSet) => JSON.parse(item.parametersJson)
+const parameterLabel = (item: ParameterSet) => { const p = parseParameters(item); return `${p.startingBalance} / ${p.stakeAmount} / ${p.fee}` }
+function applyParameterSet(id: string) { const item = parameterSets.value.find(value => value.id === id); if (item) Object.assign(form, parseParameters(item)) }
+async function saveParameterSet() { form.parameterSetId = await createParameterSet({ startingBalance: form.startingBalance, stakeAmount: form.stakeAmount, fee: form.fee }); parameterSets.value = await listParameterSets(); ElMessage.success('参数集已保存') }
+async function compare() { comparisons.value = await compareBacktests(selectedIds.value); compareVisible.value = true }
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(async () => {
   enabled.value = (await getCapabilities()).enabled
   strategyVersions.value = await listStrategyVersions()
   if (strategyVersions.value.length) form.strategyVersionId = strategyVersions.value[0].id
+  parameterSets.value = await listParameterSets()
+  if (parameterSets.value.length) { form.parameterSetId = parameterSets.value[0].id; applyParameterSet(form.parameterSetId) }
   await refresh()
   timer = setInterval(() => { if (tasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status))) void refresh().catch(() => {}) }, 5000)
 })

@@ -36,7 +36,7 @@ python script/quant/migrate.py
 python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --end 2026-09-01
 ```
 
-迁移脚本只执行 `sql/quant/001_backtest.sql` 的 `CREATE TABLE IF NOT EXISTS quant_*` 和 `sql/quant/002_backtest_menu.sql` 的幂等菜单插入，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
+迁移脚本执行量化建表、幂等菜单插入及 `003_parameter_set_scope.sql` 的参数集归属与请求快照增量迁移，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
 
 数据脚本仅需 Python 标准库，下载公开且已确认的小时 K 线；包含 240 根预热，校验时间连续性、OHLCV 数值及价格关系。存在的数据集 ID 拒绝覆盖，重新下载需新 ID。本轮已存在 `okx-btc-202608`，不要重复执行同一 ID。
 
@@ -53,16 +53,18 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/get?id=...`：参数、策略/行情摘要、状态与结果。
 - GET `/quant/backtest/capabilities`：当前开关与固定能力。
 - GET `/quant/backtest/strategy-versions`：当前租户、当前用户可用的不可变策略版本。
+- GET `/quant/backtest/parameter-sets`、POST `/quant/backtest/parameter-set/create`：列出或按内容摘要复用当前用户参数集。
+- POST `/quant/backtest/compare`：对比当前用户 2 至 5 个已完成实验的成交、收益和回撤。
 
 请求示例（不含认证信息）：
 
 ```json
-{"requestKey":"research-202608-001","strategyVersionId":"<UUID>","datasetId":"okx-btc-202608","startDate":"2026-08-01","endDate":"2026-09-01","startingBalance":1000,"stakeAmount":100,"fee":0.001}
+{"requestKey":"research-202608-001","strategyVersionId":"<UUID>","parameterSetId":"<UUID>","datasetId":"okx-btc-202608","startDate":"2026-08-01","endDate":"2026-09-01","startingBalance":1000,"stakeAmount":100,"fee":0.001}
 ```
 
 UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/requestKey 的相同请求返回原 ID，不重跑；不同参数使用同一键会拒绝。失败后使用新键，不覆盖旧实验。每用户提交前检查最多 10 个待处理任务；该检查不作为严格的全局并发配额。
 
-数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。内置策略按源码摘要注册并复用不可变版本；页面必须显式选择版本，服务端校验租户、用户归属及源码摘要。当前不开放任意 Python 源码编辑。结果和 SUCCEEDED 状态在同一事务提交。
+数据库独立记录策略、策略版本（源码/摘要）、参数集、任务、结果。内置策略按源码摘要注册并复用不可变版本；参数集按租户、用户和内容摘要复用。页面必须显式选择两者，服务端校验归属、摘要及参数一致性。当前不开放任意 Python 源码编辑。结果和 SUCCEEDED 状态在同一事务提交。
 
 状态：QUEUED → RUNNING → SUCCEEDED/FAILED。单线程 worker 从 DB 领取，CAS 防止重复领取；应用重启时先停止已知专属容器，将中断任务标失败，不自动重试。当前只支持单个应用实例及固定共享工作目录，文件锁防止同目录并行启动；不支持多个主机/多个工作目录同时消费同一数据库。取消、分布式租约、自动重试和归档清理不在首版范围。
 

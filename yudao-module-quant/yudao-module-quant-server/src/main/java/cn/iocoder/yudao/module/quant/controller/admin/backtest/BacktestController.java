@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,6 +41,19 @@ public class BacktestController {
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String, Object>>> strategyVersions() throws Exception {
         return success(service.listStrategyVersions(tenant(), owner()));
+    }
+    @GetMapping("/parameter-sets")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String, Object>>> parameterSets() { return success(service.listParameterSets(tenant(), owner())); }
+    @PostMapping("/parameter-set/create")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createParameterSet(@Valid @RequestBody ParameterSetRequest request) {
+        return success(service.createParameterSet(tenant(), owner(), request));
+    }
+    @PostMapping("/compare")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String, Object>>> compare(@RequestBody List<String> ids) throws Exception {
+        return success(service.compare(tenant(), owner(), ids));
     }
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
     private static long owner() { return Objects.requireNonNull(SecurityFrameworkUtils.getLoginUserId(), "用户上下文缺失"); }

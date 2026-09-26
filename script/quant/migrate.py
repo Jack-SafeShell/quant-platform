@@ -17,7 +17,7 @@ conn = pymysql.connect(host=url.hostname, port=url.port or 3306, user=cfg['usern
                        database='quant-platform', charset='utf8mb4', connect_timeout=10)
 try:
     cursor = conn.cursor()
-    for migration in ('001_backtest.sql', '002_backtest_menu.sql'):
+    for migration in ('001_backtest.sql', '002_backtest_menu.sql', '003_parameter_set_scope.sql'):
         sql = (root / 'sql/quant' / migration).read_text(encoding='utf-8')
         sql = '\n'.join(line for line in sql.splitlines() if not line.lstrip().startswith('--'))
         for statement in sql.split(';'):
@@ -25,10 +25,18 @@ try:
             if not statement:
                 continue
             if not (statement.startswith('CREATE TABLE IF NOT EXISTS quant_')
-                    or statement.startswith('INSERT INTO system_menu')):
+                    or statement.startswith('INSERT INTO system_menu')
+                    or statement.startswith('ALTER TABLE quant_parameter_set')
+                    or statement.startswith('ALTER TABLE quant_backtest_task')
+                    or statement.startswith('UPDATE quant_parameter_set')
+                    or statement.startswith('UPDATE quant_backtest_task')):
                 raise RuntimeError(f'Unexpected migration statement in {migration}')
-            cursor.execute(statement)
+            try:
+                cursor.execute(statement)
+            except pymysql.MySQLError as error:
+                if not (statement.startswith('ALTER TABLE quant_') and ' ADD COLUMN ' in statement and error.args[0] == 1060):
+                    raise
     conn.commit()
-    print('QUANT_MIGRATIONS_OK (5 tables, 3 menu records)')
+    print('QUANT_MIGRATIONS_OK (5 tables, scoped parameter sets, 3 menu records)')
 finally:
     conn.close()

@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.quant.service;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
 import cn.iocoder.yudao.module.quant.dal.BacktestRepository;
 import cn.iocoder.yudao.module.quant.engine.DatasetRegistry;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
@@ -31,6 +32,10 @@ public class BacktestService {
         catch (DateTimeException e) { throw new IllegalArgumentException("请提供有效的 UTC 日期"); }
         if (!end.isAfter(start) || ChronoUnit.DAYS.between(start, end) > 366) throw new IllegalArgumentException("回测区间须为 1 至 366 天，结束日不包含");
         if (request.stakeAmount().compareTo(request.startingBalance()) >= 0) throw new IllegalArgumentException("单笔投入必须小于初始资金");
+        String parameterJson = parameterJson(request.startingBalance(), request.stakeAmount(), request.fee());
+        Map<String, Object> parameterSet = repository.findParameterSet(tenant, owner, request.parameterSetId());
+        if (parameterSet == null || !parameterJson.equals(parameterSet.get("parametersJson")))
+            throw new IllegalArgumentException("参数集不存在或与请求参数不一致");
         String params = JsonUtils.toJsonString(request), digest = DatasetRegistry.hash(params.getBytes(StandardCharsets.UTF_8));
         Map<String, Object> existing = repository.findByKey(tenant, owner, request.requestKey());
         if (existing != null) return sameRequest(existing, digest);
@@ -46,7 +51,7 @@ public class BacktestService {
         try {
             transaction.executeWithoutResult(status -> {
                 if (repository.pending(tenant, owner) >= 10) throw new IllegalArgumentException("待处理任务过多，请等待现有任务完成");
-                repository.insert(id, tenant, owner, request.requestKey(), digest, params, request.strategyVersionId(), dataset, properties.getImage());
+                repository.insert(id, tenant, owner, request.requestKey(), digest, params, request.strategyVersionId(), request.parameterSetId(), dataset, properties.getImage());
             });
             return id;
         } catch (DuplicateKeyException e) {
@@ -60,6 +65,37 @@ public class BacktestService {
         String hash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
         transaction.executeWithoutResult(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));
         return repository.listVersions(tenant, owner);
+    }
+    public List<Map<String, Object>> listParameterSets(long tenant, long owner) {
+        String json = parameterJson(new java.math.BigDecimal("1000"), new java.math.BigDecimal("100"), new java.math.BigDecimal("0.001"));
+        String hash = DatasetRegistry.hash(json.getBytes(StandardCharsets.UTF_8));
+        String id = transaction.execute(status -> repository.ensureParameterSet(tenant, owner, json, hash));
+        List<Map<String, Object>> result = new ArrayList<>(repository.listParameterSets(tenant, owner));
+        if (result.stream().noneMatch(item -> id.equals(item.get("id")))) result.addFirst(repository.findParameterSet(tenant, owner, id));
+        return result;
+    }
+    public String createParameterSet(long tenant, long owner, ParameterSetRequest request) {
+        if (request.stakeAmount().compareTo(request.startingBalance()) >= 0)
+            throw new IllegalArgumentException("单笔投入必须小于初始资金");
+        String json = parameterJson(request.startingBalance(), request.stakeAmount(), request.fee());
+        return transaction.execute(status -> repository.ensureParameterSet(tenant, owner, json, DatasetRegistry.hash(json.getBytes(StandardCharsets.UTF_8))));
+    }
+    public List<Map<String, Object>> compare(long tenant, long owner, List<String> ids) throws Exception {
+        if (ids == null || ids.size() < 2 || ids.size() > 5 || ids.stream().distinct().count() != ids.size())
+            throw new IllegalArgumentException("请选择 2 至 5 个不同回测任务");
+        List<Map<String, Object>> comparison = new ArrayList<>();
+        for (String id : ids) {
+            Map<String, Object> task = get(tenant, owner, id);
+            if (!"SUCCEEDED".equals(task.get("status"))) throw new IllegalArgumentException("只能对比已完成任务");
+            var result = JsonUtils.getObjectMapper().readTree((String) task.get("resultJson"));
+            comparison.add(Map.of("id", id, "strategyName", task.get("strategyName"), "datasetId", task.get("datasetId"),
+                    "totalTrades", result.path("totalTrades").asInt(), "netProfit", result.path("netProfit").decimalValue(),
+                    "returnRatio", result.path("returnRatio").decimalValue(), "maxDrawdownRatio", result.path("maxDrawdownRatio").decimalValue()));
+        }
+        return comparison;
+    }
+    private static String parameterJson(java.math.BigDecimal balance, java.math.BigDecimal stake, java.math.BigDecimal fee) {
+        return JsonUtils.toJsonString(new TreeMap<>(Map.of("fee", fee, "stakeAmount", stake, "startingBalance", balance)));
     }
     private static String sameRequest(Map<String, Object> existing, String hash) {
         if (!hash.equals(existing.get("requestHash"))) throw new IllegalArgumentException("同一请求标识已用于不同参数");

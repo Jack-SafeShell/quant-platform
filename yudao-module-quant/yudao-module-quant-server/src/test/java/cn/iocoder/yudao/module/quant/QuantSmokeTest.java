@@ -30,7 +30,8 @@ class QuantSmokeTest {
         var service=new BacktestService(repository,datasets,props,manager);
         String key="smoke-"+UUID.randomUUID();
         String version=(String)service.listStrategyVersions(1,1).getFirst().get("id");
-        var params=new BacktestRequest(key,version,"okx-btc-202608","2026-08-01","2026-09-01",new BigDecimal("1000"),new BigDecimal("100"),new BigDecimal("0.001"));
+        String parameter=(String)service.listParameterSets(1,1).getFirst().get("id");
+        var params=new BacktestRequest(key,version,parameter,"okx-btc-202608","2026-08-01","2026-09-01",new BigDecimal("1000"),new BigDecimal("100"),new BigDecimal("0.001"));
         String id=service.create(1,1,params);
         assertEquals(id,service.create(1,1,params));
         var worker=new BacktestWorker(repository,new FreqtradeBacktestEngine(props),datasets,props,manager);
