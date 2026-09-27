@@ -116,3 +116,5 @@ export const getPaperCommandPreview=(id:string):Promise<PaperCommandPreview>=>re
 export interface PaperStartToken { id:string;executionId:string;previewHash:string;token:string;status:'ISSUED';issuedAt:number;expiresAt:number;singleDisplay:true;executionStarted:false }
 export const issuePaperStartToken=(id:string,data:{previewHash:string;confirmation:'CONFIRM_DRY_RUN_START';comment:string}):Promise<PaperStartToken>=>request.post({url:'/quant/backtest/paper-execution/start-token/issue',params:{id},data})
 export const startPaperExecution=(id:string,data:{previewHash:string;token:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/start',params:{id},data})
+export interface PaperExecutionObservation { executionId:string;status:string;containerName:string;executionEnabled:boolean;preflightPassed:boolean;checks:Array<{id:string;passed:boolean;evidence:string}>;logExists:boolean;logTail:string;logTruncated:boolean;observedAt:number }
+export const observePaperExecution=(id:string,lines=200):Promise<PaperExecutionObservation>=>request.get({url:'/quant/backtest/paper-execution/observation',params:{id,lines}})
