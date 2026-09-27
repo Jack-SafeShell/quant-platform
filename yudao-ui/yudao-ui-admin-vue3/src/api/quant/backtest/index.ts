@@ -98,3 +98,8 @@ export const getOptimization = (id:string): Promise<OptimizationResult> => reque
 export const reviewOptimization=(id:string,data:{decision:'ACCEPTED'|'REJECTED';comment:string;evidenceHash:string}):Promise<string>=>request.post({url:'/quant/backtest/optimization/review',params:{id},data})
 export const reviewPaperAdmission=(id:string,data:{decision:'READY'|'NOT_READY';comment:string;evidenceHash:string}):Promise<string>=>request.post({url:'/quant/backtest/optimization/admission/review',params:{id},data})
 export const exportResearchReport=(id:string):Promise<Blob>=>request.download({url:'/quant/backtest/optimization/research-report',params:{id}})
+export interface PaperSession { id:string;batch_id:string;parameter_set_id:string;admission_evidence_hash:string;status:'PENDING_APPROVAL'|'APPROVED'|'REJECTED';created_at:number;executionEnabled:false;activationAllowed:false;nextAction:string;reviews?:Array<{id:string;decision:string;comment:string;admissionEvidenceHash:string;createdAt:number}> }
+export const createPaperSession=(data:{batchId:string;parameterSetId:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-session/create',data})
+export const listPaperSessions=():Promise<PaperSession[]>=>request.get({url:'/quant/backtest/paper-session/list'})
+export const getPaperSession=(id:string):Promise<PaperSession>=>request.get({url:'/quant/backtest/paper-session/get',params:{id}})
+export const reviewPaperSession=(id:string,data:{decision:'APPROVED'|'REJECTED';comment:string;admissionEvidenceHash:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-session/review',params:{id},data})
