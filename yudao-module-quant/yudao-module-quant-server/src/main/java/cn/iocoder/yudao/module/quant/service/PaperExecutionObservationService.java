@@ -51,8 +51,8 @@ public class PaperExecutionObservationService {
                     && manifest.path("strategyHash").asText().equals(DatasetRegistry.hash(Files.readAllBytes(strategy)));
             var configJson = JsonUtils.getObjectMapper().readTree(Files.readString(config, StandardCharsets.UTF_8));
             dryRun = configJson.path("dry_run").asBoolean(false) && "spot".equals(configJson.path("trading_mode").asText())
-                    && !configJson.path("api_server").path("enabled").asBoolean(true)
-                    && !configJson.path("telegram").path("enabled").asBoolean(true);
+                    && !configJson.path("api_server").path("enabled").asBoolean(false)
+                    && !configJson.path("telegram").path("enabled").asBoolean(false);
             List<String> command = new ArrayList<>();
             manifest.path("command").forEach(node -> command.add(node.asText()));
             commandSafe = command.size() >= 10 && properties.getDockerExecutable().equals(command.getFirst())

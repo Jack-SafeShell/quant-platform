@@ -52,7 +52,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 
 迁移脚本执行量化建表、幂等菜单插入、`003_parameter_set_scope.sql` 的参数集归属迁移及 `004_dataset_download.sql` 的下载审计建表，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
 
-数据脚本仅需 Python 标准库，下载公开且已确认的小时 K 线；包含 240 根预热，校验时间连续性、OHLCV 数值及价格关系。存在的数据集 ID 拒绝覆盖，重新下载需新 ID。本轮已存在 `okx-btc-202608`，不要重复执行同一 ID。
+数据脚本仅需 Python 标准库，下载公开且已确认的小时 K 线；包含 240 根预热，校验时间连续性、OHLCV 数值及价格关系。公开接口的连接重置、不完整响应和超时会有限重试。存在的数据集 ID 拒绝覆盖，重新下载需新 ID。本轮已存在 `okx-btc-202608` 和覆盖一年目标区间、共 9000 根 K 线的 `okx-btc-202509-202609-v4`，不要重复执行同一 ID。
 
 每个数据集目录含 BTC_USDT-1h.json（Freqtrade JSON OHLCV）和 manifest.json：exchange、pair、timeframe、tradingMode、sha256、source。Java 提交和执行时都检查数据摘要及完整覆盖，拒绝路径穿越、缺口、重复时间、不完整预热、未来区间。每个任务复制独立数据快照并再次验证摘要。
 
@@ -93,7 +93,9 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 
 每任务独立 `quant-platform-bt-<UUID>` 一次性容器；仅开放 backtesting CLI，无 trade/webserver 操作，无交易所凭据、端口发布、Docker socket 挂载或 PoC 挂载。dry_run=true、spot 固定，API/Telegram 关闭；限制 CPU/内存、只读容器根文件系统，只写任务挂载目录。超时/关闭只清理精确任务名，绝不 remove-orphans。
 
-模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。当前只通过进程替身验证这些状态，尚无真实 dry-run 运行证据。
+模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。配置把 dry-run SQLite 固定到隔离可写目录，显式提供新版 Freqtrade 所需的定价、静态交易对及 RUNNING 初始状态；API Server 和 Telegram 对象省略并保持默认关闭。
+
+2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。当前 HTTP 代理不承载 OKX WebSocket，日志有连接错误但主循环保持 RUNNING；下一阶段需完成行情稳定性和只读交易遥测验收。
 
 页面“状态与日志”是人工验收的只读证据入口。总开关关闭是准备阶段的通过项；运行窗口开启后该项会显示当前状态，其他文件、摘要和命令约束仍须保持通过。日志不存在表示容器尚未启动，不视为伪造的运行证据。
 

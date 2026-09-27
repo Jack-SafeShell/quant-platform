@@ -7,6 +7,7 @@ Dates are UTC; end is exclusive. Includes 240 warmup candles. Existing IDs are i
 import argparse
 import datetime as dt
 import hashlib
+import http.client
 import json
 import math
 from pathlib import Path
@@ -14,6 +15,18 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
+
+
+def fetch_json(request, attempts=4):
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.load(response)
+        except (urllib.error.URLError, http.client.IncompleteRead, TimeoutError, ConnectionError):
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(1.5 * (attempt + 1))
 
 
 def main():
@@ -40,8 +53,7 @@ def main():
     while cursor > first:
         query = urllib.parse.urlencode({'instId': 'BTC-USDT', 'bar': '1H', 'limit': '100', 'after': cursor})
         request = urllib.request.Request(endpoint + '?' + query, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.load(response)
+        payload = fetch_json(request)
         if payload.get('code') != '0' or not payload.get('data'):
             raise RuntimeError('Public candle API did not return data')
         oldest = min(int(row[0]) for row in payload['data'])
