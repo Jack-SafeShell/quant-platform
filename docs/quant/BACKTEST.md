@@ -31,9 +31,9 @@ java -jar yudao-server/target/yudao-server.jar
 
 支持 QUANT_DOCKER_EXECUTABLE、QUANT_FREQTRADE_IMAGE、QUANT_BACKTEST_TIMEOUT。镜像要求官方仓库 sha256 摘要固定，当前为已实测 Freqtrade 2026.8；超时默认 600 秒，范围 30..3600 秒。运行账户需要本机 Docker 权限。Docker Engine 与该应用必须在同一台主机，工作目录使用绝对路径。
 
-模拟盘执行总开关 `yudao.quant.paper-execution-enabled` 在单体 `application-quant.yaml` 中固定为 false，当前不提供环境变量覆盖。就绪快照只运行 `docker --version`、检查工作目录并生成 dry-run 配置清单，不启动容器。
+模拟盘执行总开关 `yudao.quant.paper-execution-enabled` 在单体 `application-quant.yaml` 中固定为 false，当前不提供环境变量覆盖。一次性启动令牌有效期 `paper-start-token-ttl-seconds` 也在该文件固定为 300 秒。就绪快照只运行 `docker --version`、检查工作目录并生成 dry-run 配置清单，不启动容器。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用十七张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览及审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用十八张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌及审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 
@@ -66,6 +66,8 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - POST/GET `/quant/backtest/paper-session/readiness/*`：为已批准且证据仍有效的会话生成、查询凭据无关配置及环境校验快照；执行能力固定关闭。
 - POST/GET `/quant/backtest/paper-execution/*`：创建、列出和查看 WAITING_ENABLE 执行计划，或按任务精确停止并审计；当前不启动容器。
 - POST/GET `/quant/backtest/paper-execution/preview/*`：从执行计划生成或读取带摘要的安全命令预览；隔离目录只含 dry-run 配置与已固化策略源码，命令按参数数组保存且不会执行。
+- POST `/quant/backtest/paper-execution/start-token/issue`：提交固定确认语、意见和预览摘要后签发 5 分钟一次性令牌；明文仅在本次响应显示，重签会吊销旧令牌。
+- GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌消费入口仅预留给后续受控执行器，当前没有公开启动 API。
 
 请求示例（不含认证信息）：
 
