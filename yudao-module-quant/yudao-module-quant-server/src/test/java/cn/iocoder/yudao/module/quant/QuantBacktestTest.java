@@ -206,6 +206,8 @@ class QuantBacktestTest {
         String id=optimization.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest(versionId,"test","2025-01-11","2025-01-18","2025-01-25",List.of(parameterSetId,second)));
         var members=(List<?>)optimization.get(1,10,id).get("members");
         assertEquals(4,members.size());assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task",Integer.class));
+        for(Object value:members){var member=(Map<String,Object>)value;String task=(String)member.get("taskId");assertTrue(repository.claim(task));boolean preferred=second.equals(member.get("parameterSetId"));double result="TRAIN".equals(member.get("phase"))?(preferred?0.08:0.04):(preferred?0.03:0.035);repository.complete(task,new BacktestEngine.Output("test","{\"totalTrades\":4,\"netProfit\":1,\"returnRatio\":"+result+",\"maxDrawdownRatio\":0.01}","hash-"+task));}
+        var summary=optimization.get(1,10,id);assertEquals(true,summary.get("terminal"));var ranking=(List<Map<String,Object>>)summary.get("ranking");assertEquals(parameterSetId,ranking.getFirst().get("parameterSetId"));assertEquals(false,summary.get("autoSelected"));
         assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,id));
     }
 }

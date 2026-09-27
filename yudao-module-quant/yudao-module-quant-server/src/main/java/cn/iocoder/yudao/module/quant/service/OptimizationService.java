@@ -24,6 +24,16 @@ import java.util.*;
   }return id;
  }
  public List<Map<String,Object>> list(long t,long o){return repo.list(t,o);}
- public Map<String,Object> get(long t,long o,String id){var batch=repo.get(t,o,id);if(batch==null)throw new IllegalArgumentException("优化批次不存在");batch.put("members",repo.members(id));return batch;}
+ public Map<String,Object> get(long t,long o,String id){
+  var batch=repo.get(t,o,id);if(batch==null)throw new IllegalArgumentException("优化批次不存在");var members=repo.members(id);batch.put("members",members);
+  boolean terminal=members.stream().allMatch(m->Set.of("SUCCEEDED","FAILED").contains(m.get("status")));
+  List<Map<String,Object>> ranking=new ArrayList<>();Map<String,Map<String,Map<String,Object>>> grouped=new LinkedHashMap<>();
+  for(var member:members)grouped.computeIfAbsent((String)member.get("parameterSetId"),k->new LinkedHashMap<>()).put((String)member.get("phase"),member);
+  if(terminal)for(var entry:grouped.entrySet()){Map<String,Object> train=entry.getValue().get("TRAIN"),validation=entry.getValue().get("VALIDATION");Map<String,Object> row=new LinkedHashMap<>();row.put("parameterSetId",entry.getKey());row.put("trainStatus",train.get("status"));row.put("validationStatus",validation.get("status"));
+   if("SUCCEEDED".equals(train.get("status"))&&"SUCCEEDED".equals(validation.get("status"))){var a=metrics((String)train.get("resultJson"));var b=metrics((String)validation.get("resultJson"));row.put("trainReturn",a[0]);row.put("validationReturn",b[0]);row.put("overfitGap",a[0]-b[0]);row.put("validationDrawdown",b[1]);row.put("validationTrades",(int)b[2]);}ranking.add(row);}
+  ranking.sort(Comparator.comparingDouble(x->-((Number)x.getOrDefault("validationReturn",Double.NEGATIVE_INFINITY)).doubleValue()));for(int i=0;i<ranking.size();i++)ranking.get(i).put("rank",ranking.get(i).containsKey("validationReturn")?i+1:null);
+  batch.put("terminal",terminal);batch.put("ranking",ranking);batch.put("autoSelected",false);return batch;
+ }
+ private static double[] metrics(String json){var n=JsonUtils.getObjectMapper().readTree(json);return new double[]{n.path("returnRatio").asDouble(),n.path("maxDrawdownRatio").asDouble(),n.path("totalTrades").asInt()};}
  private static LocalDate date(String s){try{return LocalDate.parse(s);}catch(Exception e){throw new IllegalArgumentException("日期格式错误");}}
 }

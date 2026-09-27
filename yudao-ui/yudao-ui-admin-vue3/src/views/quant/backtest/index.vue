@@ -37,8 +37,9 @@
   <ContentWrap title="受控参数优化批次">
     <el-alert title="选择 2 至 5 个参数集；训练区间与验证区间完全分离，各至少 7 天。" type="info" :closable="false" />
     <el-form :inline="true" class="mt-4"><el-form-item label="参数集"><el-select v-model="optimization.parameterSetIds" multiple class="w-300px"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select></el-form-item><el-form-item label="训练/切分/验证"><el-date-picker v-model="optimizationDates" type="dates" value-format="YYYY-MM-DD" /></el-form-item><el-button type="primary" :disabled="!enabled" @click="submitOptimization">提交批次</el-button></el-form>
-    <el-table :data="optimizationBatches"><el-table-column prop="dataset_id" label="数据集" /><el-table-column prop="train_start" label="训练开始" /><el-table-column prop="split_date" label="切分日" /><el-table-column prop="validation_end" label="验证结束" /></el-table>
+    <el-table :data="optimizationBatches"><el-table-column prop="dataset_id" label="数据集" /><el-table-column prop="train_start" label="训练开始" /><el-table-column prop="split_date" label="切分日" /><el-table-column prop="validation_end" label="验证结束" /><el-table-column label="操作"><template #default="s"><el-button link type="primary" @click="showOptimization(s.row.id)">结果</el-button></template></el-table-column></el-table>
   </ContentWrap>
+  <el-dialog v-model="optimizationVisible" title="训练/验证结果" width="80%"><el-alert :title="optimizationResult?.terminal ? '结果按验证集收益率排序；系统不会自动采纳参数。' : '任务尚未全部结束，暂不生成排序。'" type="warning" :closable="false" /><el-table :data="optimizationResult?.ranking || []" class="mt-3"><el-table-column prop="rank" label="排名" /><el-table-column prop="parameterSetId" label="参数集" min-width="260" /><el-table-column prop="trainStatus" label="训练状态" /><el-table-column prop="validationStatus" label="验证状态" /><el-table-column prop="trainReturn" label="训练收益率" /><el-table-column prop="validationReturn" label="验证收益率" /><el-table-column prop="overfitGap" label="训练-验证差异" /><el-table-column prop="validationDrawdown" label="验证回撤" /><el-table-column prop="validationTrades" label="验证成交" /></el-table></el-dialog>
   <el-dialog v-model="detailVisible" title="回测结果与实验记录" width="80%">
     <template v-if="selected">
       <el-alert v-if="selected.errorMessage" :title="selected.errorMessage" type="error" :closable="false" />
@@ -79,8 +80,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads, exportBacktestReport, createOptimization, listOptimizations } from '@/api/quant/backtest'
-import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask, OptimizationBatch } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads, exportBacktestReport, createOptimization, listOptimizations, getOptimization } from '@/api/quant/backtest'
+import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask, OptimizationBatch, OptimizationResult } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
 interface Result {
@@ -104,6 +105,8 @@ const downloadSubmitting = ref(false)
 const optimization=reactive({parameterSetIds: [] as string[]})
 const optimizationDates=ref<string[]>([])
 const optimizationBatches=ref<OptimizationBatch[]>([])
+const optimizationResult=ref<OptimizationResult>()
+const optimizationVisible=ref(false)
 const dates = ref<string[]>([])
 const tasks = ref<BacktestTask[]>([])
 const selected = ref<BacktestTask>()
@@ -149,6 +152,7 @@ async function submitOptimization(){
   const d=[...optimizationDates.value].sort(); if(optimization.parameterSetIds.length<2||optimization.parameterSetIds.length>5||d.length!==3||!form.datasetId||!form.strategyVersionId){ElMessage.warning('请选择 2 至 5 个参数集和三个日期');return}
   await createOptimization({strategyVersionId:form.strategyVersionId,datasetId:form.datasetId,trainStart:d[0],splitDate:d[1],validationEnd:d[2],parameterSetIds:optimization.parameterSetIds});ElMessage.success('优化批次已提交');await refresh()
 }
+async function showOptimization(id:string){optimizationResult.value=await getOptimization(id);optimizationVisible.value=true}
 async function submitDownload() {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(downloadForm.datasetId) || downloadDates.value.length !== 2) { ElMessage.warning('请填写有效的数据集编号和日期区间'); return }
   downloadSubmitting.value = true

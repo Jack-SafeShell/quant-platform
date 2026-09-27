@@ -92,3 +92,5 @@ export const listDatasetDownloads = (): Promise<DatasetDownloadTask[]> => reques
 export interface OptimizationBatch { id: string; dataset_id: string; train_start: string; split_date: string; validation_end: string; created_at: number }
 export const createOptimization = (data: object): Promise<string> => request.post({ url: '/quant/backtest/optimization/create', data })
 export const listOptimizations = (): Promise<OptimizationBatch[]> => request.get({ url: '/quant/backtest/optimization/list' })
+export interface OptimizationResult extends OptimizationBatch { terminal: boolean; autoSelected: false; ranking: Array<{ parameterSetId:string; rank?:number; trainStatus:string; validationStatus:string; trainReturn?:number; validationReturn?:number; overfitGap?:number; validationDrawdown?:number; validationTrades?:number }> }
+export const getOptimization = (id:string): Promise<OptimizationResult> => request.get({ url:'/quant/backtest/optimization/get', params:{id} })
