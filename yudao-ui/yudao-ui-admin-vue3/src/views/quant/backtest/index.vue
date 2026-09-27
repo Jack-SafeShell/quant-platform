@@ -47,6 +47,7 @@
         <el-descriptions-item label="引擎版本">{{ selected.engineVersion || '尚未完成' }}</el-descriptions-item>
         <el-descriptions-item label="参数">{{ selected.parametersJson }}</el-descriptions-item>
       </el-descriptions>
+      <div v-if="selected.status === 'SUCCEEDED'" class="mt-3"><el-button @click="downloadReport('md')">导出实验报告</el-button><el-button @click="downloadReport('json')">导出可复现清单</el-button></div>
       <template v-if="result">
         <el-descriptions class="mt-4" :column="3" border>
           <el-descriptions-item label="成交数">{{ result.totalTrades }}</el-descriptions-item>
@@ -73,7 +74,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads, exportBacktestReport } from '@/api/quant/backtest'
 import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
@@ -142,6 +143,12 @@ async function submitDownload() {
   finally { downloadSubmitting.value = false }
 }
 async function showDetail(id: string) { selected.value = await getBacktest(id); detailVisible.value = true }
+async function downloadReport(format: 'md' | 'json') {
+  if (!selected.value) return
+  const blob = await exportBacktestReport(selected.value.id, format)
+  const url = URL.createObjectURL(blob); const link = document.createElement('a')
+  link.href = url; link.download = `backtest-${selected.value.id}.${format}`; link.click(); URL.revokeObjectURL(url)
+}
 const parseParameters = (item: ParameterSet) => JSON.parse(item.parametersJson)
 const parameterLabel = (item: ParameterSet) => { const p = parseParameters(item); return `${p.startingBalance} / ${p.stakeAmount} / ${p.fee}` }
 function applyParameterSet(id: string) { const item = parameterSets.value.find(value => value.id === id); if (item) Object.assign(form, parseParameters(item)) }

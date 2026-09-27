@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.*;
 import java.util.*;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -35,6 +36,14 @@ public class BacktestController {
     @GetMapping("/get")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String, Object>> get(@RequestParam String id) { return success(service.get(tenant(), owner(), id)); }
+    @GetMapping("/report")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public ResponseEntity<byte[]> report(@RequestParam String id, @RequestParam(defaultValue = "md") String format) throws Exception {
+        var report = service.exportReport(tenant(), owner(), id, format);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(report.filename(), java.nio.charset.StandardCharsets.UTF_8).build().toString())
+                .body(report.content());
+    }
     @GetMapping("/capabilities")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String, Object>> capabilities() {

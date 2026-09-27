@@ -10,6 +10,8 @@
 
 范围限定：OKX/Binance、BTC/USDT 现货、1h、固定 QuantEmaBaseline 策略。当前自动数据准备脚本接 OKX；Binance 数据集可按相同清单格式准备，但本轮没有 Binance 实测。策略 EMA20/EMA60、止损 2%、ROI 4%、只做多，240 根预热。只能调整区间、初始资金、单笔投入、单边手续费。不是盈利策略推荐。
 
+成功任务详情可导出 Markdown 实验报告或 JSON 可复现清单。导出内容固定关联策略和行情 SHA-256、请求参数、引擎镜像/版本、产物摘要及核心指标；JSON 清单另含自身内容摘要，不包含策略源码或凭据。
+
 ## 单体配置
 
 实际配置位于 `yudao-server/src/main/resources/application-quant.yaml`，由主 `application.yaml` 显式导入。默认关闭执行开关，完成迁移和数据准备后通过当前启动进程环境启用：

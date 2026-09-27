@@ -152,6 +152,19 @@ class QuantBacktestTest {
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_result", Integer.class));
         assertEquals("QUEUED", service.get(1, 10, id).get("status"));
     }
+    @Test void exportsReadableReportAndReproducibilityManifest() throws Exception {
+        String id = service.create(1, 10, request("report"));
+        assertTrue(repository.claim(id));
+        repository.complete(id, new BacktestEngine.Output("freqtrade-test", "{\"totalTrades\":4,\"netProfit\":1.5,\"returnRatio\":0.0015,\"maxDrawdownRatio\":0.002}", "artifact-hash"));
+        String markdown = new String(service.exportReport(1, 10, id, "md").content(), java.nio.charset.StandardCharsets.UTF_8);
+        String manifest = new String(service.exportReport(1, 10, id, "json").content(), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("历史回测实验报告"));
+        assertTrue(markdown.contains("artifact-hash"));
+        assertTrue(manifest.contains("quant-backtest-report/v1"));
+        assertTrue(manifest.contains("manifestSha256"));
+        assertFalse(manifest.contains("sourceCode"));
+        assertThrows(IllegalArgumentException.class, () -> service.exportReport(1, 11, id, "json"));
+    }
     @Test void concurrentDuplicateRequestsOnlyCreateOneExperiment() throws Exception {
         try (var pool = java.util.concurrent.Executors.newFixedThreadPool(4)) {
             var futures = new ArrayList<java.util.concurrent.Future<String>>();

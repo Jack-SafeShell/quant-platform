@@ -18,6 +18,7 @@ import java.util.*;
 
 @Service
 public class BacktestService {
+    public record ReportFile(String filename, String contentType, byte[] content) { }
     private final BacktestRepository repository;
     private final DatasetRegistry datasets;
     private final QuantProperties properties;
@@ -95,6 +96,34 @@ public class BacktestService {
         return comparison;
     }
     public List<DatasetRegistry.DatasetQuality> listDatasets() throws Exception { return datasets.list(); }
+    public ReportFile exportReport(long tenant, long owner, String id, String format) throws Exception {
+        Map<String, Object> task = get(tenant, owner, id);
+        if (!"SUCCEEDED".equals(task.get("status"))) throw new IllegalArgumentException("只能导出已完成回测报告");
+        var request = JsonUtils.getObjectMapper().readTree((String) task.get("parametersJson"));
+        var metrics = JsonUtils.getObjectMapper().readTree((String) task.get("resultJson"));
+        Map<String, Object> manifest = new TreeMap<>();
+        manifest.put("schemaVersion", "quant-backtest-report/v1");
+        manifest.put("taskId", id);
+        manifest.put("strategy", Map.of("name", task.get("strategyName"), "versionId", task.get("strategyVersionId"), "sha256", task.get("strategyHash")));
+        manifest.put("dataset", Map.of("id", task.get("datasetId"), "exchange", task.get("exchangeName"), "sha256", task.get("datasetHash"), "source", task.get("datasetSource")));
+        manifest.put("engine", Map.of("image", task.get("engineImage"), "version", task.get("engineVersion"), "artifactSha256", task.get("artifactHash")));
+        manifest.put("request", JsonUtils.getObjectMapper().convertValue(request, Map.class));
+        manifest.put("metrics", Map.of("totalTrades", metrics.path("totalTrades").asInt(), "netProfit", metrics.path("netProfit").decimalValue(), "returnRatio", metrics.path("returnRatio").decimalValue(), "maxDrawdownRatio", metrics.path("maxDrawdownRatio").decimalValue()));
+        manifest.put("notice", "仅为历史回测技术记录，不构成投资建议或盈利证明");
+        byte[] canonical = JsonUtils.toJsonByte(manifest);
+        manifest.put("manifestSha256", DatasetRegistry.hash(canonical));
+        if ("json".equalsIgnoreCase(format)) return new ReportFile("backtest-" + id + ".json", "application/json;charset=UTF-8", JsonUtils.toJsonByte(manifest));
+        if (!"md".equalsIgnoreCase(format)) throw new IllegalArgumentException("报告格式仅支持 json 或 md");
+        @SuppressWarnings("unchecked") Map<String,Object> metricMap=(Map<String,Object>)manifest.get("metrics");
+        String markdown = "# 历史回测实验报告\n\n" +
+                "- 任务编号：`" + id + "`\n- 策略：" + task.get("strategyName") + " (`" + task.get("strategyHash") + "`)\n" +
+                "- 数据集：" + task.get("datasetId") + " / " + task.get("exchangeName") + " (`" + task.get("datasetHash") + "`)\n" +
+                "- 引擎：" + task.get("engineVersion") + " / `" + task.get("engineImage") + "`\n- 产物 SHA-256：`" + task.get("artifactHash") + "`\n\n" +
+                "## 可复现参数\n\n```json\n" + JsonUtils.toJsonPrettyString(manifest.get("request")) + "\n```\n\n" +
+                "## 核心指标\n\n| 成交数 | 净收益 | 收益率 | 最大回撤 |\n|---:|---:|---:|---:|\n| " + metricMap.get("totalTrades") + " | " + metricMap.get("netProfit") + " | " + metricMap.get("returnRatio") + " | " + metricMap.get("maxDrawdownRatio") + " |\n\n" +
+                "清单 SHA-256：`" + manifest.get("manifestSha256") + "`\n\n> 仅为历史回测技术记录，不构成投资建议或盈利证明。\n";
+        return new ReportFile("backtest-" + id + ".md", "text/markdown;charset=UTF-8", markdown.getBytes(StandardCharsets.UTF_8));
+    }
     private static String parameterJson(java.math.BigDecimal balance, java.math.BigDecimal stake, java.math.BigDecimal fee) {
         return JsonUtils.toJsonString(new TreeMap<>(Map.of("fee", fee, "stakeAmount", stake, "startingBalance", balance)));
     }

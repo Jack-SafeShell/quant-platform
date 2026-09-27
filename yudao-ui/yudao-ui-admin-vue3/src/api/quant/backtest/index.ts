@@ -37,6 +37,8 @@ export const listBacktests = (): Promise<BacktestTask[]> =>
   request.get({ url: '/quant/backtest/list' })
 export const getBacktest = (id: string): Promise<BacktestTask> =>
   request.get({ url: '/quant/backtest/get', params: { id } })
+export const exportBacktestReport = (id: string, format: 'md' | 'json'): Promise<Blob> =>
+  request.download({ url: '/quant/backtest/report', params: { id, format } })
 export const getCapabilities = (): Promise<{ enabled: boolean }> =>
   request.get({ url: '/quant/backtest/capabilities' })
 export interface StrategyVersion {
