@@ -33,7 +33,7 @@ java -jar yudao-server/target/yudao-server.jar
 
 模拟盘执行总开关 `yudao.quant.paper-execution-enabled` 在单体 `application-quant.yaml` 中固定为 false，当前不提供环境变量覆盖。就绪快照只运行 `docker --version`、检查工作目录并生成 dry-run 配置清单，不启动容器。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用十四张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批及就绪快照。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用十六张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务及审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 
@@ -64,6 +64,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/datasets`：扫描本地受控数据目录，返回格式、摘要、连续性、覆盖时间和 K 线数量质量报告。
 - POST/GET `/quant/backtest/paper-session/*`：创建、列出和查看只读模拟盘会话，并对启动准备执行 APPROVED/REJECTED 人工审批；不会启动引擎。
 - POST/GET `/quant/backtest/paper-session/readiness/*`：为已批准且证据仍有效的会话生成、查询凭据无关配置及环境校验快照；执行能力固定关闭。
+- POST/GET `/quant/backtest/paper-execution/*`：创建、列出和查看 WAITING_ENABLE 执行计划，或按任务精确停止并审计；当前不启动容器。
 
 请求示例（不含认证信息）：
 

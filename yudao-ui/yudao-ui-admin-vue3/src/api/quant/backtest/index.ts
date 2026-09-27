@@ -106,3 +106,7 @@ export const reviewPaperSession=(id:string,data:{decision:'APPROVED'|'REJECTED';
 export interface PaperReadinessSnapshot { id:string;manifestJson:string;manifestHash:string;ready:boolean;createdAt:number }
 export const createPaperReadiness=(id:string):Promise<string>=>request.post({url:'/quant/backtest/paper-session/readiness/create',params:{id}})
 export const listPaperReadiness=(id:string):Promise<PaperReadinessSnapshot[]>=>request.get({url:'/quant/backtest/paper-session/readiness/list',params:{id}})
+export interface PaperExecution { id:string;session_id:string;readiness_hash:string;status:'WAITING_ENABLE'|'STARTING'|'RUNNING'|'STOP_REQUESTED'|'STOPPED'|'FAILED';container_name:string;created_at:number;executionEnabled:boolean;activationAllowed:false;containerStarted:false }
+export const createPaperExecution=(sessionId:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/create',params:{sessionId}})
+export const listPaperExecutions=():Promise<PaperExecution[]>=>request.get({url:'/quant/backtest/paper-execution/list'})
+export const stopPaperExecution=(id:string,comment:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/stop',params:{id},data:{comment}})
