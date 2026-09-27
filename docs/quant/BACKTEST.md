@@ -27,7 +27,7 @@ java -jar yudao-server/target/yudao-server.jar
 
 支持 QUANT_DOCKER_EXECUTABLE、QUANT_FREQTRADE_IMAGE、QUANT_BACKTEST_TIMEOUT。镜像要求官方仓库 sha256 摘要固定，当前为已实测 Freqtrade 2026.8；超时默认 600 秒，范围 30..3600 秒。运行账户需要本机 Docker 权限。Docker Engine 与该应用必须在同一台主机，工作目录使用绝对路径。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用五张 quant 表及三条量化菜单记录。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。当前 mock-enable 是用户原本的 local 配置，本轮未改变；正式环境须关闭。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用七张 quant 表及三条量化菜单记录。新增两张表保存受控行情下载任务及状态审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。当前 mock-enable 是用户原本的 local 配置，本轮未改变；正式环境须关闭。
 
 ## 数据与迁移
 
@@ -36,7 +36,7 @@ python script/quant/migrate.py
 python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --end 2026-09-01
 ```
 
-迁移脚本执行量化建表、幂等菜单插入及 `003_parameter_set_scope.sql` 的参数集归属与请求快照增量迁移，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
+迁移脚本执行量化建表、幂等菜单插入、`003_parameter_set_scope.sql` 的参数集归属迁移及 `004_dataset_download.sql` 的下载审计建表，不会导入基础库或删除数据。使用本机已有 PyYAML/PyMySQL；凭据从原本 local 的 master 读取，不通过命令参数或日志输出。
 
 数据脚本仅需 Python 标准库，下载公开且已确认的小时 K 线；包含 240 根预热，校验时间连续性、OHLCV 数值及价格关系。存在的数据集 ID 拒绝覆盖，重新下载需新 ID。本轮已存在 `okx-btc-202608`，不要重复执行同一 ID。
 

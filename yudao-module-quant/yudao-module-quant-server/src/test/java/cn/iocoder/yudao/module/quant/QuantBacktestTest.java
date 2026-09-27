@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.quant;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.DatasetDownloadRequest;
 import cn.iocoder.yudao.module.quant.dal.BacktestRepository;
 import cn.iocoder.yudao.module.quant.engine.*;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
@@ -33,6 +34,7 @@ class QuantBacktestTest {
         properties = new QuantProperties(); properties.setWorkspace(root.toString()); properties.setEnabled(true);
         DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", "sa", "");
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/001_backtest.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/004_dataset_download.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -172,5 +174,16 @@ class QuantBacktestTest {
         try { worker.start(); } finally { worker.close(); }
         assertEquals(List.of(id),stopped);
         assertEquals("FAILED",service.get(1,10,id).get("status"));
+    }
+    @Test void datasetDownloadIsControlledIdempotentAndAudited() {
+        var downloadRepository = new cn.iocoder.yudao.module.quant.dal.DatasetDownloadRepository(jdbc);
+        var downloads = new DatasetDownloadService(downloadRepository, properties, transactions);
+        var request = new DatasetDownloadRequest("download-key", "okx-btc-test", "2025-01-01", "2025-01-03");
+        String id = downloads.create(1, 10, request);
+        assertEquals(id, downloads.create(1, 10, request));
+        assertEquals("okx", downloads.get(1, 10, id).get("exchange_name"));
+        assertEquals(1, ((List<?>) downloads.get(1, 10, id).get("audits")).size());
+        assertThrows(IllegalArgumentException.class, () -> downloads.get(1, 11, id));
+        assertThrows(IllegalArgumentException.class, () -> downloads.create(1, 10, new DatasetDownloadRequest("download-key", "changed", "2025-01-01", "2025-01-03")));
     }
 }

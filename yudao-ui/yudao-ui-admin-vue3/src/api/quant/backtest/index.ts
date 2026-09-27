@@ -80,3 +80,10 @@ export const listParameterSets = (): Promise<ParameterSet[]> => request.get({ ur
 export const createParameterSet = (data: Pick<BacktestRequest, 'startingBalance' | 'stakeAmount' | 'fee'>): Promise<string> => request.post({ url: '/quant/backtest/parameter-set/create', data })
 export const compareBacktests = (data: string[]): Promise<BacktestComparison[]> => request.post({ url: '/quant/backtest/compare', data })
 export const listDatasets = (): Promise<DatasetQuality[]> => request.get({ url: '/quant/backtest/datasets' })
+export interface DatasetDownloadTask {
+  id: string; dataset_id: string; start_date: string; end_date: string
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'; candles?: number
+  dataset_hash?: string; error_message?: string; created_at: number
+}
+export const createDatasetDownload = (data: { requestKey: string; datasetId: string; startDate: string; endDate: string }): Promise<string> => request.post({ url: '/quant/backtest/dataset-download/create', data })
+export const listDatasetDownloads = (): Promise<DatasetDownloadTask[]> => request.get({ url: '/quant/backtest/dataset-download/list' })

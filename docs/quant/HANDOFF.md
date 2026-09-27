@@ -7,18 +7,19 @@
 - 新增 yudao-module-quant / yudao-module-quant-api / yudao-module-quant-server，根 reactor 与 yudao-server 依赖接入。
 - 单体配置 application-quant.yaml 已由 yudao-server/application.yaml 导入；配置加载有独立测试。默认关闭执行，环境开关和路径见 BACKTEST。
 - 任务提交、最近 100 条列表、详情、能力查询 API；既有认证权限接入，每次读取限定当前租户及用户。
-- 五张独立表：quant_strategy、quant_strategy_version、quant_parameter_set、quant_backtest_task、quant_backtest_result。已在项目 RDS 实际执行增量建表，无 DROP、删库或其他库操作。
+- 七张独立表：原有五张策略/回测表，加 quant_dataset_download_task、quant_dataset_download_audit。已在项目 RDS 实际执行增量建表，无 DROP、删库或其他库操作。
 - 持久队列、同键幂等、原子领取、事务结果提交、数据覆盖/摘要验证、重启中断处理与专属 Docker 容器回测。
 - 前端 /quant/backtest：提交、刷新/轮询、实验摘要、统一结果和模拟成交查看。
 - 内置策略按源码摘要注册并复用不可变版本；回测显式引用版本，前端可选择版本，后端校验租户、用户和摘要。
 - 参数集按租户、用户及内容摘要复用；任务保存独立请求快照，页面支持选择/保存参数集并对比 2 至 5 个成功实验。
 - 页面展示数据集质量报告，只允许选择摘要、OHLCV、连续性和最小预热校验通过的数据集；回测执行前仍会再次校验。
 - 新增数据准备、迁移与实际烟测脚本，详见 [BACKTEST](BACKTEST.md)。未导入 PoC 文件或操作其服务。
+- 新增受控行情下载队列：仅 OKX 公开 BTC/USDT 现货 1h，限制 1 至 366 个已结束 UTC 日；数据集不可覆盖，任务按租户/用户隔离，提交、运行、成功或失败均持久化审计。单体配置已接入 yudao-server。
 
 ## 验证结果
 
 - Java 25.0.4 / Maven 3.9.9；新增模块后单体 package 成功。
-- 11 项量化单元/集成测试（H2、真实服务与仓储、引擎结果解析）通过：并发幂等、租户/用户隔离、摘要篡改拒绝、覆盖/预热拒绝、原子结果提交、重启中断、只回测命令与真实版本证据。
+- 17 项量化测试通过（1 项需真实环境的烟测按预期跳过），覆盖下载幂等、租户/用户隔离、审计记录、摘要篡改拒绝、覆盖/预热拒绝、原子结果提交和重启中断。
 - 1 项单体配置导入测试通过；另有 1 项实际 MySQL + Docker Freqtrade 回测测试通过。
 - 管理后台已完成登录、动态菜单、页面和成功任务列表的浏览器验收；前端 `build:local` 与全量 `ts:check` 均通过。
 - RDS 仅本项目 quant-platform；Redis 既有基线 healthy/PONG，本轮没有更改 Redis 配置。
@@ -37,7 +38,7 @@
 
 ## 当前限制
 
-1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与 quant 表。量化动态菜单迁移已应用，管理员登录后可见“量化研究 / 历史回测”。
+1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与七张 quant 表。量化动态菜单和行情下载审计迁移已应用，管理员登录后可见“量化研究 / 历史回测”。
 2. 2026-09-27 浏览器验收已覆盖登录、动态菜单、历史回测页面、配置启用状态和已有成功任务列表。浏览器自动化未新增任务：Element Plus 日期范围控件的自动化文本输入未提交 Vue 范围模型，因此没有把该尝试计入成功证据。
 3. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
 4. 固定策略、BTC/USDT 现货 1h，无策略编辑、参数优化、模拟交易、用户取消、自动重试或实盘。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
@@ -52,4 +53,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**实现受控的数据集下载任务与审计记录。** 仅允许公开历史行情、固定交易对和时间粒度，不接入交易凭据，暂不扩展模拟盘或实盘。
+**实现回测实验报告导出与可复现清单。** 汇总策略、参数、行情摘要、引擎版本和核心指标，暂不扩展模拟盘或实盘。

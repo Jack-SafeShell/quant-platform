@@ -14,6 +14,11 @@
       <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">提交历史回测</el-button></el-form-item>
     </el-form>
   </ContentWrap>
+  <ContentWrap title="受控历史行情下载">
+    <el-alert title="仅下载 OKX 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
+    <el-form :inline="true" class="mt-4"><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
+    <el-table :data="downloadTasks"><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
+  </ContentWrap>
   <ContentWrap title="行情数据集与质量报告">
     <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
   </ContentWrap>
@@ -68,8 +73,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets } from '@/api/quant/backtest'
-import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality } from '@/api/quant/backtest'
+import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads } from '@/api/quant/backtest'
+import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
 interface Result {
@@ -86,6 +91,10 @@ const selectedIds = ref<string[]>([])
 const comparisons = ref<BacktestComparison[]>([])
 const compareVisible = ref(false)
 const datasets = ref<DatasetQuality[]>([])
+const downloadTasks = ref<DatasetDownloadTask[]>([])
+const downloadForm = reactive({ datasetId: '' })
+const downloadDates = ref<string[]>([])
+const downloadSubmitting = ref(false)
 const dates = ref<string[]>([])
 const tasks = ref<BacktestTask[]>([])
 const selected = ref<BacktestTask>()
@@ -121,8 +130,16 @@ async function refresh() {
   loading.value = true
   try {
     tasks.value = await listBacktests()
+    downloadTasks.value = await listDatasetDownloads()
+    datasets.value = await listDatasets()
     if (detailVisible.value && selected.value) selected.value = await getBacktest(selected.value.id)
   } finally { loading.value = false }
+}
+async function submitDownload() {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(downloadForm.datasetId) || downloadDates.value.length !== 2) { ElMessage.warning('请填写有效的数据集编号和日期区间'); return }
+  downloadSubmitting.value = true
+  try { await createDatasetDownload({ requestKey: crypto.randomUUID(), datasetId: downloadForm.datasetId, startDate: downloadDates.value[0], endDate: downloadDates.value[1] }); ElMessage.success('下载任务已提交'); await refresh() }
+  finally { downloadSubmitting.value = false }
 }
 async function showDetail(id: string) { selected.value = await getBacktest(id); detailVisible.value = true }
 const parseParameters = (item: ParameterSet) => JSON.parse(item.parametersJson)
@@ -140,7 +157,7 @@ onMounted(async () => {
   datasets.value = await listDatasets()
   if (datasets.value.some(item => item.status === 'VALID')) form.datasetId = datasets.value.find(item => item.status === 'VALID')!.id
   await refresh()
-  timer = setInterval(() => { if (tasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status))) void refresh().catch(() => {}) }, 5000)
+  timer = setInterval(() => { if (tasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status)) || downloadTasks.value.some(t => ['QUEUED', 'RUNNING'].includes(t.status))) void refresh().catch(() => {}) }, 5000)
 })
 onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
