@@ -110,3 +110,6 @@ export interface PaperExecution { id:string;session_id:string;readiness_hash:str
 export const createPaperExecution=(sessionId:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/create',params:{sessionId}})
 export const listPaperExecutions=():Promise<PaperExecution[]>=>request.get({url:'/quant/backtest/paper-execution/list'})
 export const stopPaperExecution=(id:string,comment:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/stop',params:{id},data:{comment}})
+export interface PaperCommandPreview { id:string;previewJson:string;previewHash:string;workDirectory:string;createdAt:number }
+export const createPaperCommandPreview=(id:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/preview/create',params:{id}})
+export const getPaperCommandPreview=(id:string):Promise<PaperCommandPreview>=>request.get({url:'/quant/backtest/paper-execution/preview/get',params:{id}})
