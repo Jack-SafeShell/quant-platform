@@ -103,3 +103,6 @@ export const createPaperSession=(data:{batchId:string;parameterSetId:string}):Pr
 export const listPaperSessions=():Promise<PaperSession[]>=>request.get({url:'/quant/backtest/paper-session/list'})
 export const getPaperSession=(id:string):Promise<PaperSession>=>request.get({url:'/quant/backtest/paper-session/get',params:{id}})
 export const reviewPaperSession=(id:string,data:{decision:'APPROVED'|'REJECTED';comment:string;admissionEvidenceHash:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-session/review',params:{id},data})
+export interface PaperReadinessSnapshot { id:string;manifestJson:string;manifestHash:string;ready:boolean;createdAt:number }
+export const createPaperReadiness=(id:string):Promise<string>=>request.post({url:'/quant/backtest/paper-session/readiness/create',params:{id}})
+export const listPaperReadiness=(id:string):Promise<PaperReadinessSnapshot[]>=>request.get({url:'/quant/backtest/paper-session/readiness/list',params:{id}})

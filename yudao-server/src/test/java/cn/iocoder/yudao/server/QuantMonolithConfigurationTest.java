@@ -16,6 +16,8 @@ class QuantMonolithConfigurationTest {
                     assertThat(context).hasNotFailed().hasSingleBean(QuantProperties.class);
                     QuantProperties properties = context.getBean(QuantProperties.class);
                     assertThat(properties.isEnabled()).isFalse();
+                    assertThat(properties.isPaperExecutionEnabled()).isFalse();
+                    assertThat(context.getEnvironment().getProperty("yudao.quant.paper-execution-enabled")).isEqualTo("false");
                     assertThat(properties.getWorkspace().replace('\\', '/')).contains("quant-platform").endsWith(".runtime/quant");
                     assertThat(properties.getImage()).startsWith("freqtradeorg/freqtrade@sha256:");
                     assertThat(context.getEnvironment().getProperty("yudao.quant.timeout-seconds")).isEqualTo("600");

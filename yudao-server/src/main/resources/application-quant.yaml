@@ -2,6 +2,7 @@
 yudao:
   quant:
     enabled: ${QUANT_BACKTEST_ENABLED:false}
+    paper-execution-enabled: false
     workspace: ${QUANT_WORKSPACE:D:/0000/quant-platform/.runtime/quant}
     docker-executable: ${QUANT_DOCKER_EXECUTABLE:docker}
     image: ${QUANT_FREQTRADE_IMAGE:freqtradeorg/freqtrade@sha256:7031bca43ed7668ebf421725dd5016acade6ef88b0771db3e08c96e6d19a42db}

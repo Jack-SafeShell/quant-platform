@@ -15,6 +15,7 @@ import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
 import cn.iocoder.yudao.module.quant.service.OptimizationService;
 import cn.iocoder.yudao.module.quant.service.PaperSessionService;
+import cn.iocoder.yudao.module.quant.service.PaperReadinessService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,7 +34,8 @@ public class BacktestController {
     private final DatasetDownloadService downloads;
     private final OptimizationService optimizations;
     private final PaperSessionService paperSessions;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; }
+    private final PaperReadinessService paperReadiness;
+    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {
@@ -105,6 +107,10 @@ public class BacktestController {
     public CommonResult<Map<String,Object>> getPaperSession(@RequestParam String id){return success(paperSessions.get(tenant(),owner(),id));}
     @PostMapping("/paper-session/review") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> reviewPaperSession(@RequestParam String id,@Valid @RequestBody PaperSessionReviewRequest request){return success(paperSessions.review(tenant(),owner(),id,request));}
+    @PostMapping("/paper-session/readiness/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createPaperReadiness(@RequestParam String id)throws Exception{return success(paperReadiness.create(tenant(),owner(),id));}
+    @GetMapping("/paper-session/readiness/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> listPaperReadiness(@RequestParam String id){return success(paperReadiness.list(tenant(),owner(),id));}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }

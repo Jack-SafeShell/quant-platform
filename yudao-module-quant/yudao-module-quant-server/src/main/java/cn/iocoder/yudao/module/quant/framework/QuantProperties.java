@@ -10,6 +10,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "yudao.quant")
 public class QuantProperties {
     private boolean enabled = false;
+    private boolean paperExecutionEnabled = false;
     @NotBlank private String workspace = ".runtime/quant";
     @NotBlank private String dockerExecutable = "docker";
     @Pattern(regexp = "freqtradeorg/freqtrade@sha256:[0-9a-f]{64}")
