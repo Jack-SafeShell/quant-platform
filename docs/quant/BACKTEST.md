@@ -12,6 +12,8 @@
 
 成功任务详情可导出 Markdown 实验报告或 JSON 可复现清单。导出内容固定关联策略和行情 SHA-256、请求参数、引擎镜像/版本、产物摘要及核心指标；JSON 清单另含自身内容摘要，不包含策略源码或凭据。
 
+参数优化批次只接受 2 至 5 个当前用户已有参数集，并为每组参数分别建立训练和验证回测。切分日是训练结束和验证开始，两段不重叠且各至少 7 天；批次本身不自动选择或应用参数。
+
 ## 单体配置
 
 实际配置位于 `yudao-server/src/main/resources/application-quant.yaml`，由主 `application.yaml` 显式导入。默认关闭执行开关，完成迁移和数据准备后通过当前启动进程环境启用：
@@ -29,7 +31,7 @@ java -jar yudao-server/target/yudao-server.jar
 
 支持 QUANT_DOCKER_EXECUTABLE、QUANT_FREQTRADE_IMAGE、QUANT_BACKTEST_TIMEOUT。镜像要求官方仓库 sha256 摘要固定，当前为已实测 Freqtrade 2026.8；超时默认 600 秒，范围 30..3600 秒。运行账户需要本机 Docker 权限。Docker Engine 与该应用必须在同一台主机，工作目录使用绝对路径。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用七张 quant 表及三条量化菜单记录。新增两张表保存受控行情下载任务及状态审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。当前 mock-enable 是用户原本的 local 配置，本轮未改变；正式环境须关闭。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用九张 quant 表及三条量化菜单记录，其中四张保存行情下载审计及优化批次成员。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 

@@ -35,6 +35,7 @@ class QuantBacktestTest {
         DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", "sa", "");
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/001_backtest.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/004_dataset_download.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/005_optimization_batch.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -46,7 +47,7 @@ class QuantBacktestTest {
         Path dir = root.resolve("datasets/test"); Files.createDirectories(dir);
         long begin = LocalDate.of(2025, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
         List<List<Number>> rows = new ArrayList<>();
-        for (int i = 0; i < 288; i++) rows.add(List.of(begin + i * 3600000L, 100, 105, 95, 101, 10));
+        for (int i = 0; i < 840; i++) rows.add(List.of(begin + i * 3600000L, 100, 105, 95, 101, 10));
         byte[] content = JsonUtils.toJsonByte(rows);
         Files.write(dir.resolve("BTC_USDT-1h.json"), content);
         Files.writeString(dir.resolve("manifest.json"), JsonUtils.toJsonString(Map.of("exchange", "okx", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "sha256", DatasetRegistry.hash(content), "source", "synthetic test fixture")));
@@ -97,7 +98,7 @@ class QuantBacktestTest {
     @Test void incompleteCoverageAndTraversalRejected() {
         assertThrows(Exception.class, () -> datasets.load("../test", LocalDate.of(2025,1,11), LocalDate.of(2025,1,13)));
         assertThrows(IllegalArgumentException.class, () -> datasets.load("test", LocalDate.of(2025,1,10), LocalDate.of(2025,1,13)));
-        assertThrows(IllegalArgumentException.class, () -> datasets.load("test", LocalDate.of(2025,1,11), LocalDate.of(2025,1,14)));
+        assertThrows(IllegalArgumentException.class, () -> datasets.load("test", LocalDate.of(2025,1,11), LocalDate.of(2025,2,6)));
     }
     @Test void datasetQualityReportIncludesValidAndInvalidDirectories() throws Exception {
         Files.createDirectories(root.resolve("datasets/broken"));
@@ -105,7 +106,7 @@ class QuantBacktestTest {
         var valid = reports.stream().filter(item -> item.id().equals("test")).findFirst().orElseThrow();
         var invalid = reports.stream().filter(item -> item.id().equals("broken")).findFirst().orElseThrow();
         assertEquals("VALID", valid.status());
-        assertEquals(288, valid.candles());
+        assertEquals(840, valid.candles());
         assertEquals(0, valid.gaps());
         assertEquals("INVALID", invalid.status());
         assertNotNull(invalid.error());
@@ -198,5 +199,13 @@ class QuantBacktestTest {
         assertEquals(1, ((List<?>) downloads.get(1, 10, id).get("audits")).size());
         assertThrows(IllegalArgumentException.class, () -> downloads.get(1, 11, id));
         assertThrows(IllegalArgumentException.class, () -> downloads.create(1, 10, new DatasetDownloadRequest("download-key", "changed", "2025-01-01", "2025-01-03")));
+    }
+    @Test void optimizationCreatesSeparatedTrainAndValidationTasks() throws Exception {
+        String second=service.createParameterSet(1,10,new cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest(new BigDecimal("1000"),new BigDecimal("120"),new BigDecimal("0.001")));
+        var optimization=new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc),repository,service);
+        String id=optimization.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest(versionId,"test","2025-01-11","2025-01-18","2025-01-25",List.of(parameterSetId,second)));
+        var members=(List<?>)optimization.get(1,10,id).get("members");
+        assertEquals(4,members.size());assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task",Integer.class));
+        assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,id));
     }
 }
