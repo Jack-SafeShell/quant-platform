@@ -106,7 +106,7 @@ export const reviewPaperSession=(id:string,data:{decision:'APPROVED'|'REJECTED';
 export interface PaperReadinessSnapshot { id:string;manifestJson:string;manifestHash:string;ready:boolean;createdAt:number }
 export const createPaperReadiness=(id:string):Promise<string>=>request.post({url:'/quant/backtest/paper-session/readiness/create',params:{id}})
 export const listPaperReadiness=(id:string):Promise<PaperReadinessSnapshot[]>=>request.get({url:'/quant/backtest/paper-session/readiness/list',params:{id}})
-export interface PaperExecution { id:string;session_id:string;readiness_hash:string;status:'WAITING_ENABLE'|'STARTING'|'RUNNING'|'STOP_REQUESTED'|'STOPPED'|'FAILED';container_name:string;created_at:number;executionEnabled:boolean;activationAllowed:false;containerStarted:false }
+export interface PaperExecution { id:string;session_id:string;readiness_hash:string;status:'WAITING_ENABLE'|'STARTING'|'RUNNING'|'STOP_REQUESTED'|'STOPPED'|'FAILED';container_name:string;created_at:number;executionEnabled:boolean;activationAllowed:false;containerStarted:boolean }
 export const createPaperExecution=(sessionId:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/create',params:{sessionId}})
 export const listPaperExecutions=():Promise<PaperExecution[]>=>request.get({url:'/quant/backtest/paper-execution/list'})
 export const stopPaperExecution=(id:string,comment:string):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/stop',params:{id},data:{comment}})
@@ -115,3 +115,4 @@ export const createPaperCommandPreview=(id:string):Promise<string>=>request.post
 export const getPaperCommandPreview=(id:string):Promise<PaperCommandPreview>=>request.get({url:'/quant/backtest/paper-execution/preview/get',params:{id}})
 export interface PaperStartToken { id:string;executionId:string;previewHash:string;token:string;status:'ISSUED';issuedAt:number;expiresAt:number;singleDisplay:true;executionStarted:false }
 export const issuePaperStartToken=(id:string,data:{previewHash:string;confirmation:'CONFIRM_DRY_RUN_START';comment:string}):Promise<PaperStartToken>=>request.post({url:'/quant/backtest/paper-execution/start-token/issue',params:{id},data})
+export const startPaperExecution=(id:string,data:{previewHash:string;token:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/start',params:{id},data})

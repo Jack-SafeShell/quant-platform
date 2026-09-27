@@ -67,7 +67,8 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - POST/GET `/quant/backtest/paper-execution/*`：创建、列出和查看 WAITING_ENABLE 执行计划，或按任务精确停止并审计；当前不启动容器。
 - POST/GET `/quant/backtest/paper-execution/preview/*`：从执行计划生成或读取带摘要的安全命令预览；隔离目录只含 dry-run 配置与已固化策略源码，命令按参数数组保存且不会执行。
 - POST `/quant/backtest/paper-execution/start-token/issue`：提交固定确认语、意见和预览摘要后签发 5 分钟一次性令牌；明文仅在本次响应显示，重签会吊销旧令牌。
-- GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌消费入口仅预留给后续受控执行器，当前没有公开启动 API。
+- GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌只能由受总开关保护的执行器原子消费。
+- POST `/quant/backtest/paper-execution/start`：仅在单体总开关开启时接受预览摘要和一次性令牌；启动事务复核配置、策略文件及命令清单，原子消费令牌后流转 STARTING/RUNNING。当前配置固定关闭，因此部署环境会拒绝该请求。
 
 请求示例（不含认证信息）：
 
@@ -82,6 +83,8 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 状态：QUEUED → RUNNING → SUCCEEDED/FAILED。单线程 worker 从 DB 领取，CAS 防止重复领取；应用重启时先停止已知专属容器，将中断任务标失败，不自动重试。当前只支持单个应用实例及固定共享工作目录，文件锁防止同目录并行启动；不支持多个主机/多个工作目录同时消费同一数据库。取消、分布式租约、自动重试和归档清理不在首版范围。
 
 每任务独立 `quant-platform-bt-<UUID>` 一次性容器；仅开放 backtesting CLI，无 trade/webserver 操作，无交易所凭据、端口发布、Docker socket 挂载或 PoC 挂载。dry_run=true、spot 固定，API/Telegram 关闭；限制 CPU/内存、只读容器根文件系统，只写任务挂载目录。超时/关闭只清理精确任务名，绝不 remove-orphans。
+
+模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。当前只通过进程替身验证这些状态，尚无真实 dry-run 运行证据。
 
 不能单看进程退出码：2026.8 配置错误可能未产生非零退出码。必须有唯一结果归档、有效策略结果、完整实际区间与一致成交数。结果归档不直接解压到磁盘，限制大小。2026.8 结果 JSON 没有引擎版本字段，版本取本次启动日志 banner，同时保存固定镜像摘要。零成交允许作为合法回测结果，但 UI 明确提示不代表盈利能力验证。
 

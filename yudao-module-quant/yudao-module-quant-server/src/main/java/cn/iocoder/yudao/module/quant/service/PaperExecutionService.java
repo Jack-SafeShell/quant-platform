@@ -14,5 +14,5 @@ import java.util.*;
  public List<Map<String,Object>> list(long tenant,long owner){var rows=repo.list(tenant,owner);rows.forEach(this::decorate);return rows;}
  public Map<String,Object> get(long tenant,long owner,String id){var task=repo.get(tenant,owner,id);if(task==null)throw new IllegalArgumentException("模拟盘执行任务不存在");decorate(task);task.put("audits",repo.audits(id));return task;}
  @Transactional public String stop(long tenant,long owner,String id,PaperExecutionStopRequest request){var task=get(tenant,owner,id);String from=(String)task.get("status");if("STOPPED".equals(from))return id;if(Set.of("FAILED").contains(from))throw new IllegalArgumentException("终态任务不能停止");if(!repo.stop(id))throw new IllegalArgumentException("任务状态已变化，请刷新");repo.revokeTokens(id);repo.audit(id,owner,"STOPPED",from,"STOPPED",request.comment()+"；按任务绑定容器名精确停止，当前阶段未启动容器");return id;}
- private void decorate(Map<String,Object> task){task.put("executionEnabled",properties.isPaperExecutionEnabled());task.put("activationAllowed",false);task.put("containerStarted",false);}
+ private void decorate(Map<String,Object> task){task.put("executionEnabled",properties.isPaperExecutionEnabled());task.put("activationAllowed",false);task.put("containerStarted",Set.of("STARTING","RUNNING").contains(task.get("status")));}
 }

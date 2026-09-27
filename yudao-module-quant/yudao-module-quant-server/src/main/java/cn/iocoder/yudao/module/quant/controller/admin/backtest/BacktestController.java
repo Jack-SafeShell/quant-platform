@@ -12,6 +12,7 @@ import cn.iocoder.yudao.module.quant.api.backtest.PaperAdmissionReviewRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperSessionRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperSessionReviewRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStopRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStartRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperStartTokenRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
@@ -21,6 +22,7 @@ import cn.iocoder.yudao.module.quant.service.PaperReadinessService;
 import cn.iocoder.yudao.module.quant.service.PaperExecutionService;
 import cn.iocoder.yudao.module.quant.service.PaperDryRunPreviewService;
 import cn.iocoder.yudao.module.quant.service.PaperStartTokenService;
+import cn.iocoder.yudao.module.quant.service.PaperRuntimeService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -43,7 +45,8 @@ public class BacktestController {
     private final PaperExecutionService paperExecutions;
     private final PaperDryRunPreviewService paperPreviews;
     private final PaperStartTokenService paperStartTokens;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; }
+    private final PaperRuntimeService paperRuntime;
+    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {
@@ -126,7 +129,7 @@ public class BacktestController {
     @GetMapping("/paper-execution/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String,Object>> getPaperExecution(@RequestParam String id){return success(paperExecutions.get(tenant(),owner(),id));}
     @PostMapping("/paper-execution/stop") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
-    public CommonResult<String> stopPaperExecution(@RequestParam String id,@Valid @RequestBody PaperExecutionStopRequest request){return success(paperExecutions.stop(tenant(),owner(),id,request));}
+    public CommonResult<String> stopPaperExecution(@RequestParam String id,@Valid @RequestBody PaperExecutionStopRequest request)throws Exception{return success(paperRuntime.stop(tenant(),owner(),id,request));}
     @PostMapping("/paper-execution/preview/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> createPaperPreview(@RequestParam String id)throws Exception{return success(paperPreviews.create(tenant(),owner(),id));}
     @GetMapping("/paper-execution/preview/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
@@ -135,6 +138,8 @@ public class BacktestController {
     public CommonResult<Map<String,Object>> issuePaperStartToken(@RequestParam String id,@Valid @RequestBody PaperStartTokenRequest request){return success(paperStartTokens.issue(tenant(),owner(),id,request));}
     @GetMapping("/paper-execution/start-token/latest") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String,Object>> latestPaperStartToken(@RequestParam String id){return success(paperStartTokens.latest(tenant(),owner(),id));}
+    @PostMapping("/paper-execution/start") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> startPaperExecution(@RequestParam String id,@Valid @RequestBody PaperExecutionStartRequest request)throws Exception{return success(paperRuntime.start(tenant(),owner(),id,request));}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
