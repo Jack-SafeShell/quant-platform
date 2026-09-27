@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.DatasetDownloadRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.ResearchReviewRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
 import cn.iocoder.yudao.module.quant.service.OptimizationService;
@@ -87,6 +88,10 @@ public class BacktestController {
     public CommonResult<List<Map<String,Object>>> listOptimizations(){return success(optimizations.list(tenant(),owner()));}
     @GetMapping("/optimization/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String,Object>> getOptimization(@RequestParam String id){return success(optimizations.get(tenant(),owner(),id));}
+    @PostMapping("/optimization/review") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> reviewOptimization(@RequestParam String id,@Valid @RequestBody ResearchReviewRequest request){return success(optimizations.review(tenant(),owner(),id,request));}
+    @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
     private static long owner() { return Objects.requireNonNull(SecurityFrameworkUtils.getLoginUserId(), "用户上下文缺失"); }
     @ExceptionHandler(IllegalArgumentException.class)

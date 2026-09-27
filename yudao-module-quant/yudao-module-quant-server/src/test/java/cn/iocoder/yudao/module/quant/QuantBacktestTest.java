@@ -36,6 +36,7 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/001_backtest.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/004_dataset_download.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/005_optimization_batch.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/006_research_review.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -208,6 +209,7 @@ class QuantBacktestTest {
         assertEquals(4,members.size());assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task",Integer.class));
         for(Object value:members){var member=(Map<String,Object>)value;String task=(String)member.get("taskId");assertTrue(repository.claim(task));boolean preferred=second.equals(member.get("parameterSetId"));double result="TRAIN".equals(member.get("phase"))?(preferred?0.08:0.04):(preferred?0.03:0.035);repository.complete(task,new BacktestEngine.Output("test","{\"totalTrades\":4,\"netProfit\":1,\"returnRatio\":"+result+",\"maxDrawdownRatio\":0.01}","hash-"+task));}
         var summary=optimization.get(1,10,id);assertEquals(true,summary.get("terminal"));var ranking=(List<Map<String,Object>>)summary.get("ranking");assertEquals(parameterSetId,ranking.getFirst().get("parameterSetId"));assertEquals(false,summary.get("autoSelected"));var draft=(Map<String,Object>)summary.get("researchDraft");assertEquals("quant-research-rules/v1",draft.get("ruleVersion"));assertEquals(false,draft.get("autoApplied"));assertTrue(((List<?>)draft.get("risks")).size()>=2);
+        optimization.review(1,10,id,new cn.iocoder.yudao.module.quant.api.backtest.ResearchReviewRequest("ACCEPTED","仅接受研究记录",(String)draft.get("evidenceSha256")));assertEquals(1,((List<?>)optimization.get(1,10,id).get("reviews")).size());assertTrue(new String(optimization.exportDraft(1,10,id).content()).contains("不会自动修改参数"));
         assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,id));
     }
 }
