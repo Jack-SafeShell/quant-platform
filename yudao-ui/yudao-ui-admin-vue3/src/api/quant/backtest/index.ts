@@ -39,7 +39,7 @@ export const getBacktest = (id: string): Promise<BacktestTask> =>
   request.get({ url: '/quant/backtest/get', params: { id } })
 export const exportBacktestReport = (id: string, format: 'md' | 'json'): Promise<Blob> =>
   request.download({ url: '/quant/backtest/report', params: { id, format } })
-export const getCapabilities = (): Promise<{ enabled: boolean }> =>
+export const getCapabilities = (): Promise<{ enabled: boolean; executionEnabled: boolean; riskPolicyVersion: string; snapshotRetentionDays: number }> =>
   request.get({ url: '/quant/backtest/capabilities' })
 export interface StrategyVersion {
   id: string
@@ -119,6 +119,9 @@ export const startPaperExecution=(id:string,data:{previewHash:string;token:strin
 export interface PaperExecutionObservation { executionId:string;status:string;containerName:string;executionEnabled:boolean;preflightPassed:boolean;checks:Array<{id:string;passed:boolean;evidence:string}>;logExists:boolean;logTail:string;logTruncated:boolean;runtime:{engineRunningSeen:boolean;runningStartedAt?:number;lastHeartbeatAt?:number;lastMarketDataAt?:number;networkErrorCount:number;fatalErrorCount:number;soakSeconds:number;heartbeatAgeSeconds:number;soakPassed:boolean;currentHealthy:boolean};portfolio:{available:boolean;databasePresent:boolean;databaseBytes:number;initialBalance:number;estimatedAvailableBalance:number;openPositions:number;closedTrades:number;openOrders:number;totalOrders:number;realizedProfit:number;investedStake:number;latestTradeAt?:string;latestOrderAt?:string;latestWalletAt?:string;walletBalance?:number;portfolioValue?:number;positionValue?:number;error?:string};observedAt:number }
 export const observePaperExecution=(id:string,lines=200):Promise<PaperExecutionObservation>=>request.get({url:'/quant/backtest/paper-execution/observation',params:{id,lines}})
 export interface PaperObservationSnapshot { id:string;executionStatus:string;heartbeatAgeSeconds:number;networkErrorCount:number;fatalErrorCount:number;soakSeconds:number;soakPassed:boolean;estimatedAvailableBalance:number;openPositions:number;openOrders:number;evidenceHash:string;observedAt:number }
-export interface PaperAlert { id:string;alertType:'STALE_HEARTBEAT'|'NETWORK_ERROR'|'FATAL_ERROR'|'PROCESS_EXITED';severity:'WARN'|'HIGH';status:'OPEN'|'RESOLVED';evidence:string;firstObservedAt:number;lastObservedAt:number;resolvedAt?:number }
+export interface PaperAlert { id:string;alertType:'STALE_HEARTBEAT'|'NETWORK_ERROR'|'FATAL_ERROR'|'PROCESS_EXITED'|'RISK_LIMIT_BREACH';severity:'WARN'|'HIGH';status:'OPEN'|'ACKNOWLEDGED'|'RESOLVED';evidence:string;firstObservedAt:number;lastObservedAt:number;acknowledgedAt?:number;acknowledgedBy?:number;resolvedAt?:number;resolutionComment?:string }
+export interface PaperAlertAction { id:string;alertId:string;actionType:'ACKNOWLEDGE'|'RESOLVE';fromStatus:string;toStatus:string;actorId:number;comment:string;createdAt:number }
 export const listPaperObservationSnapshots=(id:string):Promise<PaperObservationSnapshot[]>=>request.get({url:'/quant/backtest/paper-execution/observation-snapshots',params:{id}})
 export const listPaperAlerts=(id:string):Promise<PaperAlert[]>=>request.get({url:'/quant/backtest/paper-execution/alerts',params:{id}})
+export const actPaperAlert=(alertId:string,data:{action:'ACKNOWLEDGE'|'RESOLVE';comment:string}):Promise<string>=>request.post({url:'/quant/backtest/paper-execution/alert/action',params:{alertId},data})
+export const listPaperAlertActions=(id:string):Promise<PaperAlertAction[]>=>request.get({url:'/quant/backtest/paper-execution/alert-actions',params:{id}})

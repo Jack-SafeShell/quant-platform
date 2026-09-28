@@ -5,6 +5,13 @@ yudao:
     paper-execution-enabled: false
     paper-start-token-ttl-seconds: 300
     paper-observation-interval-seconds: ${QUANT_PAPER_OBSERVATION_INTERVAL:60}
+    paper-snapshot-retention-days: 30
+    paper-risk-policy-version: paper-risk-v1
+    paper-max-order-notional: 100
+    paper-max-total-exposure: 100
+    paper-max-open-positions: 1
+    paper-max-daily-loss: 20
+    paper-max-drawdown-ratio: 0.05
     workspace: ${QUANT_WORKSPACE:D:/0000/quant-platform/.runtime/quant}
     docker-executable: ${QUANT_DOCKER_EXECUTABLE:docker}
     image: ${QUANT_FREQTRADE_IMAGE:freqtradeorg/freqtrade@sha256:7031bca43ed7668ebf421725dd5016acade6ef88b0771db3e08c96e6d19a42db}

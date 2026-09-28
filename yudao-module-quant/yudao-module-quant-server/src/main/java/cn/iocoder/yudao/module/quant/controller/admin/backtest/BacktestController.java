@@ -14,6 +14,7 @@ import cn.iocoder.yudao.module.quant.api.backtest.PaperSessionReviewRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStopRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStartRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperStartTokenRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.PaperAlertActionRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
 import cn.iocoder.yudao.module.quant.service.OptimizationService;
@@ -73,7 +74,7 @@ public class BacktestController {
     @GetMapping("/capabilities")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String, Object>> capabilities() {
-        return success(Map.of("enabled", properties.isEnabled(), "strategy", "QuantEmaBaseline", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot"));
+        return success(Map.of("enabled", properties.isEnabled(), "executionEnabled", properties.isPaperExecutionEnabled(), "strategy", "QuantEmaBaseline", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "riskPolicyVersion", properties.getPaperRiskPolicyVersion(), "snapshotRetentionDays", properties.getPaperSnapshotRetentionDays()));
     }
     @GetMapping("/strategy-versions")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
@@ -150,6 +151,10 @@ public class BacktestController {
     public CommonResult<List<Map<String,Object>>> paperObservationSnapshots(@RequestParam String id){return success(paperObservationMonitor.snapshots(tenant(),owner(),id));}
     @GetMapping("/paper-execution/alerts") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> paperAlerts(@RequestParam String id){return success(paperObservationMonitor.alerts(tenant(),owner(),id));}
+    @PostMapping("/paper-execution/alert/action") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> actPaperAlert(@RequestParam String alertId,@Valid @RequestBody PaperAlertActionRequest request){return success(paperObservationMonitor.act(tenant(),owner(),alertId,request));}
+    @GetMapping("/paper-execution/alert-actions") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> paperAlertActions(@RequestParam String id){return success(paperObservationMonitor.alertActions(tenant(),owner(),id));}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }

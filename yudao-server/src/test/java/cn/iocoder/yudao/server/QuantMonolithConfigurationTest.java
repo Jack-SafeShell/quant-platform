@@ -19,6 +19,12 @@ class QuantMonolithConfigurationTest {
                     assertThat(properties.isPaperExecutionEnabled()).isFalse();
                     assertThat(context.getEnvironment().getProperty("yudao.quant.paper-execution-enabled")).isEqualTo("false");
                     assertThat(properties.getPaperStartTokenTtlSeconds()).isEqualTo(300);
+                    assertThat(properties.getPaperSnapshotRetentionDays()).isEqualTo(30);
+                    assertThat(properties.getPaperRiskPolicyVersion()).isEqualTo("paper-risk-v1");
+                    assertThat(properties.getPaperMaxOrderNotional()).isEqualByComparingTo("100");
+                    assertThat(properties.getPaperMaxTotalExposure()).isEqualByComparingTo("100");
+                    assertThat(properties.getPaperMaxOpenPositions()).isEqualTo(1);
+                    assertThat(properties.getPaperMaxDailyLoss()).isEqualByComparingTo("20");
                     assertThat(properties.getWorkspace().replace('\\', '/')).contains("quant-platform").endsWith(".runtime/quant");
                     assertThat(properties.getImage()).startsWith("freqtradeorg/freqtrade@sha256:");
                     assertThat(context.getEnvironment().getProperty("yudao.quant.timeout-seconds")).isEqualTo("600");

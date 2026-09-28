@@ -31,7 +31,7 @@ java -jar yudao-server/target/yudao-server.jar
 
 支持 QUANT_DOCKER_EXECUTABLE、QUANT_FREQTRADE_IMAGE、QUANT_BACKTEST_TIMEOUT。镜像要求官方仓库 sha256 摘要固定，当前为已实测 Freqtrade 2026.8；超时默认 600 秒，范围 30..3600 秒。运行账户需要本机 Docker 权限。Docker Engine 与该应用必须在同一台主机，工作目录使用绝对路径。
 
-模拟盘执行总开关 `yudao.quant.paper-execution-enabled` 在单体 `application-quant.yaml` 中固定为 false，当前不提供环境变量覆盖。一次性启动令牌有效期 `paper-start-token-ttl-seconds` 也在该文件固定为 300 秒。就绪快照只运行 `docker --version`、检查工作目录并生成 dry-run 配置清单，不启动容器。
+模拟盘执行总开关 `yudao.quant.paper-execution-enabled` 在单体 `application-quant.yaml` 中固定为 false，当前不提供环境变量覆盖。一次性启动令牌有效期 `paper-start-token-ttl-seconds` 固定为 300 秒，分钟快照保留期固定为 30 天。`paper-risk-v1` 固定单笔/总暴露 100 USDT、最多 1 个持仓、日内亏损 20 USDT、回撤 5% 且禁止实盘；策略版本和限额进入就绪清单摘要。就绪快照只运行 `docker --version`、检查工作目录并生成 dry-run 配置清单，不启动容器。
 
 首个真实 dry-run 只允许在人工验收窗口内通过单次进程参数临时覆盖，仓库配置始终保持 false。开始前先在页面确认“状态与日志”的启动前检查全部通过，再签发一次性令牌；随后停止当前单体进程，并仅对本次启动追加：
 
@@ -41,7 +41,7 @@ java -jar yudao-server/target/yudao-server.jar --yudao.quant.paper-execution-ena
 
 验收完成后先在页面精确停止执行计划，再停止该单体进程；按原启动命令重新启动（不携带上述参数），并在页面确认总开关显示“关闭”、任务已进入 STOPPED 或 FAILED。若页面停止失败，使用执行计划显示的唯一 `quant-platform-paper-<UUID>` 容器名执行 `docker stop --time 20 <容器名>`，绝不使用批量删除或 `remove-orphans`。启动窗口不得加入 API key、secret、password 或 token，不得改成实盘模式。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用二十张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌、周期观测及告警。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用二十一张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌、周期观测、告警及人工处置审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 
@@ -78,7 +78,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌只能由受总开关保护的执行器原子消费。
 - POST `/quant/backtest/paper-execution/start`：仅在单体总开关开启时接受预览摘要和一次性令牌；启动事务复核配置、策略文件及命令清单，原子消费令牌后流转 STARTING/RUNNING。当前配置固定关闭，因此部署环境会拒绝该请求。
 - GET `/quant/backtest/paper-execution/observation`：按当前租户和用户只读返回执行状态、启动前结构检查、运行健康、模拟资产摘要及专属 `runtime.log` 尾部；日志最多 200 行、64 KiB，不能指定任意路径。检查覆盖预览自身摘要、隔离目录、配置和策略摘要、`dry_run=true`、固定镜像及受限命令。资产数据直接以只读模式查询任务隔离 SQLite，不启动 API Server、不发布端口。
-- GET `/quant/backtest/paper-execution/observation-snapshots`、`/alerts`：查询当前用户最近 100 条分钟级快照及该任务告警。终态执行完成后，同一有效会话可顺序创建新执行；准入证据变化时保留旧会话并按新证据重新留痕，禁止并行创建多个活动执行。
+- GET `/quant/backtest/paper-execution/observation-snapshots`、`/alerts`：查询当前用户最近 100 条分钟级快照及该任务告警。POST `/paper-execution/alert/action` 支持人工确认或解决，GET `/alert-actions` 返回不可变处置记录；所有操作按租户和用户隔离。终态快照超过 30 天后由单体定期清理，活动执行不清理。终态执行完成后，同一有效会话可顺序创建新执行；准入证据变化时保留旧会话并按新证据重新留痕，禁止并行创建多个活动执行。
 
 请求示例（不含认证信息）：
 
@@ -95,6 +95,8 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 每任务独立 `quant-platform-bt-<UUID>` 一次性容器；仅开放 backtesting CLI，无 trade/webserver 操作，无交易所凭据、端口发布、Docker socket 挂载或 PoC 挂载。dry_run=true、spot 固定，API/Telegram 关闭；限制 CPU/内存、只读容器根文件系统，只写任务挂载目录。超时/关闭只清理精确任务名，绝不 remove-orphans。
 
 模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。配置把 dry-run SQLite 固定到隔离可写目录，显式提供新版 Freqtrade 所需的定价、静态交易对及 RUNNING 初始状态；API Server 和 Telegram 对象省略并保持默认关闭。交易所 WebSocket 固定关闭，公开行情沿用 `QUANT_EXCHANGE_PROXY` 的 HTTP 代理。
+
+告警状态为 OPEN → ACKNOWLEDGED → RESOLVED。自动观测会在异常恢复时解决告警；人工确认和解决必须提交说明并写入处置审计。持续异常会保留 ACKNOWLEDGED 状态，已解决后再次出现会重新打开。监控当前对心跳、网络、致命错误、进程退出以及仓位/总暴露/已实现亏损越界告警；风险越界尚只告警，不自动停止执行。
 
 2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。该次发现 HTTP 代理不承载 OKX WebSocket，后续已通过固定禁用 WebSocket 消除该错误。
 
