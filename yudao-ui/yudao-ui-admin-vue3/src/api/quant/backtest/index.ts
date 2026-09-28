@@ -129,3 +129,10 @@ export const actPaperAlert=(alertId:string,data:{action:'ACKNOWLEDGE'|'RESOLVE';
 export const listPaperAlertActions=(id:string):Promise<PaperAlertAction[]>=>request.get({url:'/quant/backtest/paper-execution/alert-actions',params:{id}})
 export const listPaperOrders=(id:string):Promise<PaperOrder[]>=>request.get({url:'/quant/backtest/paper-execution/orders',params:{id}})
 export const listPaperOrderReconciliations=(id:string):Promise<PaperOrderReconciliation[]>=>request.get({url:'/quant/backtest/paper-execution/reconciliations',params:{id}})
+export interface LiveAdmissionSummary { id:string;reportHash:string;createdAt:number;confirmationState:'PENDING_CONFIRMATION'|'DOUBLE_CONFIRMED';activationAllowed:false }
+export interface LiveAdmissionReport extends LiveAdmissionSummary { reportJson:string;liveTradingAllowed:false;confirmations:Array<{id:string;actorId:number;confirmationType:'EVIDENCE_REVIEW'|'KEY_BOUNDARY_REVIEW';confirmationPhrase:string;comment:string;reportHash:string;createdAt:number}> }
+export const createLiveAdmission=():Promise<string>=>request.post({url:'/quant/backtest/live-admission/create'})
+export const listLiveAdmissions=():Promise<LiveAdmissionSummary[]>=>request.get({url:'/quant/backtest/live-admission/list'})
+export const getLiveAdmission=(id:string):Promise<LiveAdmissionReport>=>request.get({url:'/quant/backtest/live-admission/get',params:{id}})
+export const confirmLiveAdmission=(id:string,data:{confirmationType:'EVIDENCE_REVIEW'|'KEY_BOUNDARY_REVIEW';confirmationPhrase:string;comment:string;reportHash:string}):Promise<string>=>request.post({url:'/quant/backtest/live-admission/confirm',params:{id},data})
+export const exportLiveAdmission=(id:string):Promise<Blob>=>request.download({url:'/quant/backtest/live-admission/export',params:{id}})

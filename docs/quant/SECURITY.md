@@ -8,6 +8,10 @@
 
 凭据只在本机配置或安全存储使用，不进入文档、聊天、日志和命令行参数。测试账户虽获授权使用，也不得无意义复制。当前 `application-local.yaml` 已受 Git 跟踪，前端 `.env.local` 已暂存；新增 ignore 不能保护已跟踪文件。本轮保留用户文件与索引，未来提交前必须人工审阅并另行迁移本地覆盖配置，不能声称凭据已从历史移除。
 
+实盘前密钥边界固定为：API Key 仅开放读取与现货交易权限，禁止提现；必须绑定受控出口 IP 白名单；模拟盘与实盘使用不同密钥。密钥必须进入专用加密托管，不进入业务数据库、源码、日志、聊天或命令行参数。常规轮换周期不超过 90 天；疑似泄露、人员或主机变更时立即吊销并轮换。当前平台不读取或校验私有密钥，也不提供实盘下单能力。
+
+`quant_live_admission_report` 保存跨执行证据的不可变 JSON 与 SHA-256，覆盖历史回测、4 小时 dry-run、订单对账故障恢复、风险停机和未解决告警。`quant_live_admission_confirmation` 以追加记录分别保存证据复核和密钥边界复核；两步都要求绑定报告摘要和固定确认语。双确认只表示人工已阅读当前证据，接口仍固定返回 `liveTradingAllowed=false`、`activationAllowed=false`，不构成实盘授权。
+
 RDS 仅允许本项目 `quant-platform`：连接测试、SELECT 1、必要建表迁移及明确范围测试数据。禁止删库、无条件大范围删除或操作其他库。初始化轮次仅做只读查询；回测开发轮次已按 sql/quant 创建五张业务表并写入明确标识的 smoke 实验。当前连接 URL 为 useSSL=false；正式环境前需单独验证 TLS 和最小权限账户。
 
 Docker 只管理 `quant-platform` 专属资源：容器 `quant-platform-redis`、网络 `quant-platform-local`、卷 `quant-platform-redis-data`。Redis 仅绑定 127.0.0.1，开启 AOF 和健康检查。端口冲突先查归属，改专属备用端口，不停未知服务。不执行 `--remove-orphans`，不停止/删除/重建其他项目容器，不随意删除持久卷。

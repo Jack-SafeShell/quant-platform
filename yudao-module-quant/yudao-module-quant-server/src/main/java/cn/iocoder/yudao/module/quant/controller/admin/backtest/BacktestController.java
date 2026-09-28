@@ -15,6 +15,7 @@ import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStopRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperExecutionStartRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperStartTokenRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.PaperAlertActionRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.LiveAdmissionConfirmationRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
 import cn.iocoder.yudao.module.quant.service.OptimizationService;
@@ -27,6 +28,7 @@ import cn.iocoder.yudao.module.quant.service.PaperRuntimeService;
 import cn.iocoder.yudao.module.quant.service.PaperExecutionObservationService;
 import cn.iocoder.yudao.module.quant.service.PaperObservationMonitorService;
 import cn.iocoder.yudao.module.quant.service.PaperOrderReconciliationService;
+import cn.iocoder.yudao.module.quant.service.LiveAdmissionService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -53,7 +55,8 @@ public class BacktestController {
     private final PaperExecutionObservationService paperObservations;
     private final PaperObservationMonitorService paperObservationMonitor;
     private final PaperOrderReconciliationService paperOrderReconciliation;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation; }
+    private final LiveAdmissionService liveAdmissions;
+    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation,LiveAdmissionService liveAdmissions) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation;this.liveAdmissions=liveAdmissions; }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {
@@ -161,6 +164,16 @@ public class BacktestController {
     public CommonResult<List<Map<String,Object>>> paperOrders(@RequestParam String id){return success(paperOrderReconciliation.orders(tenant(),owner(),id));}
     @GetMapping("/paper-execution/reconciliations") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> paperReconciliations(@RequestParam String id){return success(paperOrderReconciliation.reconciliations(tenant(),owner(),id));}
+    @PostMapping("/live-admission/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createLiveAdmission(){return success(liveAdmissions.create(tenant(),owner()));}
+    @GetMapping("/live-admission/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> listLiveAdmissions(){return success(liveAdmissions.list(tenant(),owner()));}
+    @GetMapping("/live-admission/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String,Object>> getLiveAdmission(@RequestParam String id){return success(liveAdmissions.get(tenant(),owner(),id));}
+    @PostMapping("/live-admission/confirm") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> confirmLiveAdmission(@RequestParam String id,@Valid @RequestBody LiveAdmissionConfirmationRequest request){return success(liveAdmissions.confirm(tenant(),owner(),id,request));}
+    @GetMapping("/live-admission/export") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public ResponseEntity<byte[]> exportLiveAdmission(@RequestParam String id){var report=liveAdmissions.export(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }
