@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -45,11 +47,13 @@ public class PaperExecutionObservationService {
                 && Files.isRegularFile(strategy, LinkOption.NOFOLLOW_LINKS);
         check(checks, "IMMUTABLE_INPUT_FILES", regularFiles, regularFiles ? "配置与策略文件存在且不是符号链接" : "文件缺失或路径不安全");
         boolean hashesMatch = false, dryRun = false, commandSafe = false;
+        double initialBalance = 0.0;
         if (regularFiles && previewHashValid) {
             var manifest = JsonUtils.getObjectMapper().readTree((String) preview.get("previewJson"));
             hashesMatch = manifest.path("configHash").asText().equals(DatasetRegistry.hash(Files.readAllBytes(config)))
                     && manifest.path("strategyHash").asText().equals(DatasetRegistry.hash(Files.readAllBytes(strategy)));
             var configJson = JsonUtils.getObjectMapper().readTree(Files.readString(config, StandardCharsets.UTF_8));
+            initialBalance = configJson.path("dry_run_wallet").asDouble(0.0);
             dryRun = configJson.path("dry_run").asBoolean(false) && "spot".equals(configJson.path("trading_mode").asText())
                     && !configJson.path("api_server").path("enabled").asBoolean(false)
                     && !configJson.path("telegram").path("enabled").asBoolean(false);
@@ -69,7 +73,8 @@ public class PaperExecutionObservationService {
 
         Path log = expectedWork.resolve("runtime.log");
         boolean logExists = workMatches && Files.isRegularFile(log, LinkOption.NOFOLLOW_LINKS);
-        String logTail = logExists ? tail(log, lines) : "";
+        String recentLog = logExists ? tail(log, 2_000) : "";
+        String logTail = lastLines(recentLog, lines);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("executionId", executionId);
         result.put("status", task.get("status"));
@@ -80,6 +85,8 @@ public class PaperExecutionObservationService {
         result.put("logExists", logExists);
         result.put("logTail", logTail);
         result.put("logTruncated", logExists && Files.size(log) > MAX_LOG_BYTES);
+        result.put("runtime", runtime(recentLog, String.valueOf(task.get("status"))));
+        result.put("portfolio", PaperTelemetryReader.read(expectedWork, initialBalance));
         result.put("observedAt", System.currentTimeMillis());
         return result;
     }
@@ -96,8 +103,55 @@ public class PaperExecutionObservationService {
             bytes = new byte[(int) (file.length() - start)];
             file.readFully(bytes);
         }
-        String text = new String(bytes, StandardCharsets.UTF_8).replace("\u0000", "");
+        return lastLines(new String(bytes, StandardCharsets.UTF_8).replace("\u0000", ""), maxLines);
+    }
+
+    private static String lastLines(String text, int maxLines) {
         String[] rows = text.split("\\R", -1);
         return String.join(System.lineSeparator(), Arrays.copyOfRange(rows, Math.max(0, rows.length - maxLines), rows.length));
+    }
+
+    private static Map<String, Object> runtime(String log, String status) {
+        Instant started = null, heartbeat = null, market = null;
+        int networkErrors = 0, fatalErrors = 0;
+        for (String line : log.split("\\R")) {
+            Instant timestamp = timestamp(line);
+            if (line.contains("Changing state to: RUNNING") && started == null) started = timestamp;
+            if (line.contains("Bot heartbeat") && timestamp != null) heartbeat = timestamp;
+            if ((line.contains("Wallets synced.") || line.contains("Whitelist with") || line.contains("ohlcv"))
+                    && !line.contains(" ERROR ") && timestamp != null) market = timestamp;
+            if (line.contains(" ERROR ") && (line.contains("Network") || line.contains("connection") || line.contains("connect"))) networkErrors++;
+            if (line.contains("Fatal exception") || line.contains("Configuration error:")) fatalErrors++;
+        }
+        long soakSeconds = started != null && heartbeat != null && !heartbeat.isBefore(started)
+                ? Duration.between(started, heartbeat).toSeconds() : 0;
+        long heartbeatAgeSeconds = heartbeat == null ? -1 : Math.max(0, Duration.between(heartbeat, Instant.now()).toSeconds());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("engineRunningSeen", started != null);
+        result.put("runningStartedAt", epoch(started));
+        result.put("lastHeartbeatAt", epoch(heartbeat));
+        result.put("lastMarketDataAt", epoch(market));
+        result.put("networkErrorCount", networkErrors);
+        result.put("fatalErrorCount", fatalErrors);
+        result.put("soakSeconds", soakSeconds);
+        result.put("heartbeatAgeSeconds", heartbeatAgeSeconds);
+        result.put("soakPassed", started != null && soakSeconds >= 60 && networkErrors == 0 && fatalErrors == 0);
+        result.put("currentHealthy", "RUNNING".equals(status) && heartbeatAgeSeconds >= 0 && heartbeatAgeSeconds <= 90
+                && networkErrors == 0 && fatalErrors == 0);
+        return result;
+    }
+
+    private static Instant timestamp(String line) {
+        if (line.length() < 23) return null;
+        try {
+            return LocalDateTime.parse(line.substring(0, 23), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss,SSS"))
+                    .toInstant(ZoneOffset.UTC);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static Long epoch(Instant instant) {
+        return instant == null ? null : instant.toEpochMilli();
     }
 }

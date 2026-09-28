@@ -77,7 +77,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - POST `/quant/backtest/paper-execution/start-token/issue`：提交固定确认语、意见和预览摘要后签发 5 分钟一次性令牌；明文仅在本次响应显示，重签会吊销旧令牌。
 - GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌只能由受总开关保护的执行器原子消费。
 - POST `/quant/backtest/paper-execution/start`：仅在单体总开关开启时接受预览摘要和一次性令牌；启动事务复核配置、策略文件及命令清单，原子消费令牌后流转 STARTING/RUNNING。当前配置固定关闭，因此部署环境会拒绝该请求。
-- GET `/quant/backtest/paper-execution/observation`：按当前租户和用户只读返回执行状态、启动前结构检查及专属 `runtime.log` 尾部；日志最多 200 行、64 KiB，不能指定任意路径。检查覆盖预览自身摘要、隔离目录、配置和策略摘要、`dry_run=true`、固定镜像及受限命令。
+- GET `/quant/backtest/paper-execution/observation`：按当前租户和用户只读返回执行状态、启动前结构检查、运行健康、模拟资产摘要及专属 `runtime.log` 尾部；日志最多 200 行、64 KiB，不能指定任意路径。检查覆盖预览自身摘要、隔离目录、配置和策略摘要、`dry_run=true`、固定镜像及受限命令。资产数据直接以只读模式查询任务隔离 SQLite，不启动 API Server、不发布端口。
 
 请求示例（不含认证信息）：
 
@@ -93,9 +93,11 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 
 每任务独立 `quant-platform-bt-<UUID>` 一次性容器；仅开放 backtesting CLI，无 trade/webserver 操作，无交易所凭据、端口发布、Docker socket 挂载或 PoC 挂载。dry_run=true、spot 固定，API/Telegram 关闭；限制 CPU/内存、只读容器根文件系统，只写任务挂载目录。超时/关闭只清理精确任务名，绝不 remove-orphans。
 
-模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。配置把 dry-run SQLite 固定到隔离可写目录，显式提供新版 Freqtrade 所需的定价、静态交易对及 RUNNING 初始状态；API Server 和 Telegram 对象省略并保持默认关闭。
+模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。配置把 dry-run SQLite 固定到隔离可写目录，显式提供新版 Freqtrade 所需的定价、静态交易对及 RUNNING 初始状态；API Server 和 Telegram 对象省略并保持默认关闭。交易所 WebSocket 固定关闭，公开行情沿用 `QUANT_EXCHANGE_PROXY` 的 HTTP 代理。
 
-2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。当前 HTTP 代理不承载 OKX WebSocket，日志有连接错误但主循环保持 RUNNING；下一阶段需完成行情稳定性和只读交易遥测验收。
+2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。该次发现 HTTP 代理不承载 OKX WebSocket，后续已通过固定禁用 WebSocket 消除该错误。
+
+同日已完成禁用 WebSocket 后的稳定性与遥测验收：批次 `1db57c0a-2513-4188-ae33-c47fb3e9cb1c`、执行 `8de8ab4e-1dea-4945-815f-5e899c4493f5`。RUNNING 心跳跨度 65 秒，网络/致命错误均为 0；SQLite 只读遥测返回 1000 USDT 模拟余额，持仓、订单和成交均为 0。停止及恢复默认启动后复核 STOPPED、总开关 false、检查通过且无专属容器残留。60 秒通过只证明短时技术稳定性，不代表长期运行或策略收益。
 
 页面“状态与日志”是人工验收的只读证据入口。总开关关闭是准备阶段的通过项；运行窗口开启后该项会显示当前状态，其他文件、摘要和命令约束仍须保持通过。日志不存在表示容器尚未启动，不视为伪造的运行证据。
 
