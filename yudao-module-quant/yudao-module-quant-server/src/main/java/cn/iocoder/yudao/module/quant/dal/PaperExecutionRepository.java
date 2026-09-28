@@ -24,5 +24,5 @@ import java.util.*;
  public boolean starting(String id){return jdbc.update("UPDATE quant_paper_execution SET status='STARTING',error_message=NULL,updated_at=? WHERE id=? AND status='WAITING_ENABLE'",System.currentTimeMillis(),id)==1;}
  public boolean running(String id){return jdbc.update("UPDATE quant_paper_execution SET status='RUNNING',updated_at=? WHERE id=? AND status='STARTING'",System.currentTimeMillis(),id)==1;}
  public boolean failActive(String id,String message){return jdbc.update("UPDATE quant_paper_execution SET status='FAILED',error_message=?,updated_at=? WHERE id=? AND status IN ('STARTING','RUNNING')",message,System.currentTimeMillis(),id)==1;}
- public List<Map<String,Object>> active(){return jdbc.queryForList("SELECT id,owner_id AS ownerId,status,container_name AS containerName FROM quant_paper_execution WHERE status IN ('STARTING','RUNNING')");}
+ public List<Map<String,Object>> active(){return jdbc.queryForList("SELECT id,tenant_id AS tenantId,owner_id AS ownerId,status,container_name AS containerName FROM quant_paper_execution WHERE status IN ('STARTING','RUNNING')");}
 }

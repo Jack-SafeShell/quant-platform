@@ -24,6 +24,7 @@ import cn.iocoder.yudao.module.quant.service.PaperDryRunPreviewService;
 import cn.iocoder.yudao.module.quant.service.PaperStartTokenService;
 import cn.iocoder.yudao.module.quant.service.PaperRuntimeService;
 import cn.iocoder.yudao.module.quant.service.PaperExecutionObservationService;
+import cn.iocoder.yudao.module.quant.service.PaperObservationMonitorService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -48,7 +49,8 @@ public class BacktestController {
     private final PaperStartTokenService paperStartTokens;
     private final PaperRuntimeService paperRuntime;
     private final PaperExecutionObservationService paperObservations;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; }
+    private final PaperObservationMonitorService paperObservationMonitor;
+    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor; }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {
@@ -144,6 +146,10 @@ public class BacktestController {
     public CommonResult<String> startPaperExecution(@RequestParam String id,@Valid @RequestBody PaperExecutionStartRequest request)throws Exception{return success(paperRuntime.start(tenant(),owner(),id,request));}
     @GetMapping("/paper-execution/observation") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String,Object>> observePaperExecution(@RequestParam String id,@RequestParam(defaultValue="200") int lines)throws Exception{return success(paperObservations.observe(tenant(),owner(),id,lines));}
+    @GetMapping("/paper-execution/observation-snapshots") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> paperObservationSnapshots(@RequestParam String id){return success(paperObservationMonitor.snapshots(tenant(),owner(),id));}
+    @GetMapping("/paper-execution/alerts") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> paperAlerts(@RequestParam String id){return success(paperObservationMonitor.alerts(tenant(),owner(),id));}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }

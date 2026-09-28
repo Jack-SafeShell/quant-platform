@@ -12,6 +12,7 @@ public class QuantProperties {
     private boolean enabled = false;
     private boolean paperExecutionEnabled = false;
     @Min(60) @Max(900) private int paperStartTokenTtlSeconds = 300;
+    @Min(10) @Max(3600) private int paperObservationIntervalSeconds = 60;
     @NotBlank private String workspace = ".runtime/quant";
     @NotBlank private String dockerExecutable = "docker";
     @Pattern(regexp = "freqtradeorg/freqtrade@sha256:[0-9a-f]{64}")

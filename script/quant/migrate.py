@@ -17,7 +17,7 @@ conn = pymysql.connect(host=url.hostname, port=url.port or 3306, user=cfg['usern
                        database='quant-platform', charset='utf8mb4', connect_timeout=10)
 try:
     cursor = conn.cursor()
-    for migration in ('001_backtest.sql', '002_backtest_menu.sql', '003_parameter_set_scope.sql', '004_dataset_download.sql', '005_optimization_batch.sql', '006_research_review.sql', '007_paper_admission.sql', '008_paper_session.sql', '009_paper_readiness.sql', '010_paper_execution.sql', '011_paper_command_preview.sql', '012_paper_start_token.sql'):
+    for migration in ('001_backtest.sql', '002_backtest_menu.sql', '003_parameter_set_scope.sql', '004_dataset_download.sql', '005_optimization_batch.sql', '006_research_review.sql', '007_paper_admission.sql', '008_paper_session.sql', '009_paper_readiness.sql', '010_paper_execution.sql', '011_paper_command_preview.sql', '012_paper_start_token.sql', '013_paper_observation_alert.sql'):
         sql = (root / 'sql/quant' / migration).read_text(encoding='utf-8')
         sql = '\n'.join(line for line in sql.splitlines() if not line.lstrip().startswith('--'))
         for statement in sql.split(';'):
@@ -37,6 +37,6 @@ try:
                 if not (statement.startswith('ALTER TABLE quant_') and ' ADD COLUMN ' in statement and error.args[0] == 1060):
                     raise
     conn.commit()
-    print('QUANT_MIGRATIONS_OK (18 tables, scoped parameter sets, 3 menu records)')
+    print('QUANT_MIGRATIONS_OK (20 tables, scoped parameter sets, 3 menu records)')
 finally:
     conn.close()
