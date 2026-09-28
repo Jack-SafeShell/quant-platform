@@ -50,7 +50,9 @@
 - 订单账本迁移已应用到项目数据库，当前共 24 张 quant 表；15 项 `QuantBacktestTest` 通过，覆盖订单幂等同步、来源消失转 UNKNOWN、风险越界精确停止及既有告警/快照闭环。单体聚合 package、前端全量 `ts:check` 与 `build:local` 均通过。
 - 真实环境订单对账故障演练 `00af85b4-a5ec-4500-b212-7191c123d92a` 通过：真实 MySQL 留存 5 次 PASSED、1 次 SQLite 锁超时 FAILED 及恢复；订单覆盖 OPEN → FILLED、CANCELED → UNKNOWN，重复观测没有重复审计。固定摘要镜像的一次性无网络容器经风险停止路径精确停止，任务为 STOPPED 且无容器残留。
 - 新增实盘前只读准入报告和双确认审计：跨执行汇总成功回测、4 小时 dry-run、订单故障恢复、风险停机和未解决告警；报告正文与 SHA-256 不可变，证据复核和密钥边界复核分别追加留痕。无论确认状态如何，`liveTradingAllowed=false`、`activationAllowed=false`。
-- 真实项目报告 `fb027b52-8ec3-4f37-9adc-26e4d610db27`、SHA-256 `c4f359d7e85424d27c1a6e0f6683807449be1b6a6a69eec47decab66c0afef99` 的五项证据均通过；用户已完成证据复核与密钥边界复核，状态为 DOUBLE_CONFIRMED。两条追加审计均绑定原摘要且意见非空，报告正文及摘要未变化；实盘与激活开关仍为 false。数据库当前共 26 张 quant 表。
+- 真实项目报告 `fb027b52-8ec3-4f37-9adc-26e4d610db27`、SHA-256 `c4f359d7e85424d27c1a6e0f6683807449be1b6a6a69eec47decab66c0afef99` 的五项证据均通过；用户已完成证据复核与密钥边界复核，状态为 DOUBLE_CONFIRMED。两条追加审计均绑定原摘要且意见非空，报告正文及摘要未变化；实盘与激活开关仍为 false。
+- 新增 `live-risk-v1` 离线安全门禁、订单决策与审计三张表，数据库当前共 29 张 quant 表。策略绑定双确认报告，固定 OKX BTC/USDT 现货限价单、单笔 10 USDT、单日 20 USDT、总仓位 20 USDT及最多 1 个挂单；覆盖客户端订单幂等、越界拒绝和全局紧急停机。
+- 真实策略 `46267ec1-9963-44a4-a330-d25fc0467938` 已完成接口验收：5 USDT 请求 ALLOWED_OFFLINE 且幂等复用，11 USDT 请求按 MAX_ORDER_NOTIONAL 拒绝，紧急停机后请求按 GATE_HALTED 拒绝；全部 `executed=false`，最终 HALTED。Windows DPAPI 凭据提供器、OKX 私有签名/余额只读/受总开关保护的限价单适配已实现，但凭据未配置、私有接口未连接、真实下单入口不存在。
 
 ## 真实回测证据
 
@@ -65,7 +67,7 @@
 
 ## 当前限制
 
-1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与二十六张 quant 表。量化动态菜单及全部增量迁移已应用。
+1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与二十九张 quant 表。量化动态菜单及全部增量迁移已应用。
 2. 2026-09-27 浏览器验收已覆盖登录、动态菜单、历史回测页面、配置启用状态和已有成功任务列表。浏览器自动化未新增任务：Element Plus 日期范围控件的自动化文本输入未提交 Vue 范围模型，因此没有把该尝试计入成功证据。
 3. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
 4. 固定策略、BTC/USDT 现货 1h，已有受控参数批次、模拟交易运行时、固定风险基线、周期快照、订单账本、对账告警和风险精确停止，但无策略编辑、自动重试或实盘。真实 dry-run 已完成 4 小时无人值守验收；订单状态与故障语义已用 Freqtrade 兼容 SQLite 和真实 MySQL/Docker 演练验证，但尚无真实 Freqtrade 策略信号产生订单的证据。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
@@ -80,4 +82,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**建立受限实盘执行的离线安全门禁。** 在不配置或读取私有凭据、不连接交易所私有接口、不发送真实订单的前提下，固化交易对与现货方向白名单、单笔/单日/总仓位硬限额、全局停机开关、订单幂等键、人工启停授权和完整审计；用本地桩验证越界拒绝、重复订单拒绝及紧急停机。任何凭据接入和真实订单仍须用户另行明确授权。
+**配置 OKX 专用 API Key 并验收私有只读连接。** 用户在 OKX 创建仅 Read + Trade、禁止 Withdraw、绑定受控出口 IP 的专用密钥，通过交互脚本保存到 `.runtime` 下的 Windows DPAPI 文件，再以 `QUANT_LIVE_CREDENTIAL_FILE` 启动单体；在页面输入 `CONFIRM_OKX_PRIVATE_READ` 只读取账户摘要并留存审计。该步骤不开放真实下单；只读验收通过后，再由用户另行明确授权极小额度首单。

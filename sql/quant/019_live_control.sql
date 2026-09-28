@@ -1,0 +1,60 @@
+CREATE TABLE IF NOT EXISTS quant_live_control_policy (
+  id VARCHAR(36) PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  admission_report_id VARCHAR(36) NOT NULL,
+  admission_report_hash VARCHAR(64) NOT NULL,
+  policy_version VARCHAR(64) NOT NULL,
+  exchange_name VARCHAR(32) NOT NULL,
+  pair_symbol VARCHAR(32) NOT NULL,
+  trading_mode VARCHAR(16) NOT NULL,
+  max_order_notional DECIMAL(20,8) NOT NULL,
+  max_daily_notional DECIMAL(20,8) NOT NULL,
+  max_total_exposure DECIMAL(20,8) NOT NULL,
+  max_open_orders INT NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE KEY uk_quant_live_control_report (tenant_id, owner_id, admission_report_id),
+  CONSTRAINT fk_quant_live_control_report FOREIGN KEY (admission_report_id) REFERENCES quant_live_admission_report(id)
+);
+
+CREATE TABLE IF NOT EXISTS quant_live_order_decision (
+  id VARCHAR(36) PRIMARY KEY,
+  policy_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  client_order_id VARCHAR(64) NOT NULL,
+  request_hash VARCHAR(64) NOT NULL,
+  side VARCHAR(8) NOT NULL,
+  order_type VARCHAR(16) NOT NULL,
+  price DECIMAL(20,8) NOT NULL,
+  amount DECIMAL(20,8) NOT NULL,
+  notional DECIMAL(20,8) NOT NULL,
+  current_exposure DECIMAL(20,8) NOT NULL,
+  daily_executed_notional DECIMAL(20,8) NOT NULL,
+  open_orders INT NOT NULL,
+  decision VARCHAR(24) NOT NULL,
+  reason_code VARCHAR(64) NOT NULL,
+  reason_message VARCHAR(500) NOT NULL,
+  executed BIT NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  UNIQUE KEY uk_quant_live_client_order (tenant_id, owner_id, client_order_id),
+  KEY idx_quant_live_decision_policy (policy_id, created_at),
+  CONSTRAINT fk_quant_live_decision_policy FOREIGN KEY (policy_id) REFERENCES quant_live_control_policy(id)
+);
+
+CREATE TABLE IF NOT EXISTS quant_live_control_audit (
+  id VARCHAR(36) PRIMARY KEY,
+  policy_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  actor_id BIGINT NOT NULL,
+  event_type VARCHAR(48) NOT NULL,
+  from_status VARCHAR(24),
+  to_status VARCHAR(24),
+  message VARCHAR(500) NOT NULL,
+  created_at BIGINT NOT NULL,
+  KEY idx_quant_live_control_audit (policy_id, created_at),
+  CONSTRAINT fk_quant_live_audit_policy FOREIGN KEY (policy_id) REFERENCES quant_live_control_policy(id)
+);

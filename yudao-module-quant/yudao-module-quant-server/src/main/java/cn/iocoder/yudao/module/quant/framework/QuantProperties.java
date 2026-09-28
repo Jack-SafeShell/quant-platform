@@ -21,6 +21,17 @@ public class QuantProperties {
     @Min(1) @Max(100) private int paperMaxOpenPositions = 1;
     @DecimalMin("0.01") private BigDecimal paperMaxDailyLoss = new BigDecimal("20");
     @DecimalMin("0.0001") @DecimalMax("1.0") private BigDecimal paperMaxDrawdownRatio = new BigDecimal("0.05");
+    private boolean liveExecutionEnabled = false;
+    @NotBlank private String liveRiskPolicyVersion = "live-risk-v1";
+    @NotBlank private String liveExchange = "okx";
+    @NotBlank private String livePair = "BTC/USDT";
+    @DecimalMin("0.01") private BigDecimal liveMaxOrderNotional = new BigDecimal("10");
+    @DecimalMin("0.01") private BigDecimal liveMaxDailyNotional = new BigDecimal("20");
+    @DecimalMin("0.01") private BigDecimal liveMaxTotalExposure = new BigDecimal("20");
+    @Min(1) @Max(100) private int liveMaxOpenOrders = 1;
+    private String liveCredentialFile = "";
+    @NotBlank private String liveCredentialReaderScript = "D:/0000/quant-platform/script/quant/read_live_credential.ps1";
+    @Pattern(regexp = "https://(openapi|www|us|eea)\\.okx\\.com") private String liveOkxBaseUrl = "https://openapi.okx.com";
     @NotBlank private String workspace = ".runtime/quant";
     @NotBlank private String dockerExecutable = "docker";
     @Pattern(regexp = "freqtradeorg/freqtrade@sha256:[0-9a-f]{64}")

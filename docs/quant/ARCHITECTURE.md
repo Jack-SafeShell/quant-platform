@@ -14,7 +14,7 @@ Vue3 → Spring Boot 应用服务 → 领域模型/风险与审批 → 引擎适
 
 策略代码、策略版本、参数集、回测任务、回测结果、模拟账户、风控规则、审批记录分别建模，不合并成引擎配置 JSON。策略版本不可变并带内容摘要；参数集、数据快照和引擎版本共同标识实验。订单、成交、持仓及审计记录在后续阶段独立管理。
 
-已接入 Maven 模块 `yudao-module-quant` / `yudao-module-quant-api` / `yudao-module-quant-server`，Java 包 `cn.iocoder.yudao.module.quant`，表前缀 `quant_`。当前已实现研究、回测、模拟盘准入与执行、周期遥测、告警和人工处置审计。固定风险策略以版本号和限额写入不可变就绪证据，并在运行观测中复核；完整实盘订单、成交、持仓和风控规则仍须独立建模，当前不能进入实盘。
+已接入 Maven 模块 `yudao-module-quant` / `yudao-module-quant-api` / `yudao-module-quant-server`，Java 包 `cn.iocoder.yudao.module.quant`，表前缀 `quant_`。当前已实现研究、回测、模拟盘准入与执行、周期遥测、告警和人工处置审计，并新增绑定双确认报告的实盘离线安全门禁、Windows DPAPI 凭据提供器及 OKX 私有 REST 适配。真实执行总开关默认关闭，控制器没有真实下单入口；首次真实订单仍须补齐执行账本绑定并获得所有者明确授权。
 
 ## 适配协议
 
