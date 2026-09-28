@@ -101,11 +101,15 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 
 每次分钟观测以只读方式扫描该执行的 Freqtrade SQLite `orders` 表。平台幂等键为 SHA-256(`执行 ID + 换行 + 来源订单 ID`)，订单状态收敛为 OPEN、FILLED、CANCELED、UNKNOWN，状态变化追加不可变审计。SQLite 读取设置 2 秒忙等待；数据库缺失、锁等待超时或读取异常会记录 FAILED 对账并产生高等级告警。只有完整读取成功后，来源中消失的既有订单才转为 UNKNOWN；平台不会自行推断为成交或撤销。当前对账事实源仍是 Freqtrade dry-run SQLite，不连接交易所私有 API。
 
+订单对账故障演练通过 `python script/quant/verify_paper_order_reconciliation.py` 显式执行。脚本使用项目真实 MySQL、隔离的 Freqtrade 兼容 SQLite 和固定摘要镜像的无网络一次性容器，验证 OPEN → FILLED、CANCELED、重复观测幂等、SQLite 排他锁超时、恢复、来源消失转 UNKNOWN 及风险精确停机；演练执行、订单、对账和审计记录保留，工作文件位于忽略目录。该演练不会启动 Freqtrade 交易命令，不连接私有交易接口，也不构成真实交易所订单证据。
+
 2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。该次发现 HTTP 代理不承载 OKX WebSocket，后续已通过固定禁用 WebSocket 消除该错误。
 
 同日已完成禁用 WebSocket 后的稳定性与遥测验收：批次 `1db57c0a-2513-4188-ae33-c47fb3e9cb1c`、执行 `8de8ab4e-1dea-4945-815f-5e899c4493f5`。RUNNING 心跳跨度 65 秒，网络/致命错误均为 0；SQLite 只读遥测返回 1000 USDT 模拟余额，持仓、订单和成交均为 0。停止及恢复默认启动后复核 STOPPED、总开关 false、检查通过且无专属容器残留。60 秒通过只证明短时技术稳定性，不代表长期运行或策略收益。
 
 2026-09-29 完成 4 小时无人值守 dry-run 验收：批次 `1db57c0a-2513-4188-ae33-c47fb3e9cb1c`、会话 `bca35512-df65-4eb9-b0ad-4748f48c1697`、执行 `1ce84e47-292e-4d8f-b020-de89047b20e2`。共固化 246 条分钟级快照，观测跨度约 4 小时 6 分 23 秒，心跳跨度约 4 小时 6 分 49 秒；行情时间持续更新，网络/致命错误和未处理告警均为 0。余额始终为 1000 USDT，持仓、订单、成交和已实现收益均为 0。平台接口精确停止后任务为 STOPPED、专属容器消失；随后以默认参数恢复单体并复核 `executionEnabled=false`。该结果证明当前固定配置可连续稳定运行 4 小时，不构成策略收益验证。
+
+2026-09-29 完成真实环境订单对账与故障演练：执行 `00af85b4-a5ec-4500-b212-7191c123d92a` 在项目 MySQL 留存 5 次 PASSED、1 次 SQLite 锁超时 FAILED 及恢复记录；两条演练订单覆盖 OPEN → FILLED、CANCELED → UNKNOWN，共 4 条订单审计。风险演练通过真实 Docker 停止路径精确停止无网络一次性容器，任务为 STOPPED，执行审计包含 REHEARSAL_CREATED 和 RISK_STOPPED，容器无残留。该证据验证平台控制与对账语义，不声称产生了真实 Freqtrade 或交易所订单。
 
 页面“状态与日志”是人工验收的只读证据入口。总开关关闭是准备阶段的通过项；运行窗口开启后该项会显示当前状态，其他文件、摘要和命令约束仍须保持通过。日志不存在表示容器尚未启动，不视为伪造的运行证据。
 
@@ -118,6 +122,8 @@ mvn -pl yudao-server -am -Dtest=QuantBacktestTest,FreqtradeEngineTest -Dsurefire
 # 显式执行真实引擎 + 本项目 RDS，并保留该次实验记录：
 $env:QUANT_EXCHANGE_PROXY='http://host.docker.internal:3066'
 python script/quant/verify_smoke.py
+# 显式执行真实 MySQL + 隔离 SQLite + 一次性容器的订单对账故障演练：
+python script/quant/verify_paper_order_reconciliation.py
 ```
 
 真实烟测默认不随普通测试运行；脚本将现有数据库凭据仅注入子进程环境。测试记录 requestKey 前缀为 smoke-，保留审计，不自动清理。测试工作区独立于 PoC；尚未验证的登录/权限 UI 链路不能用内部服务测试代替。

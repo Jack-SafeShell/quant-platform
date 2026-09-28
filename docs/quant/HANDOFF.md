@@ -48,6 +48,7 @@
 - 稳定性执行 `8de8ab4e-1dea-4945-815f-5e899c4493f5`：RUNNING 心跳跨度 65 秒，网络错误和致命错误均为 0，SQLite 遥测可读且显示 1000 USDT 模拟余额、零持仓/订单/成交；人工停止后为 STOPPED。默认启动复核总开关 false、启动前检查和稳定性证据均通过。
 - 4 小时无人值守执行 `1ce84e47-292e-4d8f-b020-de89047b20e2`：固化 246 条分钟级快照，观测跨度约 4 小时 6 分 23 秒，心跳跨度约 4 小时 6 分 49 秒，行情持续更新；网络错误、致命错误和未处理告警均为 0，1000 USDT 余额保持一致，持仓、订单、成交和已实现收益均为 0。经平台接口精确停止后为 STOPPED，专属容器消失；默认参数恢复单体并复核 `executionEnabled=false`，临时令牌文件不存在。
 - 订单账本迁移已应用到项目数据库，当前共 24 张 quant 表；15 项 `QuantBacktestTest` 通过，覆盖订单幂等同步、来源消失转 UNKNOWN、风险越界精确停止及既有告警/快照闭环。单体聚合 package、前端全量 `ts:check` 与 `build:local` 均通过。
+- 真实环境订单对账故障演练 `00af85b4-a5ec-4500-b212-7191c123d92a` 通过：真实 MySQL 留存 5 次 PASSED、1 次 SQLite 锁超时 FAILED 及恢复；订单覆盖 OPEN → FILLED、CANCELED → UNKNOWN，重复观测没有重复审计。固定摘要镜像的一次性无网络容器经风险停止路径精确停止，任务为 STOPPED 且无容器残留。
 
 ## 真实回测证据
 
@@ -62,10 +63,10 @@
 
 ## 当前限制
 
-1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与二十一张 quant 表。量化动态菜单及全部增量迁移已应用。
+1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与二十四张 quant 表。量化动态菜单及全部增量迁移已应用。
 2. 2026-09-27 浏览器验收已覆盖登录、动态菜单、历史回测页面、配置启用状态和已有成功任务列表。浏览器自动化未新增任务：Element Plus 日期范围控件的自动化文本输入未提交 Vue 范围模型，因此没有把该尝试计入成功证据。
 3. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
-4. 固定策略、BTC/USDT 现货 1h，已有受控参数批次、模拟交易运行时、固定风险基线、周期快照、订单账本、对账告警和风险精确停止，但无策略编辑、自动重试或实盘。真实 dry-run 已完成 4 小时无人值守验收；该次没有产生订单，因此真实有订单状态流转和故障注入仍待验收。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
+4. 固定策略、BTC/USDT 现货 1h，已有受控参数批次、模拟交易运行时、固定风险基线、周期快照、订单账本、对账告警和风险精确停止，但无策略编辑、自动重试或实盘。真实 dry-run 已完成 4 小时无人值守验收；订单状态与故障语义已用 Freqtrade 兼容 SQLite 和真实 MySQL/Docker 演练验证，但尚无真实 Freqtrade 策略信号产生订单的证据。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
 5. 根 Spring Boot 4.1.0 / BOM 4.1.1 原样保留。聚合 package 后各 server 模块会生成可执行 JAR；本地启动需先以 `-Dspring-boot.repackage.skip=true clean install` 安装普通模块 JAR，再从 `yudao-server` 执行 `spring-boot:run`。
 6. application-local.yaml 与前端 .env.local 为既有跟踪配置；现有测试 RDS useSSL=false、local mock-enable=true 未修改。正式环境前需另行治理。
 
@@ -77,4 +78,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**完成有订单场景的 dry-run 持续运行与故障注入验收。** 在不接入私有凭据和实盘的前提下，验证 OPEN → FILLED/CANCELED 的真实账本流转、重复观测幂等、SQLite 短时锁等待失败与恢复、来源订单消失转 UNKNOWN，以及风险停机后的容器、任务和审计一致性。继续保持 `dry_run=true`、执行总开关默认关闭。
+**建立实盘前只读准入评估与密钥边界。** 将历史回测、4 小时 dry-run、订单对账演练、风险停机和未处理告警汇总为不可变准入报告；定义交易所 API Key 仅交易、禁止提现、IP 白名单、密钥托管和轮换要求，并以人工双确认留痕。继续保持 `liveTradingAllowed=false`、不读取私有凭据、不实现或调用实盘下单。
