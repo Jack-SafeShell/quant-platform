@@ -17,7 +17,7 @@ conn = pymysql.connect(host=url.hostname, port=url.port or 3306, user=cfg['usern
                        database='quant-platform', charset='utf8mb4', connect_timeout=10)
 try:
     cursor = conn.cursor()
-    for migration in ('001_backtest.sql', '002_backtest_menu.sql', '003_parameter_set_scope.sql', '004_dataset_download.sql', '005_optimization_batch.sql', '006_research_review.sql', '007_paper_admission.sql', '008_paper_session.sql', '009_paper_readiness.sql', '010_paper_execution.sql', '011_paper_command_preview.sql', '012_paper_start_token.sql', '013_paper_observation_alert.sql'):
+    for migration in ('001_backtest.sql', '002_backtest_menu.sql', '003_parameter_set_scope.sql', '004_dataset_download.sql', '005_optimization_batch.sql', '006_research_review.sql', '007_paper_admission.sql', '008_paper_session.sql', '009_paper_readiness.sql', '010_paper_execution.sql', '011_paper_command_preview.sql', '012_paper_start_token.sql', '013_paper_observation_alert.sql', '014_repeatable_paper_execution.sql', '015_repeatable_paper_session.sql'):
         sql = (root / 'sql/quant' / migration).read_text(encoding='utf-8')
         sql = '\n'.join(line for line in sql.splitlines() if not line.lstrip().startswith('--'))
         for statement in sql.split(';'):
@@ -28,13 +28,17 @@ try:
                     or statement.startswith('INSERT INTO system_menu')
                     or statement.startswith('ALTER TABLE quant_parameter_set')
                     or statement.startswith('ALTER TABLE quant_backtest_task')
+                    or statement.startswith('ALTER TABLE quant_paper_execution')
+                    or statement.startswith('ALTER TABLE quant_paper_session')
                     or statement.startswith('UPDATE quant_parameter_set')
                     or statement.startswith('UPDATE quant_backtest_task')):
                 raise RuntimeError(f'Unexpected migration statement in {migration}')
             try:
                 cursor.execute(statement)
             except pymysql.MySQLError as error:
-                if not (statement.startswith('ALTER TABLE quant_') and ' ADD COLUMN ' in statement and error.args[0] == 1060):
+                repeatable_index = migration in ('014_repeatable_paper_execution.sql', '015_repeatable_paper_session.sql') and error.args[0] in (1061, 1091)
+                if not ((statement.startswith('ALTER TABLE quant_') and ' ADD COLUMN ' in statement and error.args[0] == 1060)
+                        or repeatable_index):
                     raise
     conn.commit()
     print('QUANT_MIGRATIONS_OK (20 tables, scoped parameter sets, 3 menu records)')

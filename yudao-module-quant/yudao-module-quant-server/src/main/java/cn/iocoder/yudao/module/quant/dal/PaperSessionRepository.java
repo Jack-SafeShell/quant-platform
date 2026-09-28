@@ -6,7 +6,7 @@ import java.util.*;
 
 @Repository public class PaperSessionRepository {
  private final JdbcTemplate jdbc; public PaperSessionRepository(JdbcTemplate jdbc){this.jdbc=jdbc;}
- public Map<String,Object> existing(long tenant,long owner,String batch,String parameter){var rows=jdbc.queryForList("SELECT * FROM quant_paper_session WHERE tenant_id=? AND owner_id=? AND batch_id=? AND parameter_set_id=?",tenant,owner,batch,parameter);return rows.isEmpty()?null:rows.getFirst();}
+ public Map<String,Object> existing(long tenant,long owner,String batch,String parameter,String evidence){var rows=jdbc.queryForList("SELECT * FROM quant_paper_session WHERE tenant_id=? AND owner_id=? AND batch_id=? AND parameter_set_id=? AND admission_evidence_hash=? AND status IN ('PENDING_APPROVAL','APPROVED') ORDER BY created_at DESC LIMIT 1",tenant,owner,batch,parameter,evidence);return rows.isEmpty()?null:rows.getFirst();}
  public void create(String id,long tenant,long owner,String batch,String version,String parameter,String evidence){long now=System.currentTimeMillis();jdbc.update("INSERT INTO quant_paper_session(id,tenant_id,owner_id,batch_id,strategy_version_id,parameter_set_id,admission_evidence_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",id,tenant,owner,batch,version,parameter,evidence,"PENDING_APPROVAL",now,now);}
  public Map<String,Object> get(long tenant,long owner,String id){var rows=jdbc.queryForList("SELECT * FROM quant_paper_session WHERE tenant_id=? AND owner_id=? AND id=?",tenant,owner,id);return rows.isEmpty()?null:rows.getFirst();}
  public List<Map<String,Object>> list(long tenant,long owner){return jdbc.queryForList("SELECT * FROM quant_paper_session WHERE tenant_id=? AND owner_id=? ORDER BY created_at DESC LIMIT 50",tenant,owner);}

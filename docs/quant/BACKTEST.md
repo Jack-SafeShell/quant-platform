@@ -41,7 +41,7 @@ java -jar yudao-server/target/yudao-server.jar --yudao.quant.paper-execution-ena
 
 验收完成后先在页面精确停止执行计划，再停止该单体进程；按原启动命令重新启动（不携带上述参数），并在页面确认总开关显示“关闭”、任务已进入 STOPPED 或 FAILED。若页面停止失败，使用执行计划显示的唯一 `quant-platform-paper-<UUID>` 容器名执行 `docker stop --time 20 <容器名>`，绝不使用批量删除或 `remove-orphans`。启动窗口不得加入 API key、secret、password 或 token，不得改成实盘模式。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用十八张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌及审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用二十张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌、周期观测及告警。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 
@@ -78,6 +78,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - GET `/quant/backtest/paper-execution/start-token/latest`：查询最近令牌的摘要、状态和到期时间，不返回令牌明文。令牌只能由受总开关保护的执行器原子消费。
 - POST `/quant/backtest/paper-execution/start`：仅在单体总开关开启时接受预览摘要和一次性令牌；启动事务复核配置、策略文件及命令清单，原子消费令牌后流转 STARTING/RUNNING。当前配置固定关闭，因此部署环境会拒绝该请求。
 - GET `/quant/backtest/paper-execution/observation`：按当前租户和用户只读返回执行状态、启动前结构检查、运行健康、模拟资产摘要及专属 `runtime.log` 尾部；日志最多 200 行、64 KiB，不能指定任意路径。检查覆盖预览自身摘要、隔离目录、配置和策略摘要、`dry_run=true`、固定镜像及受限命令。资产数据直接以只读模式查询任务隔离 SQLite，不启动 API Server、不发布端口。
+- GET `/quant/backtest/paper-execution/observation-snapshots`、`/alerts`：查询当前用户最近 100 条分钟级快照及该任务告警。终态执行完成后，同一有效会话可顺序创建新执行；准入证据变化时保留旧会话并按新证据重新留痕，禁止并行创建多个活动执行。
 
 请求示例（不含认证信息）：
 
