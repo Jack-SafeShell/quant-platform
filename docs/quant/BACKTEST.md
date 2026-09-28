@@ -41,7 +41,7 @@ java -jar yudao-server/target/yudao-server.jar --yudao.quant.paper-execution-ena
 
 验收完成后先在页面精确停止执行计划，再停止该单体进程；按原启动命令重新启动（不携带上述参数），并在页面确认总开关显示“关闭”、任务已进入 STOPPED 或 FAILED。若页面停止失败，使用执行计划显示的唯一 `quant-platform-paper-<UUID>` 容器名执行 `docker stop --time 20 <容器名>`，绝不使用批量删除或 `remove-orphans`。启动窗口不得加入 API key、secret、password 或 token，不得改成实盘模式。
 
-当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用二十一张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌、周期观测、告警及人工处置审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
+当前 RDS 已由用户执行 `ruoyi-vue-pro.sql` 和 `quartz.sql`，并已应用二十四张 quant 表及三条量化菜单记录，覆盖行情下载审计、优化研究评审、模拟盘准入、会话、启动审批、就绪快照、执行任务、命令预览、一次性启动令牌、周期观测、告警及人工处置审计。2026-09-27 已验证管理员登录、动态菜单加载、历史回测页面以及成功任务列表；认证和租户校验保持启用。
 
 ## 数据与迁移
 
@@ -79,6 +79,7 @@ python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --
 - POST `/quant/backtest/paper-execution/start`：仅在单体总开关开启时接受预览摘要和一次性令牌；启动事务复核配置、策略文件及命令清单，原子消费令牌后流转 STARTING/RUNNING。当前配置固定关闭，因此部署环境会拒绝该请求。
 - GET `/quant/backtest/paper-execution/observation`：按当前租户和用户只读返回执行状态、启动前结构检查、运行健康、模拟资产摘要及专属 `runtime.log` 尾部；日志最多 200 行、64 KiB，不能指定任意路径。检查覆盖预览自身摘要、隔离目录、配置和策略摘要、`dry_run=true`、固定镜像及受限命令。资产数据直接以只读模式查询任务隔离 SQLite，不启动 API Server、不发布端口。
 - GET `/quant/backtest/paper-execution/observation-snapshots`、`/alerts`：查询当前用户最近 100 条分钟级快照及该任务告警。POST `/paper-execution/alert/action` 支持人工确认或解决，GET `/alert-actions` 返回不可变处置记录；所有操作按租户和用户隔离。终态快照超过 30 天后由单体定期清理，活动执行不清理。终态执行完成后，同一有效会话可顺序创建新执行；准入证据变化时保留旧会话并按新证据重新留痕，禁止并行创建多个活动执行。
+- GET `/quant/backtest/paper-execution/orders`、`/reconciliations`：按执行任务查询独立模拟订单账本与最近 100 次对账结果。
 
 请求示例（不含认证信息）：
 
@@ -96,7 +97,9 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 
 模拟盘运行同样使用唯一 `quant-platform-paper-<UUID>` 容器名。监控器记录 STARTING/RUNNING/FAILED/STOPPED 和追加审计；进程意外退出标记失败且不自动重试，应用重启会请求停止遗留容器并标记失败。配置把 dry-run SQLite 固定到隔离可写目录，显式提供新版 Freqtrade 所需的定价、静态交易对及 RUNNING 初始状态；API Server 和 Telegram 对象省略并保持默认关闭。交易所 WebSocket 固定关闭，公开行情沿用 `QUANT_EXCHANGE_PROXY` 的 HTTP 代理。
 
-告警状态为 OPEN → ACKNOWLEDGED → RESOLVED。自动观测会在异常恢复时解决告警；人工确认和解决必须提交说明并写入处置审计。持续异常会保留 ACKNOWLEDGED 状态，已解决后再次出现会重新打开。监控当前对心跳、网络、致命错误、进程退出以及仓位/总暴露/已实现亏损越界告警；风险越界尚只告警，不自动停止执行。
+告警状态为 OPEN → ACKNOWLEDGED → RESOLVED。自动观测会在异常恢复时解决告警；人工确认和解决必须提交说明并写入处置审计。持续异常会保留 ACKNOWLEDGED 状态，已解决后再次出现会重新打开。监控当前对心跳、网络、致命错误、进程退出、订单对账以及仓位/总暴露/已实现亏损越界告警；风险越界会先保留告警证据，再按执行 ID 绑定的唯一容器名精确停止并追加执行审计。
+
+每次分钟观测以只读方式扫描该执行的 Freqtrade SQLite `orders` 表。平台幂等键为 SHA-256(`执行 ID + 换行 + 来源订单 ID`)，订单状态收敛为 OPEN、FILLED、CANCELED、UNKNOWN，状态变化追加不可变审计。SQLite 读取设置 2 秒忙等待；数据库缺失、锁等待超时或读取异常会记录 FAILED 对账并产生高等级告警。只有完整读取成功后，来源中消失的既有订单才转为 UNKNOWN；平台不会自行推断为成交或撤销。当前对账事实源仍是 Freqtrade dry-run SQLite，不连接交易所私有 API。
 
 2026-09-28 已完成首个真实启停验收：批次 `4b5633e9-4540-4b05-8234-8b853e8a098a`、会话 `74c8af46-5b1a-4078-8a17-ce4eebba72c6`、执行 `eb013430-84c8-47dc-9f3d-260b673ae4dd`。日志确认 Freqtrade 2026.8、`dry_run`、OKX、QuantEmaBaseline、BTC/USDT、内部 RUNNING 和心跳；随后平台接口精确停止为 STOPPED，容器清除，默认开关恢复 false。此前因工作目录和新版配置条件校验失败的尝试均保留为失败审计，未改写结果。该次发现 HTTP 代理不承载 OKX WebSocket，后续已通过固定禁用 WebSocket 消除该错误。
 

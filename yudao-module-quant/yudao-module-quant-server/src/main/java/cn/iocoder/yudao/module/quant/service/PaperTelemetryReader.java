@@ -4,10 +4,14 @@ import org.sqlite.SQLiteConfig;
 
 import java.nio.file.*;
 import java.sql.*;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
-final class PaperTelemetryReader {
+public final class PaperTelemetryReader {
     private PaperTelemetryReader() {}
 
     static Map<String, Object> read(Path work, double initialBalance) {
@@ -53,6 +57,48 @@ final class PaperTelemetryReader {
         }
         return result;
     }
+
+    public static OrderRead readOrders(Path work) {
+        Path database = work.resolve("tradesv3.dryrun.sqlite").normalize();
+        if (!database.startsWith(work) || !Files.isRegularFile(database, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(database)) return new OrderRead(false, List.of(), "模拟盘数据库不存在");
+        try {
+            SQLiteConfig config = new SQLiteConfig(); config.setReadOnly(true); config.setBusyTimeout(2_000);
+            try (Connection connection = config.createConnection("jdbc:sqlite:" + database.toAbsolutePath());
+                 Statement statement = connection.createStatement(); ResultSet rows = statement.executeQuery("SELECT * FROM orders")) {
+                var columns = columns(rows.getMetaData()); List<SourceOrder> orders = new ArrayList<>();
+                while (rows.next()) {
+                    String internalId = value(rows, columns, "id");
+                    String sourceId = first(value(rows, columns, "order_id"), internalId);
+                    if (sourceId == null || sourceId.isBlank()) continue;
+                    boolean open = bool(rows, columns, "ft_is_open");
+                    BigDecimal filled = decimal(rows, columns, "filled");
+                    String filledAt = value(rows, columns, "order_filled_date");
+                    orders.add(new SourceOrder(sourceId, value(rows, columns, "ft_trade_id"),
+                            first(value(rows, columns, "ft_pair"), value(rows, columns, "pair"), "UNKNOWN"),
+                            first(value(rows, columns, "ft_order_side"), value(rows, columns, "side"), "UNKNOWN"),
+                            first(value(rows, columns, "order_type"), "UNKNOWN"),
+                            status(value(rows, columns, "status"), open, filled, filledAt),
+                            decimal(rows, columns, "price"), decimal(rows, columns, "amount"), filled,
+                            decimal(rows, columns, "cost"), value(rows, columns, "order_date"),
+                            first(value(rows, columns, "order_update_date"), filledAt)));
+                }
+                return new OrderRead(true, List.copyOf(orders), null);
+            }
+        } catch (Exception e) { return new OrderRead(false, List.of(), "模拟订单事实暂时不可读"); }
+    }
+
+    public record SourceOrder(String sourceOrderId,String tradeId,String pair,String side,String orderType,String status,
+                       BigDecimal price,BigDecimal amount,BigDecimal filled,BigDecimal cost,
+                       String sourceCreatedAt,String sourceUpdatedAt) {}
+    public record OrderRead(boolean available,List<SourceOrder> orders,String error) {}
+
+    private static Map<String,Integer> columns(ResultSetMetaData metadata)throws SQLException{Map<String,Integer> result=new LinkedHashMap<>();for(int i=1;i<=metadata.getColumnCount();i++)result.put(metadata.getColumnLabel(i).toLowerCase(),i);return result;}
+    private static String value(ResultSet rows,Map<String,Integer> columns,String name)throws SQLException{Integer i=columns.get(name);return i==null?null:rows.getString(i);}
+    private static boolean bool(ResultSet rows,Map<String,Integer> columns,String name)throws SQLException{Integer i=columns.get(name);return i!=null&&rows.getBoolean(i)&&!rows.wasNull();}
+    private static BigDecimal decimal(ResultSet rows,Map<String,Integer> columns,String name)throws SQLException{String value=value(rows,columns,name);try{return value==null?BigDecimal.ZERO:new BigDecimal(value);}catch(NumberFormatException ignored){return BigDecimal.ZERO;}}
+    private static String first(String... values){for(String value:values)if(value!=null&&!value.isBlank())return value;return null;}
+    private static String status(String raw,boolean open,BigDecimal filled,String filledAt){if(raw!=null){String value=raw.trim().toUpperCase();if(Set.of("FILLED","CLOSED").contains(value))return "FILLED";if(Set.of("CANCELED","CANCELLED","REJECTED","EXPIRED").contains(value))return "CANCELED";if(Set.of("OPEN","NEW","PENDING").contains(value))return "OPEN";}if(open)return "OPEN";if(filled.signum()>0||filledAt!=null)return "FILLED";return "UNKNOWN";}
 
     private static Map<String, Object> empty(double initialBalance) {
         Map<String, Object> result = new LinkedHashMap<>();
