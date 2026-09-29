@@ -119,6 +119,8 @@ UTC 开始日包含、结束日不包含，最长 366 天。同一租户/用户/
 
 基于该报告创建离线策略 `46267ec1-9963-44a4-a330-d25fc0467938`。真实项目接口验收覆盖人工启用、5 USDT 合规请求放行、相同客户端订单号幂等复用、11 USDT 请求按 `MAX_ORDER_NOTIONAL` 拒绝、紧急停机以及停机后按 `GATE_HALTED` 拒绝；所有记录均为 `executed=false`，最终状态 HALTED。OKX 凭据保持未配置，私有接口未连接，真实订单入口未开放。
 
+2026-09-29 已为专用 OKX 子账户配置当前 Windows 用户绑定的 DPAPI 文件并完成私有余额只读验收：readiness 显示 `credentialConfigured=true`、`privateReadAvailable=true`、`realOrderAvailable=false`；OKX 返回 `code=0` 和 1 组账户数据，平台记录 `ordersSent=0` 审计。验收期间策略保持 HALTED、`liveExecutionEnabled=false`、真实下单入口关闭。密钥禁止提现并限制现货交易；因当前使用条件限制暂未绑定 IP，按 SECURITY 的临时降级约束使用。适配器已修正为 `pwsh` 解密、毫秒级签名时间戳、固定 User-Agent，并复用 `QUANT_EXCHANGE_PROXY`。
+
 不能单看进程退出码：2026.8 配置错误可能未产生非零退出码。必须有唯一结果归档、有效策略结果、完整实际区间与一致成交数。结果归档不直接解压到磁盘，限制大小。2026.8 结果 JSON 没有引擎版本字段，版本取本次启动日志 banner，同时保存固定镜像摘要。零成交允许作为合法回测结果，但 UI 明确提示不代表盈利能力验证。
 
 ## 验证

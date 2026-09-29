@@ -52,7 +52,8 @@
 - 新增实盘前只读准入报告和双确认审计：跨执行汇总成功回测、4 小时 dry-run、订单故障恢复、风险停机和未解决告警；报告正文与 SHA-256 不可变，证据复核和密钥边界复核分别追加留痕。无论确认状态如何，`liveTradingAllowed=false`、`activationAllowed=false`。
 - 真实项目报告 `fb027b52-8ec3-4f37-9adc-26e4d610db27`、SHA-256 `c4f359d7e85424d27c1a6e0f6683807449be1b6a6a69eec47decab66c0afef99` 的五项证据均通过；用户已完成证据复核与密钥边界复核，状态为 DOUBLE_CONFIRMED。两条追加审计均绑定原摘要且意见非空，报告正文及摘要未变化；实盘与激活开关仍为 false。
 - 新增 `live-risk-v1` 离线安全门禁、订单决策与审计三张表，数据库当前共 29 张 quant 表。策略绑定双确认报告，固定 OKX BTC/USDT 现货限价单、单笔 10 USDT、单日 20 USDT、总仓位 20 USDT及最多 1 个挂单；覆盖客户端订单幂等、越界拒绝和全局紧急停机。
-- 真实策略 `46267ec1-9963-44a4-a330-d25fc0467938` 已完成接口验收：5 USDT 请求 ALLOWED_OFFLINE 且幂等复用，11 USDT 请求按 MAX_ORDER_NOTIONAL 拒绝，紧急停机后请求按 GATE_HALTED 拒绝；全部 `executed=false`，最终 HALTED。Windows DPAPI 凭据提供器、OKX 私有签名/余额只读/受总开关保护的限价单适配已实现，但凭据未配置、私有接口未连接、真实下单入口不存在。
+- 真实策略 `46267ec1-9963-44a4-a330-d25fc0467938` 已完成接口验收：5 USDT 请求 ALLOWED_OFFLINE 且幂等复用，11 USDT 请求按 MAX_ORDER_NOTIONAL 拒绝，紧急停机后请求按 GATE_HALTED 拒绝；全部 `executed=false`，最终 HALTED。Windows DPAPI 凭据提供器、OKX 私有签名/余额只读/受总开关保护的限价单适配已实现。
+- 专用 OKX 子账户密钥已通过隐藏交互保存为当前 Windows 用户绑定的 DPAPI 文件。私有只读验收返回 OKX `code=0`、1 组账户数据和 `ordersSent=0`，审计已留存；readiness 为 credentialConfigured/privateReadAvailable=true、realOrderAvailable=false，策略仍 HALTED、实盘总开关 false、真实下单入口不存在。读取器使用 `pwsh`，请求使用毫秒级时间戳、固定 User-Agent 和受控 HTTP 代理。
 
 ## 真实回测证据
 
@@ -73,6 +74,7 @@
 4. 固定策略、BTC/USDT 现货 1h，已有受控参数批次、模拟交易运行时、固定风险基线、周期快照、订单账本、对账告警和风险精确停止，但无策略编辑、自动重试或实盘。真实 dry-run 已完成 4 小时无人值守验收；订单状态与故障语义已用 Freqtrade 兼容 SQLite 和真实 MySQL/Docker 演练验证，但尚无真实 Freqtrade 策略信号产生订单的证据。Binance 适配允许同格式数据，但本轮只有 OKX 实测。
 5. 根 Spring Boot 4.1.0 / BOM 4.1.1 原样保留。聚合 package 后各 server 模块会生成可执行 JAR；本地启动需先以 `-Dspring-boot.repackage.skip=true clean install` 安装普通模块 JAR，再从 `yudao-server` 执行 `spring-boot:run`。
 6. application-local.yaml 与前端 .env.local 为既有跟踪配置；现有测试 RDS useSSL=false、local mock-enable=true 未修改。正式环境前需另行治理。
+7. 当前 OKX 密钥属于专用子账户并禁止提现，但因使用条件限制未绑定 IP；这是已知临时降级。子账户只保留受控小额资金，具备绑定条件后应立即补绑或轮换；未绑定且有交易权限的密钥还受 OKX 连续 14 天未使用自动失效规则影响。
 
 ## Git 和操作边界
 
@@ -82,4 +84,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**配置 OKX 专用 API Key 并验收私有只读连接。** 用户在 OKX 创建仅 Read + Trade、禁止 Withdraw、绑定受控出口 IP 的专用密钥，通过交互脚本保存到 `.runtime` 下的 Windows DPAPI 文件，再以 `QUANT_LIVE_CREDENTIAL_FILE` 启动单体；在页面输入 `CONFIRM_OKX_PRIVATE_READ` 只读取账户摘要并留存审计。该步骤不开放真实下单；只读验收通过后，再由用户另行明确授权极小额度首单。
+**实现极小额度首单的二次授权与交易所订单闭环。** 在继续保持默认 HALTED、`liveExecutionEnabled=false` 和无公开下单入口的前提下，增加一次性首单令牌、固定 BTC/USDT 现货限价单、下单结果持久化、交易所订单查询/撤单、超时自动撤单和紧急停机；先用桩验证全链路。只有代码与离线验收完成、子账户已放入明确的小额资金并由用户再次明确授权后，才可临时开启总开关发送一笔不超过 5 USDT 的真实订单。

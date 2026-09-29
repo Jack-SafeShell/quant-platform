@@ -16,7 +16,7 @@ public class DpapiLiveCredentialProvider implements LiveCredentialProvider {
     public Optional<OkxCredential> load(){
         if(!configured())return Optional.empty();
         try{
-            Process process=new ProcessBuilder("powershell","-NoProfile","-NonInteractive","-File",properties.getLiveCredentialReaderScript(),"-CredentialPath",properties.getLiveCredentialFile()).redirectErrorStream(true).start();
+            Process process=new ProcessBuilder("pwsh","-NoProfile","-NonInteractive","-File",properties.getLiveCredentialReaderScript(),"-CredentialPath",properties.getLiveCredentialFile()).redirectErrorStream(true).start();
             if(!process.waitFor(15,TimeUnit.SECONDS)){process.destroyForcibly();throw new IllegalStateException("读取加密凭据超时");}
             byte[] output=process.getInputStream().readNBytes(8192);
             if(process.exitValue()!=0)throw new IllegalStateException("无法读取加密凭据");
