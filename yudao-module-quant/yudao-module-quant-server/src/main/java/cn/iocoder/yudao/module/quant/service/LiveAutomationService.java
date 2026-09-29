@@ -1,0 +1,63 @@
+package cn.iocoder.yudao.module.quant.service;
+
+import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.module.quant.api.backtest.*;
+import cn.iocoder.yudao.module.quant.dal.*;
+import cn.iocoder.yudao.module.quant.engine.*;
+import cn.iocoder.yudao.module.quant.framework.QuantProperties;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.math.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+@Service
+public class LiveAutomationService {
+    private final LiveAutomationRepository repository;private final LiveControlRepository controlRepository;private final LiveControlService controls;private final LiveOrderService orders;private final LiveTradingClient client;private final QuantProperties properties;
+    public LiveAutomationService(LiveAutomationRepository repository,LiveControlRepository controlRepository,LiveControlService controls,LiveOrderService orders,LiveTradingClient client,QuantProperties properties){this.repository=repository;this.controlRepository=controlRepository;this.controls=controls;this.orders=orders;this.client=client;this.properties=properties;}
+
+    public String start(long tenant,long owner,String policyId,LiveAutomationStartRequest request){
+        if(!"CONFIRM_AUTO_LIVE_START".equals(request.confirmation()))throw new IllegalArgumentException("自动实盘确认语不匹配");
+        if(!properties.isLiveExecutionEnabled()||!properties.isLiveAutomationEnabled())throw new IllegalArgumentException("真实执行或自动策略总开关关闭");
+        var policy=controlRepository.get(tenant,owner,policyId);if(policy==null||!"ARMED_OFFLINE".equals(policy.get("status")))throw new IllegalArgumentException("实盘策略未启用");if(properties.getLiveAutomationOrderNotional().compareTo(decimal(policy,"maxOrderNotional"))>0)throw new IllegalArgumentException("自动单笔金额超过策略上限");
+        if(!client.configured())throw new IllegalArgumentException("OKX 凭据未配置");var existing=repository.active(tenant,owner,policyId);if(existing!=null)return String.valueOf(existing.get("id"));
+        Account account=account();String id=repository.create(policyId,tenant,owner,properties.getLiveAutomationOrderNotional(),properties.getLiveMaxSessionLoss(),account.totalEquity());controlRepository.audit(policyId,tenant,owner,owner,"AUTO_SESSION_STARTED","ARMED_OFFLINE","ARMED_OFFLINE",id+" / "+request.comment());return id;
+    }
+
+    public String stop(long tenant,long owner,String sessionId,String reason){var session=owned(tenant,owner,sessionId);String policy=String.valueOf(session.get("policyId"));repository.stop(sessionId,"STOPPED",reason);orders.emergencyStop(tenant,owner,policy,new LiveControlStopRequest("自动会话停止: "+reason));return "STOPPED";}
+    public List<Map<String,Object>> list(long tenant,long owner,String policy){if(controlRepository.get(tenant,owner,policy)==null)throw new IllegalArgumentException("实盘安全策略不存在");return repository.list(tenant,owner,policy);}
+    public Map<String,Object> get(long tenant,long owner,String id){var session=owned(tenant,owner,id);session.put("signals",repository.signals(tenant,owner,id));session.put("reconciliations",repository.snapshots(tenant,owner,id));session.put("alerts",repository.alerts(tenant,owner,id));return session;}
+
+    @Scheduled(fixedDelayString="#{${yudao.quant.live-automation-interval-seconds:15} * 1000}") public void tick(){if(!properties.isLiveExecutionEnabled()||!properties.isLiveAutomationEnabled()||!client.configured())return;for(var session:repository.active())try{process(session);}catch(RuntimeException e){fail(session,"AUTOMATION_FAILURE",safe(e.getMessage()));}}
+    public void tick(String id,long tenant,long owner){process(owned(tenant,owner,id));}
+    @EventListener(ApplicationReadyEvent.class) public void recoverInterrupted(){var interrupted=repository.active();if(interrupted.isEmpty())return;repository.failInterrupted();for(var row:interrupted)controlRepository.halt(String.valueOf(row.get("policyId")));}
+
+    private void process(Map<String,Object> session){if(!"RUNNING".equals(session.get("status")))return;long tenant=((Number)session.get("tenantId")).longValue(),owner=((Number)session.get("ownerId")).longValue();String id=String.valueOf(session.get("id")),policy=String.valueOf(session.get("policyId"));
+        orders.reconcilePolicy(tenant,owner,policy);Account account=account();int exchangeOpen=pendingCount(),platformOpen=orders.openCount(policy);BigDecimal start=decimal(session,"startEquity"),loss=start.subtract(account.totalEquity()).max(BigDecimal.ZERO);MarketSignal signal=evaluate(client.marketCandles());Map<String,Object> evidence=new TreeMap<>();evidence.put("sessionId",id);evidence.put("equity",plain(account.totalEquity()));evidence.put("btcExposure",plain(account.btcExposure()));evidence.put("exchangeOpenOrders",exchangeOpen);evidence.put("platformOpenOrders",platformOpen);evidence.put("loss",plain(loss));evidence.put("candleAt",signal.candleAt());String hash=DatasetRegistry.hash(JsonUtils.toJsonString(evidence).getBytes(StandardCharsets.UTF_8));String reconciliation=exchangeOpen==platformOpen?"PASSED":"MISMATCH";repository.snapshot(id,tenant,owner,account.totalEquity(),account.btcExposure(),exchangeOpen,platformOpen,loss,reconciliation,hash,null);repository.heartbeat(id,account.totalEquity(),signal.candleAt());repository.resolve(id,"RECONCILIATION_FAILURE");
+        if(exchangeOpen!=platformOpen){fail(session,"ORDER_RECONCILIATION_MISMATCH","交易所挂单 "+exchangeOpen+" 与平台活动订单 "+platformOpen+" 不一致");return;}
+        if(loss.compareTo(decimal(session,"maxSessionLoss"))>=0){fail(session,"SESSION_LOSS_LIMIT","会话亏损达到 "+plain(loss)+" USDT");return;}
+        String signalHash=DatasetRegistry.hash((policy+"\nQuantEmaBaseline\n1h\n"+signal.candleAt()+"\n"+signal.type()).getBytes(StandardCharsets.UTF_8));String clientId="qa"+signalHash.substring(0,26),signalId=UUID.randomUUID().toString();if(!repository.insertSignal(signalId,id,policy,tenant,owner,signal.candleAt(),signal.type(),signal.close(),signal.fast(),signal.slow(),signalHash,"NONE".equals(signal.type())?null:clientId))return;if("NONE".equals(signal.type())){repository.signalResult(signalId,"NO_ACTION",null,null,"本根已收盘 K 线无 EMA 交叉");return;}
+        BigDecimal amount=decimal(session,"orderNotional").divide(signal.close(),8,RoundingMode.DOWN);var decision=controls.check(tenant,owner,policy,new LiveOrderCheckRequest(clientId,signal.type(),"LIMIT",signal.close(),amount,account.btcExposure(),dailyNotional(policy),exchangeOpen));if(!"ALLOWED_OFFLINE".equals(decision.get("decision"))){repository.signalResult(signalId,"REJECTED",String.valueOf(decision.get("id")),null,String.valueOf(decision.get("reasonCode")));return;}try{var token=orders.issue(tenant,owner,policy,new LiveOrderTokenRequest(clientId,"CONFIRM_LIVE_ORDER","固定策略自动会话 "+id));var order=orders.execute(tenant,owner,policy,new LiveOrderExecuteRequest(String.valueOf(token.get("token"))));repository.signalResult(signalId,"ORDER_SUBMITTED",String.valueOf(decision.get("id")),String.valueOf(order.get("id")),String.valueOf(order.get("status")));}catch(RuntimeException e){repository.signalResult(signalId,"ORDER_FAILED",String.valueOf(decision.get("id")),null,safe(e.getMessage()));throw e;}
+    }
+    private void fail(Map<String,Object> session,String type,String message){String id=String.valueOf(session.get("id"));long tenant=((Number)session.get("tenantId")).longValue(),owner=((Number)session.get("ownerId")).longValue();String policy=String.valueOf(session.get("policyId"));repository.alert(id,tenant,owner,type,message);repository.stop(id,"RISK_STOPPED",message);try{orders.emergencyStop(tenant,owner,policy,new LiveControlStopRequest("自动停机: "+message));}catch(RuntimeException ignored){controlRepository.halt(policy);}}
+    private Map<String,Object> owned(long tenant,long owner,String id){var row=repository.get(tenant,owner,id);if(row==null)throw new IllegalArgumentException("自动实盘会话不存在");return row;}
+    private Account account(){Map<String,Object> response=parse(client.accountBalance());if(!"0".equals(text(response,"code")))throw new IllegalStateException("OKX 账户核对失败");Map<?,?> account=firstMap(response,"data");BigDecimal total=number(account.get("totalEq")),btc=BigDecimal.ZERO;Object details=account.get("details");if(details instanceof List<?> list)for(Object value:list)if(value instanceof Map<?,?> currency&&"BTC".equals(String.valueOf(currency.get("ccy"))))btc=number(currency.get("eqUsd"));if(total.signum()==0&&details instanceof List<?> list)for(Object value:list)if(value instanceof Map<?,?> currency)total=total.add(number(currency.get("eqUsd")));return new Account(total,btc);}
+    private int pendingCount(){Map<String,Object> response=parse(client.pendingOrders());if(!"0".equals(text(response,"code")))throw new IllegalStateException("OKX 挂单核对失败");Object data=response.get("data");return data instanceof List<?> list?list.size():Integer.MAX_VALUE;}
+    private BigDecimal dailyNotional(String policy){long start=java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();return orders.dailyNotional(policy,start);}
+    public static MarketSignal evaluate(String json){Map<String,Object> response=parse(json);if(!"0".equals(text(response,"code")))throw new IllegalArgumentException("OKX K 线请求失败");Object data=response.get("data");if(!(data instanceof List<?> raw))throw new IllegalArgumentException("OKX K 线数据缺失");List<Candle> candles=new ArrayList<>();for(Object value:raw)if(value instanceof List<?> row&&row.size()>=9&&"1".equals(String.valueOf(row.get(8))))candles.add(new Candle(Long.parseLong(String.valueOf(row.get(0))),new BigDecimal(String.valueOf(row.get(4))),new BigDecimal(String.valueOf(row.get(5)))));candles.sort(Comparator.comparingLong(Candle::at));if(candles.size()<61)throw new IllegalArgumentException("已收盘 K 线不足 61 根");double[] fast=ema(candles,20),slow=ema(candles,60);int i=candles.size()-1,p=i-1;String type="NONE";if(candles.get(i).volume().signum()>0&&fast[i]>slow[i]&&fast[p]<=slow[p])type="BUY";else if(candles.get(i).volume().signum()>0&&fast[i]<slow[i]&&fast[p]>=slow[p])type="SELL";return new MarketSignal(candles.get(i).at(),type,candles.get(i).close(),BigDecimal.valueOf(fast[i]),BigDecimal.valueOf(slow[i]));}
+    private static double[] ema(List<Candle> candles,int period){double[] out=new double[candles.size()];Arrays.fill(out,Double.NaN);double sum=0;for(int i=0;i<period;i++)sum+=candles.get(i).close().doubleValue();out[period-1]=sum/period;double alpha=2.0/(period+1);for(int i=period;i<candles.size();i++)out[i]=(candles.get(i).close().doubleValue()-out[i-1])*alpha+out[i-1];return out;}
+    @SuppressWarnings("unchecked") private static Map<String,Object> parse(String json){return JsonUtils.parseObject(json,Map.class);}
+    private static Map<?,?> firstMap(Map<String,Object> response,String key){Object data=response.get(key);if(!(data instanceof List<?> list)||list.isEmpty()||!(list.getFirst() instanceof Map<?,?> map))throw new IllegalStateException("OKX 响应数据不完整");return map;}
+    private static String text(Map<String,Object> map,String key){Object value=map.get(key);return value==null?"":String.valueOf(value);}
+    private static BigDecimal number(Object value){if(value==null||String.valueOf(value).isBlank()||"null".equals(String.valueOf(value)))return BigDecimal.ZERO;return new BigDecimal(String.valueOf(value));}
+    private static BigDecimal decimal(Map<String,Object> map,String key){return new BigDecimal(String.valueOf(map.get(key)));}
+    private static String plain(BigDecimal value){return value.stripTrailingZeros().toPlainString();}
+    private static String safe(String value){if(value==null)return "未知错误";return value.length()>500?value.substring(0,500):value;}
+    private record Candle(long at,BigDecimal close,BigDecimal volume){}
+    public record MarketSignal(long candleAt,String type,BigDecimal close,BigDecimal fast,BigDecimal slow){}
+    private record Account(BigDecimal totalEquity,BigDecimal btcExposure){}
+
+}

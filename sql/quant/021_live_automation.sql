@@ -1,0 +1,83 @@
+CREATE TABLE IF NOT EXISTS quant_live_automation_session (
+  id VARCHAR(36) PRIMARY KEY,
+  policy_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  strategy_name VARCHAR(64) NOT NULL,
+  timeframe VARCHAR(16) NOT NULL,
+  order_notional DECIMAL(20,8) NOT NULL,
+  max_session_loss DECIMAL(20,8) NOT NULL,
+  start_equity DECIMAL(20,8) NOT NULL,
+  high_equity DECIMAL(20,8) NOT NULL,
+  last_equity DECIMAL(20,8) NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  last_heartbeat_at BIGINT,
+  last_candle_at BIGINT,
+  stop_reason VARCHAR(500),
+  started_at BIGINT NOT NULL,
+  stopped_at BIGINT,
+  updated_at BIGINT NOT NULL,
+  KEY idx_quant_live_auto_policy (policy_id, started_at),
+  KEY idx_quant_live_auto_status (status, updated_at),
+  CONSTRAINT fk_quant_live_auto_policy FOREIGN KEY (policy_id) REFERENCES quant_live_control_policy(id)
+);
+
+CREATE TABLE IF NOT EXISTS quant_live_strategy_signal (
+  id VARCHAR(36) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL,
+  policy_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  candle_at BIGINT NOT NULL,
+  signal_type VARCHAR(8) NOT NULL,
+  close_price DECIMAL(20,8) NOT NULL,
+  fast_ema DECIMAL(20,8) NOT NULL,
+  slow_ema DECIMAL(20,8) NOT NULL,
+  signal_hash VARCHAR(64) NOT NULL,
+  client_order_id VARCHAR(32),
+  decision_id VARCHAR(36),
+  exchange_order_id VARCHAR(36),
+  status VARCHAR(24) NOT NULL,
+  message VARCHAR(500),
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE KEY uk_quant_live_signal_candle (session_id, candle_at),
+  KEY idx_quant_live_signal_policy (policy_id, created_at),
+  CONSTRAINT fk_quant_live_signal_session FOREIGN KEY (session_id) REFERENCES quant_live_automation_session(id),
+  CONSTRAINT fk_quant_live_signal_policy FOREIGN KEY (policy_id) REFERENCES quant_live_control_policy(id)
+);
+
+CREATE TABLE IF NOT EXISTS quant_live_reconciliation_snapshot (
+  id VARCHAR(36) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  total_equity DECIMAL(20,8) NOT NULL,
+  btc_exposure DECIMAL(20,8) NOT NULL,
+  exchange_open_orders INT NOT NULL,
+  platform_open_orders INT NOT NULL,
+  session_loss DECIMAL(20,8) NOT NULL,
+  reconciliation_status VARCHAR(16) NOT NULL,
+  evidence_hash VARCHAR(64) NOT NULL,
+  error_message VARCHAR(500),
+  reconciled_at BIGINT NOT NULL,
+  KEY idx_quant_live_reconcile_session (session_id, reconciled_at),
+  CONSTRAINT fk_quant_live_reconcile_session FOREIGN KEY (session_id) REFERENCES quant_live_automation_session(id)
+);
+
+CREATE TABLE IF NOT EXISTS quant_live_automation_alert (
+  id VARCHAR(36) PRIMARY KEY,
+  session_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  owner_id BIGINT NOT NULL,
+  alert_type VARCHAR(48) NOT NULL,
+  severity VARCHAR(16) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  message VARCHAR(500) NOT NULL,
+  first_seen_at BIGINT NOT NULL,
+  last_seen_at BIGINT NOT NULL,
+  resolved_at BIGINT,
+  UNIQUE KEY uk_quant_live_auto_alert (session_id, alert_type),
+  KEY idx_quant_live_auto_alert_status (tenant_id, owner_id, status),
+  CONSTRAINT fk_quant_live_auto_alert_session FOREIGN KEY (session_id) REFERENCES quant_live_automation_session(id)
+);

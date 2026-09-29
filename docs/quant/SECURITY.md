@@ -14,6 +14,8 @@
 
 `live-risk-v1` 固定 OKX、BTC/USDT、现货和限价单，默认单笔 10 USDT、单日累计 20 USDT、总仓位 20 USDT、最多 1 个挂单。策略默认 HALTED；启用后仍须为已通过决策签发 180 秒一次性令牌，令牌只存 SHA-256 且至多消费一次。真实挂单默认 60 秒自动撤销；紧急停机会先尝试撤销平台未终结订单，再恢复 HALTED。
 
+固定策略自动实盘另受 `live-automation-enabled` 独立开关保护，默认关闭。会话只读取已收盘 1h K 线，按 QuantEmaBaseline 的 EMA20/60 交叉生成每根 K 线唯一信号，固定单笔 5 USDT；每笔仍复用离线决策、一次性令牌、交易所实际仓位/挂单校验和订单账本。账户权益、BTC 暴露、交易所与平台挂单持续对账；挂单不一致、请求异常或会话亏损达到 5 USDT 时自动撤单、记录告警并 HALTED。应用重启不会自动恢复会话。
+
 `quant_live_admission_report` 保存跨执行证据的不可变 JSON 与 SHA-256，覆盖历史回测、4 小时 dry-run、订单对账故障恢复、风险停机和未解决告警。`quant_live_admission_confirmation` 以追加记录分别保存证据复核和密钥边界复核；两步都要求绑定报告摘要和固定确认语。双确认只表示人工已阅读当前证据，接口仍固定返回 `liveTradingAllowed=false`、`activationAllowed=false`，不构成实盘授权。
 
 RDS 仅允许本项目 `quant-platform`：连接测试、SELECT 1、必要建表迁移及明确范围测试数据。禁止删库、无条件大范围删除或操作其他库。初始化轮次仅做只读查询；回测开发轮次已按 sql/quant 创建五张业务表并写入明确标识的 smoke 实验。当前连接 URL 为 useSSL=false；正式环境前需单独验证 TLS 和最小权限账户。

@@ -22,6 +22,7 @@ import cn.iocoder.yudao.module.quant.api.backtest.LiveOrderCheckRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.LiveOrderTokenRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.LiveOrderExecuteRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.LivePrivateReadRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.LiveAutomationStartRequest;
 import cn.iocoder.yudao.module.quant.service.BacktestService;
 import cn.iocoder.yudao.module.quant.service.DatasetDownloadService;
 import cn.iocoder.yudao.module.quant.service.OptimizationService;
@@ -38,6 +39,7 @@ import cn.iocoder.yudao.module.quant.service.LiveAdmissionService;
 import cn.iocoder.yudao.module.quant.service.LiveControlService;
 import cn.iocoder.yudao.module.quant.service.OkxPrivateReadService;
 import cn.iocoder.yudao.module.quant.service.LiveOrderService;
+import cn.iocoder.yudao.module.quant.service.LiveAutomationService;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -68,7 +70,8 @@ public class BacktestController {
     private final LiveControlService liveControls;
     private final OkxPrivateReadService okxPrivateRead;
     private final LiveOrderService liveOrders;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation,LiveAdmissionService liveAdmissions,LiveControlService liveControls,OkxPrivateReadService okxPrivateRead,LiveOrderService liveOrders) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation;this.liveAdmissions=liveAdmissions;this.liveControls=liveControls;this.okxPrivateRead=okxPrivateRead;this.liveOrders=liveOrders; }
+    private final LiveAutomationService liveAutomation;
+    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation,LiveAdmissionService liveAdmissions,LiveControlService liveControls,OkxPrivateReadService okxPrivateRead,LiveOrderService liveOrders,LiveAutomationService liveAutomation) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation;this.liveAdmissions=liveAdmissions;this.liveControls=liveControls;this.okxPrivateRead=okxPrivateRead;this.liveOrders=liveOrders;this.liveAutomation=liveAutomation; }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {
@@ -91,7 +94,7 @@ public class BacktestController {
     @GetMapping("/capabilities")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String, Object>> capabilities() {
-        return success(Map.of("enabled", properties.isEnabled(), "executionEnabled", properties.isPaperExecutionEnabled(), "liveExecutionEnabled",properties.isLiveExecutionEnabled(), "strategy", "QuantEmaBaseline", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "riskPolicyVersion", properties.getPaperRiskPolicyVersion(), "snapshotRetentionDays", properties.getPaperSnapshotRetentionDays()));
+        return success(Map.of("enabled", properties.isEnabled(), "executionEnabled", properties.isPaperExecutionEnabled(), "liveExecutionEnabled",properties.isLiveExecutionEnabled(), "liveAutomationEnabled",properties.isLiveAutomationEnabled(), "strategy", "QuantEmaBaseline", "pair", "BTC/USDT", "timeframe", "1h", "tradingMode", "spot", "riskPolicyVersion", properties.getPaperRiskPolicyVersion(), "snapshotRetentionDays", properties.getPaperSnapshotRetentionDays()));
     }
     @GetMapping("/strategy-versions")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
@@ -212,6 +215,14 @@ public class BacktestController {
     public CommonResult<Map<String,Object>> refreshLiveOrder(@RequestParam String orderId){return success(liveOrders.refresh(tenant(),owner(),orderId));}
     @PostMapping("/live-control/order/cancel") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<Map<String,Object>> cancelLiveOrder(@RequestParam String orderId){return success(liveOrders.cancel(tenant(),owner(),orderId));}
+    @PostMapping("/live-control/automation/start") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> startLiveAutomation(@RequestParam String id,@Valid @RequestBody LiveAutomationStartRequest request){return success(liveAutomation.start(tenant(),owner(),id,request));}
+    @PostMapping("/live-control/automation/stop") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> stopLiveAutomation(@RequestParam String sessionId,@Valid @RequestBody LiveControlStopRequest request){return success(liveAutomation.stop(tenant(),owner(),sessionId,request.comment()));}
+    @GetMapping("/live-control/automation/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String,Object>>> listLiveAutomation(@RequestParam String id){return success(liveAutomation.list(tenant(),owner(),id));}
+    @GetMapping("/live-control/automation/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String,Object>> getLiveAutomation(@RequestParam String sessionId){return success(liveAutomation.get(tenant(),owner(),sessionId));}
     @GetMapping("/optimization/research-report") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public ResponseEntity<byte[]> researchReport(@RequestParam String id){var report=optimizations.exportDraft(tenant(),owner(),id);return ResponseEntity.ok().contentType(MediaType.parseMediaType(report.contentType())).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(report.filename(),java.nio.charset.StandardCharsets.UTF_8).build().toString()).body(report.content());}
     private static long tenant() { return Objects.requireNonNull(TenantContextHolder.getTenantId(), "租户上下文缺失"); }

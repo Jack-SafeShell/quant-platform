@@ -54,8 +54,10 @@
 - 新增 `live-risk-v1` 离线安全门禁、订单决策与审计三张表，数据库当前共 29 张 quant 表。策略绑定双确认报告，固定 OKX BTC/USDT 现货限价单、单笔 10 USDT、单日 20 USDT、总仓位 20 USDT及最多 1 个挂单；覆盖客户端订单幂等、越界拒绝和全局紧急停机。
 - 真实策略 `46267ec1-9963-44a4-a330-d25fc0467938` 已完成接口验收：5 USDT 请求 ALLOWED_OFFLINE 且幂等复用，11 USDT 请求按 MAX_ORDER_NOTIONAL 拒绝，紧急停机后请求按 GATE_HALTED 拒绝；全部 `executed=false`，最终 HALTED。Windows DPAPI 凭据提供器、OKX 私有签名/余额只读/受总开关保护的限价单适配已实现。
 - 专用 OKX 子账户密钥已通过隐藏交互保存为当前 Windows 用户绑定的 DPAPI 文件。私有只读验收返回 OKX `code=0`、1 组账户数据和 `ordersSent=0`，审计已留存；readiness 为 credentialConfigured/privateReadAvailable=true、realOrderAvailable=false，策略仍 HALTED、实盘总开关 false、真实下单入口不存在。读取器使用 `pwsh`，请求使用毫秒级时间戳、固定 User-Agent 和受控 HTTP 代理。
-- 新增一次性真实订单令牌和交易所订单账本，数据库共 31 张 quant 表；令牌只保存 SHA-256，执行前以 OKX 实际仓位和挂单重新校验，支持查询、人工撤单、60 秒超时撤单和紧急停机撤单。
+- 新增一次性真实订单令牌和交易所订单账本；令牌只保存 SHA-256，执行前以 OKX 实际仓位和挂单重新校验，支持查询、人工撤单、60 秒超时撤单和紧急停机撤单。
 - 首个真实订单闭环已完成：平台订单 `2768d958-fca6-4926-8940-1e5d6230bbcd`，BTC/USDT BUY 限价，名义金额约 4.654811 USDT；OKX 接受后成功撤销，最终 CANCELED、成交量 0，令牌重放被拒绝。策略已恢复 HALTED，单体默认实盘开关 false、真实订单入口关闭。
+- 新增固定策略自动实盘会话、信号、对账快照和告警四张表，数据库共 35 张 quant 表。会话按已收盘 1h K 线生成 EMA20/60 唯一信号，自动复用既有决策、一次性令牌和订单账本；账户权益、BTC 暴露及两侧挂单持续对账，差异、异常、5 USDT 会话亏损或应用重启均停机，不自动恢复。
+- 短时真实市场会话 `ebf608ab-af15-4741-82e4-ef1f31d9319a` 已完成：约 35 秒内 2 次对账均 PASSED、无告警；最新已收盘 K 线无 EMA 交叉，记录 NONE/NO_ACTION，未创建订单。会话 STOPPED、策略 HALTED、平台活动订单 0；默认双开关关闭后单体健康 UP。
 
 ## 真实回测证据
 
@@ -70,10 +72,10 @@
 
 ## 当前限制
 
-1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与三十一张 quant 表。量化动态菜单及全部增量迁移已应用。
+1. RDS 已执行芋道基础脚本和 Quartz 脚本；当前包含 system、infra、Quartz 与三十五张 quant 表。量化动态菜单及全部增量迁移已应用。
 2. 2026-09-27 浏览器验收已覆盖登录、动态菜单、历史回测页面、配置启用状态和已有成功任务列表。浏览器自动化未新增任务：Element Plus 日期范围控件的自动化文本输入未提交 Vue 范围模型，因此没有把该尝试计入成功证据。
 3. 首版仅单体单实例、固定工作目录；不支持多机或不同目录的多个 worker 同时消费同一数据库。默认执行开关 false，部署步骤见 BACKTEST。
-4. 固定策略、BTC/USDT 现货 1h，已有受控参数批次、模拟交易运行时、固定风险基线、周期快照、订单账本、对账告警和风险精确停止。平台人工首单已验证真实 OKX 下单与撤单，但尚未由策略信号自动产生真实订单；也没有策略编辑和自动重试。Binance 适配允许同格式数据，但只有 OKX 实测。
+4. 固定策略、BTC/USDT 现货 1h 已接入自动实盘会话；短时验收期间没有出现真实 EMA 交叉，因此自动链路尚无由自然策略信号触发的真实订单成交证据。当前没有策略编辑和自动重试；Binance 适配允许同格式数据，但只有 OKX 实测。
 5. 根 Spring Boot 4.1.0 / BOM 4.1.1 原样保留。聚合 package 后各 server 模块会生成可执行 JAR；本地启动需先以 `-Dspring-boot.repackage.skip=true clean install` 安装普通模块 JAR，再从 `yudao-server` 执行 `spring-boot:run`。
 6. application-local.yaml 与前端 .env.local 为既有跟踪配置；现有测试 RDS useSSL=false、local mock-enable=true 未修改。正式环境前需另行治理。
 7. 当前 OKX 密钥属于专用子账户并禁止提现，但因使用条件限制未绑定 IP；这是已知临时降级。子账户只保留受控小额资金，具备绑定条件后应立即补绑或轮换；未绑定且有交易权限的密钥还受 OKX 连续 14 天未使用自动失效规则影响。
@@ -86,4 +88,4 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**把已验证的真实订单适配接入固定策略的小额自动执行。** 继续保持默认 HALTED 和 `liveExecutionEnabled=false`，先实现策略信号到平台订单决策的唯一映射、持仓及成交持续对账、异常告警和会话级损失停机；用桩与 dry-run 验证后，再在现有低资金子账户进行短时小额实盘运行。
+**一次完成自动实盘管理页与 24 小时小额无人值守验收。** 页面提供会话启停、信号、账户/订单对账和告警查看；在现有低资金子账户运行 24 小时，验证跨已收盘 K 线幂等、持续对账、自然信号处理和异常停机，结束后恢复 HALTED 及双开关关闭。

@@ -4,6 +4,7 @@ public interface LiveTradingClient {
     boolean configured();
     String accountBalance();
     String pendingOrders();
+    default String marketCandles(){throw new UnsupportedOperationException("行情接口未实现");}
     String placeSpotLimitOrder(String clientOrderId, String side, String price, String amount);
     String getOrder(String clientOrderId);
     String cancelOrder(String clientOrderId);

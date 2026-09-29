@@ -25,6 +25,7 @@ public class OkxPrivateApiClient implements LiveTradingClient {
     public boolean configured(){return credentials.configured();}
     public String accountBalance() { return request("GET","/api/v5/account/balance?ccy=BTC,USDT",""); }
     public String pendingOrders(){return request("GET","/api/v5/trade/orders-pending?instType=SPOT&instId="+instrument(),"");}
+    public String marketCandles(){return publicRequest("/api/v5/market/candles?instId="+instrument()+"&bar=1H&limit=100");}
     public String placeSpotLimitOrder(String clientOrderId,String side,String price,String amount){
         if(!properties.isLiveExecutionEnabled())throw new IllegalStateException("真实执行总开关关闭");
         Map<String,Object> body=new LinkedHashMap<>();body.put("instId",properties.getLivePair().replace('/','-'));body.put("tdMode","cash");body.put("clOrdId",clientOrderId);body.put("side",side.toLowerCase(Locale.ROOT));body.put("ordType","limit");body.put("px",price);body.put("sz",amount);
@@ -36,6 +37,7 @@ public class OkxPrivateApiClient implements LiveTradingClient {
         return request("POST","/api/v5/trade/cancel-order",JsonUtils.toJsonString(Map.of("instId",instrument(),"clOrdId",clientOrderId)));
     }
     private String instrument(){return properties.getLivePair().replace('/','-');}
+    private String publicRequest(String path){try{var request=HttpRequest.newBuilder(URI.create(properties.getLiveOkxBaseUrl()+path)).timeout(java.time.Duration.ofSeconds(15)).header("Accept","application/json").header("User-Agent","quant-platform/1.0").GET().build();var response=http.send(request,HttpResponse.BodyHandlers.ofString());if(response.statusCode()/100!=2)throw new IllegalStateException("OKX 公开接口 HTTP "+response.statusCode());return response.body();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("OKX 公开接口请求被中断");}catch(Exception e){if(e instanceof IllegalStateException state)throw state;throw new IllegalStateException("OKX 公开接口请求失败");}}
     private String request(String method,String path,String body){
         var value=credentials.load().orElseThrow(()->new IllegalStateException("OKX 加密凭据未配置"));String timestamp=OKX_TIMESTAMP.format(Instant.now());
         try{

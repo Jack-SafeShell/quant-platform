@@ -23,6 +23,11 @@ yudao:
     live-max-open-orders: 1
     live-order-token-ttl-seconds: 180
     live-order-cancel-timeout-seconds: 60
+    # A separate switch prevents a manually enabled order endpoint from starting strategy automation.
+    live-automation-enabled: ${QUANT_LIVE_AUTOMATION_ENABLED:false}
+    live-automation-interval-seconds: ${QUANT_LIVE_AUTOMATION_INTERVAL:15}
+    live-automation-order-notional: 5
+    live-max-session-loss: 5
     # Empty means no private credential is available. The encrypted file is never committed.
     live-credential-file: ${QUANT_LIVE_CREDENTIAL_FILE:}
     live-credential-reader-script: ${QUANT_LIVE_CREDENTIAL_READER_SCRIPT:D:/0000/quant-platform/script/quant/read_live_credential.ps1}
