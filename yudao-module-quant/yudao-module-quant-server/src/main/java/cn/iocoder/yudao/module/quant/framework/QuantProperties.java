@@ -29,6 +29,8 @@ public class QuantProperties {
     @DecimalMin("0.01") private BigDecimal liveMaxDailyNotional = new BigDecimal("20");
     @DecimalMin("0.01") private BigDecimal liveMaxTotalExposure = new BigDecimal("20");
     @Min(1) @Max(100) private int liveMaxOpenOrders = 1;
+    @Min(30) @Max(900) private int liveOrderTokenTtlSeconds = 180;
+    @Min(10) @Max(3600) private int liveOrderCancelTimeoutSeconds = 60;
     private String liveCredentialFile = "";
     @NotBlank private String liveCredentialReaderScript = "D:/0000/quant-platform/script/quant/read_live_credential.ps1";
     @Pattern(regexp = "https://(openapi|www|us|eea)\\.okx\\.com") private String liveOkxBaseUrl = "https://openapi.okx.com";

@@ -12,8 +12,8 @@ yudao:
     paper-max-open-positions: 1
     paper-max-daily-loss: 20
     paper-max-drawdown-ratio: 0.05
-    # Real execution remains hard-disabled until a separately authorized deployment.
-    live-execution-enabled: false
+    # The environment switch is required in addition to the database gate and one-time token.
+    live-execution-enabled: ${QUANT_LIVE_EXECUTION_ENABLED:false}
     live-risk-policy-version: live-risk-v1
     live-exchange: okx
     live-pair: BTC/USDT
@@ -21,6 +21,8 @@ yudao:
     live-max-daily-notional: 20
     live-max-total-exposure: 20
     live-max-open-orders: 1
+    live-order-token-ttl-seconds: 180
+    live-order-cancel-timeout-seconds: 60
     # Empty means no private credential is available. The encrypted file is never committed.
     live-credential-file: ${QUANT_LIVE_CREDENTIAL_FILE:}
     live-credential-reader-script: ${QUANT_LIVE_CREDENTIAL_READER_SCRIPT:D:/0000/quant-platform/script/quant/read_live_credential.ps1}

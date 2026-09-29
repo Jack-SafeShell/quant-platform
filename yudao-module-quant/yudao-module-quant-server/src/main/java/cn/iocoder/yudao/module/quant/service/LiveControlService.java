@@ -65,6 +65,6 @@ public class LiveControlService {
         return repository.decision(tenant,owner,request.clientOrderId());
     }
 
-    private void decorate(Map<String,Object> policy){policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",false);policy.put("activationAllowed",false);}
+    private void decorate(Map<String,Object> policy){policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",properties.isLiveExecutionEnabled()&&credentials.configured());policy.put("activationAllowed",properties.isLiveExecutionEnabled()&&credentials.configured()&&"ARMED_OFFLINE".equals(policy.get("status")));}
     private static BigDecimal decimal(Map<String,Object> map,String key){return new BigDecimal(String.valueOf(map.get(key)));}
 }

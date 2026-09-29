@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Component
-public class OkxPrivateApiClient {
+public class OkxPrivateApiClient implements LiveTradingClient {
     private static final DateTimeFormatter OKX_TIMESTAMP=DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
     private final QuantProperties properties;private final LiveCredentialProvider credentials;private final HttpClient http;
     @org.springframework.beans.factory.annotation.Autowired
@@ -24,11 +24,18 @@ public class OkxPrivateApiClient {
     OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,HttpClient http){this.properties=properties;this.credentials=credentials;this.http=http;}
     public boolean configured(){return credentials.configured();}
     public String accountBalance() { return request("GET","/api/v5/account/balance?ccy=BTC,USDT",""); }
+    public String pendingOrders(){return request("GET","/api/v5/trade/orders-pending?instType=SPOT&instId="+instrument(),"");}
     public String placeSpotLimitOrder(String clientOrderId,String side,String price,String amount){
         if(!properties.isLiveExecutionEnabled())throw new IllegalStateException("真实执行总开关关闭");
         Map<String,Object> body=new LinkedHashMap<>();body.put("instId",properties.getLivePair().replace('/','-'));body.put("tdMode","cash");body.put("clOrdId",clientOrderId);body.put("side",side.toLowerCase(Locale.ROOT));body.put("ordType","limit");body.put("px",price);body.put("sz",amount);
         return request("POST","/api/v5/trade/order",JsonUtils.toJsonString(body));
     }
+    public String getOrder(String clientOrderId){return request("GET","/api/v5/trade/order?instId="+instrument()+"&clOrdId="+clientOrderId,"");}
+    public String cancelOrder(String clientOrderId){
+        if(!properties.isLiveExecutionEnabled())throw new IllegalStateException("真实执行总开关关闭");
+        return request("POST","/api/v5/trade/cancel-order",JsonUtils.toJsonString(Map.of("instId",instrument(),"clOrdId",clientOrderId)));
+    }
+    private String instrument(){return properties.getLivePair().replace('/','-');}
     private String request(String method,String path,String body){
         var value=credentials.load().orElseThrow(()->new IllegalStateException("OKX 加密凭据未配置"));String timestamp=OKX_TIMESTAMP.format(Instant.now());
         try{
