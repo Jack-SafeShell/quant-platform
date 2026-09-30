@@ -26,6 +26,7 @@ public class OkxPrivateApiClient implements LiveTradingClient {
     public String accountBalance() { return request("GET","/api/v5/account/balance?ccy=BTC,USDT",""); }
     public String pendingOrders(){return request("GET","/api/v5/trade/orders-pending?instType=SPOT&instId="+instrument(),"");}
     public String marketCandles(){return publicRequest("/api/v5/market/candles?instId="+instrument()+"&bar=1H&limit=100");}
+    public String marketTicker(){return publicRequest("/api/v5/market/ticker?instId="+instrument());}
     public String placeSpotLimitOrder(String clientOrderId,String side,String price,String amount){
         if(!properties.isLiveExecutionEnabled())throw new IllegalStateException("真实执行总开关关闭");
         Map<String,Object> body=new LinkedHashMap<>();body.put("instId",properties.getLivePair().replace('/','-'));body.put("tdMode","cash");body.put("clOrdId",clientOrderId);body.put("side",side.toLowerCase(Locale.ROOT));body.put("ordType","limit");body.put("px",price);body.put("sz",amount);

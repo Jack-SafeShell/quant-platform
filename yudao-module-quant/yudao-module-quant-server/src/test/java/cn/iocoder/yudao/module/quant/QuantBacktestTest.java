@@ -266,6 +266,9 @@ class QuantBacktestTest {
         assertEquals(new BigDecimal("0E-8"),LiveAutomationService.sellAmount(BigDecimal.ZERO,new BigDecimal("1"),new BigDecimal("5"),new BigDecimal("100000")));
         assertEquals(new BigDecimal("0.00003930"),LiveAutomationService.sellAmount(new BigDecimal("0.00003937"),new BigDecimal("0.00003930"),new BigDecimal("5"),new BigDecimal("100000")));
         assertEquals(new BigDecimal("0.00005000"),LiveAutomationService.sellAmount(new BigDecimal("1"),new BigDecimal("1"),new BigDecimal("5"),new BigDecimal("100000")));
+        String ticker="{\"code\":\"0\",\"data\":[{\"askPx\":\"84237.2\",\"bidPx\":\"84236.9\",\"last\":\"84237.0\"}]}";
+        assertEquals(new BigDecimal("84237.2"),LiveAutomationService.executionPrice(ticker,"BUY"));
+        assertEquals(new BigDecimal("84236.9"),LiveAutomationService.executionPrice(ticker,"SELL"));
     }
 
     void writePaperTelemetry(Path directory) throws Exception {
