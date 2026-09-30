@@ -263,6 +263,9 @@ class QuantBacktestTest {
         Collections.reverse(rows);String json=JsonUtils.toJsonString(Map.of("code","0","data",rows));
         var signal=LiveAutomationService.evaluate(json);assertEquals("BUY",signal.type());assertEquals(start+60*3600000L,signal.candleAt());assertEquals(new BigDecimal("400"),signal.close());
         assertEquals(signal,LiveAutomationService.evaluate(json));
+        assertEquals(new BigDecimal("0E-8"),LiveAutomationService.sellAmount(BigDecimal.ZERO,new BigDecimal("1"),new BigDecimal("5"),new BigDecimal("100000")));
+        assertEquals(new BigDecimal("0.00003930"),LiveAutomationService.sellAmount(new BigDecimal("0.00003937"),new BigDecimal("0.00003930"),new BigDecimal("5"),new BigDecimal("100000")));
+        assertEquals(new BigDecimal("0.00005000"),LiveAutomationService.sellAmount(new BigDecimal("1"),new BigDecimal("1"),new BigDecimal("5"),new BigDecimal("100000")));
     }
 
     void writePaperTelemetry(Path directory) throws Exception {
