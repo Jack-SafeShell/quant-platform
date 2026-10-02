@@ -98,6 +98,34 @@
 
     <ContentWrap v-if="activeSession" title="会话运行证据">
       <el-tabs v-model="evidenceTab">
+        <el-tab-pane label="策略收益与成本" name="performance">
+          <el-alert v-if="performanceError" :title="performanceError" type="warning" :closable="false" />
+          <template v-if="performance">
+            <p class="evidence-note">仅归属本会话的全部 BTC/USDT 订单，不包含账户原有资产及入金。收益贡献 = 卖出收入 − 买入支出 + USDT 费用/返佣 + 扣除 BTC 费用后的持仓估值。当前订单累计成交记录不提供逐笔已实现收益拆分。</p>
+            <el-descriptions :column="3" border>
+              <el-descriptions-item label="净收益贡献">{{ performanceMoney(performance.netContribution) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="净交易现金流">{{ performanceMoney(performance.netCashFlow) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="剩余持仓估值">{{ performanceMoney(performance.markedPositionValue) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="会话净持仓 BTC">{{ performance.netPositionBtc ?? '数据不完整' }}</el-descriptions-item>
+              <el-descriptions-item label="买入 / 卖出成交额">{{ money(performance.buyTurnover) }} / {{ money(performance.sellTurnover) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="已知费用与返佣折算">{{ performanceMoney(performance.knownSignedCostsUsdt) }} USDT（扣费负，返佣正）</el-descriptions-item>
+              <el-descriptions-item label="估值价格">{{ performance.markPrice ?? '-' }} USDT</el-descriptions-item>
+              <el-descriptions-item label="估值 K 线">{{ formatTime(performance.markCandleAt) }}</el-descriptions-item>
+              <el-descriptions-item label="账本覆盖">{{ performance.orderCount }} 单 / {{ performance.filledOrderCount }} 单有成交 / {{ performance.activeOrderCount }} 单活动</el-descriptions-item>
+            </el-descriptions>
+            <p class="evidence-note">估值使用该会话最近已收盘 K 线价格，停止后的历史会话不刷新实时价格。费用按成交均价折算，估值未计入未来平仓费用；活动订单后续成交会改变结果。缺少实际费用的 {{ performance.missingCostOrderCount }} 个成交订单不会按零费用计算。</p>
+            <el-alert v-if="!performance.valuationComplete" title="数据不完整，净收益暂不可计算；请核对成交、手续费及估值证据。" type="warning" :closable="false" />
+            <el-table :data="performance.orders" max-height="420" row-key="id">
+              <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" />
+              <el-table-column prop="side" label="方向" width="80" />
+              <el-table-column prop="status" label="状态" width="130" />
+              <el-table-column prop="filledAmount" label="累计成交 BTC" width="150" />
+              <el-table-column prop="averagePrice" label="成交均价" width="130" />
+              <el-table-column label="实际费用" min-width="150"><template #default="s">{{ s.row.feeAmount ?? '缺失' }} {{ s.row.feeCurrency }}</template></el-table-column>
+              <el-table-column label="返佣" min-width="150"><template #default="s">{{ s.row.rebateAmount ?? '缺失' }} {{ s.row.rebateCurrency }}</template></el-table-column>
+            </el-table>
+          </template>
+        </el-tab-pane>
         <el-tab-pane label="权益与敞口" name="equity">
           <p class="evidence-note">最近 {{ reconciliations.length }} 条对账快照：{{ formatTime(reconciliations[reconciliations.length - 1]?.reconciledAt) }} 至 {{ formatTime(reconciliations[0]?.reconciledAt) }}。账户权益包含已有资产及价格变化，不等同于策略收益。</p>
           <Echart v-if="reconciliations.length" :key="activeSession.id" :options="equityOptions" height="300px" :not-merge="true" />
@@ -198,6 +226,7 @@
 </template>
 
 <script setup lang="ts">
+import { getLivePerformance, type LivePerformance } from '@/api/quant/performance'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -239,6 +268,8 @@ const policies = ref<LiveControlPolicy[]>([])
 const sessions = ref<LiveAutomationSession[]>([])
 const activeSession = ref<LiveAutomationSession>()
 const liveOrders = ref<LiveExchangeOrder[]>([])
+const performance = ref<LivePerformance>()
+const performanceError = ref('')
 const selectedSessionId = ref<string>()
 const evidenceTab = ref('equity')
 const sessionOrdersOnly = ref(true)
@@ -299,6 +330,7 @@ const parameterRows = computed(() => parameterSets.value.map((item) => {
   catch { return { ...item, startingBalance: '-', stakeAmount: '-', fee: '-' } }
 }))
 
+function performanceMoney(value?: number | null) { return value == null ? '-' : Number(value).toFixed(6) }
 async function refresh() {
   if (loading.value) return
   loading.value = true
@@ -311,6 +343,12 @@ async function refresh() {
     const selected = availableSessions.find((item) => item.id === selectedSessionId.value)
       || availableSessions.find((item) => item.status === 'RUNNING') || availableSessions[0]
     const detail = selected ? await getLiveAutomation(selected.id) : undefined
+    let attribution: LivePerformance | undefined
+    let attributionError = ''
+    if (selected) {
+      try { attribution = await getLivePerformance(selected.id) }
+      catch { attributionError = '收益数据读取失败；请确认新增接口已部署，其他运行证据仍可查看。' }
+    }
     const policyId = detail?.policyId || controls[0]?.id
     const orders = policyId ? await listLiveOrders(policyId) : []
     if (disposed) return
@@ -319,6 +357,8 @@ async function refresh() {
     sessions.value = availableSessions
     selectedSessionId.value = selected?.id
     activeSession.value = detail
+    performance.value = attribution
+    performanceError.value = attributionError
     liveOrders.value = orders
     refreshError.value = ''
     lastUpdated.value = Date.now()
