@@ -35,6 +35,8 @@ public class QuantProperties {
     @Min(5) @Max(300) private int liveAutomationIntervalSeconds = 15;
     @DecimalMin("0.01") private BigDecimal liveAutomationOrderNotional = new BigDecimal("5");
     @DecimalMin("0.01") private BigDecimal liveMaxSessionLoss = new BigDecimal("5");
+    @Min(1) @Max(5) private int livePrivateReadMaxAttempts = 3;
+    @Min(50) @Max(5000) private int livePrivateReadRetryDelayMillis = 500;
     private String liveCredentialFile = "";
     @NotBlank private String liveCredentialReaderScript = "D:/0000/quant-platform/script/quant/read_live_credential.ps1";
     @Pattern(regexp = "https://(openapi|www|us|eea)\\.okx\\.com") private String liveOkxBaseUrl = "https://openapi.okx.com";

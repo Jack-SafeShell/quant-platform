@@ -28,6 +28,9 @@ yudao:
     live-automation-interval-seconds: ${QUANT_LIVE_AUTOMATION_INTERVAL:15}
     live-automation-order-notional: 5
     live-max-session-loss: 5
+    # Retry only idempotent private reads. Order placement and cancellation remain single-attempt.
+    live-private-read-max-attempts: ${QUANT_LIVE_PRIVATE_READ_MAX_ATTEMPTS:3}
+    live-private-read-retry-delay-millis: ${QUANT_LIVE_PRIVATE_READ_RETRY_DELAY_MILLIS:500}
     # Empty means no private credential is available. The encrypted file is never committed.
     live-credential-file: ${QUANT_LIVE_CREDENTIAL_FILE:}
     live-credential-reader-script: ${QUANT_LIVE_CREDENTIAL_READER_SCRIPT:D:/0000/quant-platform/script/quant/read_live_credential.ps1}
