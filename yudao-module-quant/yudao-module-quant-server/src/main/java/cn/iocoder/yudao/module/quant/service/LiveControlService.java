@@ -27,6 +27,33 @@ public class LiveControlService {
         return repository.createOrGet(tenant,owner,reportId,(String)report.get("reportHash"),properties.getLiveRiskPolicyVersion(),properties.getLiveExchange(),properties.getLivePair(),properties.getLiveMaxOrderNotional(),properties.getLiveMaxDailyNotional(),properties.getLiveMaxTotalExposure(),properties.getLiveMaxOpenOrders());
     }
 
+    @Transactional(readOnly=true)
+    public Map<String,Object> portfolioBudget(long tenant,long owner,PortfolioBudgetRequest request){
+        var totals=PortfolioBudgetPlan.calculate(properties,request);
+        var plans=new ArrayList<Map<String,Object>>();var versions=new HashSet<String>();
+        for(var allocation:request.allocations()){
+            var plan=runPlan(tenant,owner,allocation.reportId(),allocation.orderNotional(),allocation.maxSessionLoss(),request.feeBps(),request.slippageBps());
+            var strategy=JsonUtils.getObjectMapper().valueToTree(plan.get("strategy"));
+            String version=strategy.path("strategyVersionId").asText();
+            if(version.isBlank()||!versions.add(version))throw new IllegalArgumentException("Choose distinct strategy versions from v2 reports");
+            var limits=JsonUtils.getObjectMapper().valueToTree(plan.get("limits"));
+            if(allocation.capital().compareTo(limits.path("maxTotalExposure").decimalValue())>0
+                    ||allocation.dailyNotional().compareTo(limits.path("maxDailyNotional").decimalValue())>0)
+                throw new IllegalArgumentException("Allocation exceeds its bound policy limits");
+            plans.add(Map.of("capital",allocation.capital(),"dailyNotional",allocation.dailyNotional(),"runPlan",plan));
+        }
+        var result=new TreeMap<String,Object>();result.put("totals",totals);result.put("allocations",plans);
+        result.put("exchange",properties.getLiveExchange());result.put("pair",properties.getLivePair());
+        result.put("budgetValid",true);result.put("readOnly",true);result.put("fundsReserved",false);
+        result.put("multiStrategyExecutionSupported",false);result.put("readyForPortfolioStart",false);
+        result.put("sharedInstrument",plans.size()>1);
+        result.put("limitations",List.of("Allocation is a planning snapshot, not an account balance or a fund reservation",
+                "Same-account strategies require shared order reservations and inventory ownership before simultaneous execution",
+                "Individual readiness does not authorize a portfolio start; no strategy is started by this request"));
+        result.put("evidenceHash",DatasetRegistry.hash(JsonUtils.toJsonString(result).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        return result;
+    }
+
     public Map<String,Object> runPlan(long tenant, long owner, String reportId, BigDecimal order, BigDecimal loss, Integer fee, Integer slip) {
         var report=admissions.get(tenant,owner,reportId);
         var manifest=JsonUtils.getObjectMapper().readTree((String)report.get("reportJson"));

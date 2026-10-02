@@ -56,6 +56,9 @@
     <el-select v-model="runPlanReportId" filterable placeholder="选择准入报告查看准备缺口" style="width: 100%"><el-option v-for="r in liveAdmissions" :key="r.id" :value="r.id" :label="`${r.id} / ${r.confirmationState}`" /></el-select>
     <LiveRunPlanEditor :report-id="runPlanReportId" />
   </ContentWrap>
+  <ContentWrap title="多策略资金分配规划">
+    <PortfolioBudgetEditor :reports="liveAdmissions" />
+  </ContentWrap>
   <ContentWrap title="受控实盘与固定策略自动执行">
     <el-alert title="真实执行由后端双开关控制；默认关闭。自动会话使用准入报告绑定的 EMA 或突破配置版本，限定 OKX BTC/USDT 现货；止损止盈按已收盘 1h K 线毛收益判断，不等同于回测盘中成交。" type="warning" :closable="false" />
     <el-table :data="liveAdmissions.filter(x=>x.confirmationState==='DOUBLE_CONFIRMED')" class="mt-3"><el-table-column prop="reportHash" label="已双确认报告" min-width="360" /><el-table-column label="操作" width="180"><template #default="s"><el-button type="primary" link @click="generateLiveControl(s.row.id)">创建/查看门禁</el-button></template></el-table-column></el-table>
@@ -171,6 +174,7 @@
 
 <script setup lang="ts">
 import LiveRunPlanEditor from './LiveRunPlanEditor.vue'
+import PortfolioBudgetEditor from './PortfolioBudgetEditor.vue'
 import type { LiveRunBudget } from '@/api/quant/backtest'
 
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'

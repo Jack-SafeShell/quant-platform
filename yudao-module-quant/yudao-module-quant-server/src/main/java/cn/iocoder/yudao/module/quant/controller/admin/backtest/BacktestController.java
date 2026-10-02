@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.PortfolioBudgetRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest;
 import cn.iocoder.yudao.module.quant.service.StrategyExperimentService;
@@ -222,6 +223,8 @@ public class BacktestController {
             @RequestParam(required=false) Integer feeBps, @RequestParam(required=false) Integer slippageBps) {
         return success(liveControls.runPlan(tenant(),owner(),reportId,orderNotional,maxSessionLoss,feeBps,slippageBps));
     }
+    @PostMapping("/live-control/portfolio-budget") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String,Object>> portfolioBudget(@Valid @RequestBody PortfolioBudgetRequest request){return success(liveControls.portfolioBudget(tenant(),owner(),request));}
     @PostMapping("/live-admission/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> createLiveAdmission(@RequestParam(required=false) String backtestId){return success(liveAdmissions.create(tenant(),owner(),backtestId));}
     @GetMapping("/live-admission/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
