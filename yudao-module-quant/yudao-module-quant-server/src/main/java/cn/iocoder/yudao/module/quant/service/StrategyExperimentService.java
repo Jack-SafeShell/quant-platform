@@ -70,7 +70,7 @@ public class StrategyExperimentService {
             var batch = optimizations.get(tenant, owner, batchId);
             var version = backtests.findVersion(tenant, owner, versionId);
             var row = new LinkedHashMap<String, Object>(); row.put("strategyVersionId", versionId); row.put("batchId", batchId);
-            row.put("configuration", EmaStrategyTemplate.readConfiguration((String) version.get("sourceCode")));
+            row.put("configuration", StrategyTemplates.readConfiguration((String) version.get("sourceCode")));
             var members = (List<Map<String, Object>>) batch.get("members");
             for (var task : members) row.put("TRAIN".equals(task.get("phase")) ? "trainStatus" : "validationStatus", task.get("status"));
             boolean complete = Boolean.TRUE.equals(batch.get("terminal")); terminal &= complete;

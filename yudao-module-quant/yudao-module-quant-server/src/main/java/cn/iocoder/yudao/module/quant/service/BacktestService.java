@@ -71,7 +71,7 @@ public class BacktestService {
         return repository.listVersions(tenant, owner).stream().map(version -> {
             var view = new LinkedHashMap<String, Object>();
             for (String key : List.of("id", "strategyId", "strategyName", "sourceHash")) view.put(key, version.get(key));
-            view.put("configuration", EmaStrategyTemplate.readConfiguration((String) version.get("sourceCode")));
+            view.put("configuration", StrategyTemplates.readConfiguration((String) version.get("sourceCode")));
             return (Map<String, Object>) view;
         }).toList();
     }
@@ -79,6 +79,12 @@ public class BacktestService {
         String source = EmaStrategyTemplate.render(request);
         String hash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
         return ensureStrategyVersion(tenant, owner, source, hash);
+    }
+    public String createBreakoutVersion(long tenant,long owner,cn.iocoder.yudao.module.quant.api.backtest.BreakoutStrategyRequest request)throws Exception{
+        String source=BreakoutStrategyTemplate.render(request),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        synchronized(VERSION_LOCKS[Math.floorMod(Objects.hash(tenant,owner),VERSION_LOCKS.length)]){
+            return transaction.execute(status->repository.ensureVersion(tenant,owner,"QuantChannelBreakout",source,hash));
+        }
     }
     private String ensureStrategyVersion(long tenant, long owner, String source, String hash) {
         synchronized (VERSION_LOCKS[Math.floorMod(Objects.hash(tenant, owner), VERSION_LOCKS.length)]) {
@@ -167,7 +173,7 @@ public class BacktestService {
         for (String key : List.of("id", "status", "requestKey", "datasetId", "datasetHash", "datasetSource",
                 "exchangeName", "engineImage", "errorMessage", "createdAt", "startedAt", "finishedAt",
                 "strategyVersionId", "strategyName", "strategyHash", "parametersJson", "engineVersion", "artifactHash")) result.put(key, task.get(key));
-        result.put("strategyConfiguration", EmaStrategyTemplate.readConfiguration((String) task.get("strategySource")));
+        result.put("strategyConfiguration", StrategyTemplates.readConfiguration((String) task.get("strategySource")));
         if (detail) result.put("resultJson", task.get("resultJson"));
         return result;
     }

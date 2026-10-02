@@ -254,3 +254,22 @@ python script/quant/verify_paper_order_reconciliation.py
 日志 `%TEMP%\quant-platform-backtest`；任务日志 `.runtime/quant/jobs/<id>/engine.log`，最近真实测试摘要 `.runtime/quant/smoke-result.json`。这些只保留本机，不提交。
 
 接口行为依据 [Freqtrade 回测官方文档](https://www.freqtrade.io/en/stable/backtesting/) 和 [数据下载官方文档](https://www.freqtrade.io/en/stable/data-download/)，具体导出格式通过本机固定 2026.8 镜像实测确认。
+
+## 通道突破模板（2026-10-02）
+
+历史回测页面“配置策略并保存新版本”可选 EMA 交叉或通道突破。新增 POST /quant/backtest/strategy-version/breakout，参数 entryPeriod、exitPeriod（整数 2～120）、stopLossRatio（0.001～0.2）、takeProfitRatio（0.001～0.5），沿用创建回测权限及租户/用户隔离。配置带 template=CHANNEL_BREAKOUT，固定完整源码校验及版本摘要去重；现有 EMA 版本不变。
+
+已收盘 1h K 线收盘价高于此前 entryPeriod 根最高价时入场，低于此前 exitPeriod 根最低价时退出；rolling 后 shift(1) 排除当前 K 线，不允许空头。沿用 240 根预热及原止损/ROI。满足条件可以连续给出入场信号，持仓数仍受原引擎及风险限制。内部 Freqtrade 类名仍为 QuantEmaBaseline 以兼容既有适配器，平台通过版本及配置区分模板。
+
+实验工作台可混合选择两模板，共用资金、日期及费率。模拟预览复制完整绑定源码，评审和启动规则继续生效。本轮没有实际突破模拟容器运行，自动实盘信号未实现，实盘准入拒绝突破模板；保存版本不改变已有 EMA 实盘会话。
+
+真实实验 9e452246-ee90-48dd-8db6-4a41394e6ca9，数据集 okx-btc-202601-202609-v2，训练 2026-01-01～04-01、验证 04-01～10-01（UTC，结束日不含）；初始 1000 USDT、单笔 100、单边费率 0.001、止损 3%/ROI 6%。四次 Freqtrade 2026.8 回测均成功。
+
+| 方案 | 验证成交 | 验证净收益 USDT | 验证最大回撤 |
+|---|---:|---:|---:|
+| EMA30/90 | 27 | 13.109769 | 1.096418% |
+| 突破20/10 | 65 | 9.997476 | 0.897854% |
+
+收益扣上述手续费，未加入额外滑点；已观察样本不能再次作为未来独立检验。没有自动选中、增资或实际突破运行证据。完整本机摘要 .runtime/quant/breakout-comparison-20261002.json 忽略不提交。
+
+Java 测试覆盖模板边界、数值规范化、源码篡改、隔离、报告及突破实盘准入拒绝；原模拟端到端测试同时运行 EMA/突破。Python 行为测试：在固定 Freqtrade 镜像中用 python 执行 script/quant/test_breakout_strategy.py，挂载项目到 /workspace（只读），使用 --network none；无凭据或交易所访问。覆盖当前 K 线排除、等值/零成交量、预热不足及未来数据变化不影响过去。

@@ -96,7 +96,7 @@ import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
 import { getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
-import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, type EmaStrategyConfiguration, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
+import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, strategyConfigurationLabel, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantExperiments' })
 const router = useRouter()
@@ -118,7 +118,7 @@ const chartRows = computed(() => result.value?.rows.filter(row => row.validation
 const comparisonOptions = computed<EChartsOption>(() => ({
   tooltip: { trigger: 'axis' }, legend: { data: ['验证收益 %', '验证回撤 %'] },
   grid: { left: 55, right: 20, top: 40, bottom: 65 },
-  xAxis: { type: 'category', data: chartRows.value.map(row => row.configuration ? `EMA${row.configuration.fastPeriod}/${row.configuration.slowPeriod}` : row.strategyVersionId.slice(0, 8)) },
+  xAxis: { type: 'category', data: chartRows.value.map(row => row.configuration ? strategyConfigurationLabel(row.configuration).split(' · ')[0] : row.strategyVersionId.slice(0, 8)) },
   yAxis: { type: 'value', name: '%' },
   series: [
     { name: '验证收益 %', type: 'bar', data: chartRows.value.map(row => Number(row.validationReturn) * 100) },
@@ -129,7 +129,7 @@ const parameterSummary = computed(() => {
   try { const p = JSON.parse(result.value?.parametersJson || '{}'); return `初始 ${p.startingBalance} USDT / 单笔 ${p.stakeAmount} USDT / 单边费率 ${p.fee}` }
   catch { return '资金参数待加载' }
 })
-function label(config?: EmaStrategyConfiguration | null) { return config ? `EMA${config.fastPeriod}/${config.slowPeriod} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% / 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%` : '未知配置（以版本 ID 为准）' }
+const label = strategyConfigurationLabel
 function parameterLabel(p: ParameterSet) { try { const v = JSON.parse(p.parametersJson); return `${v.startingBalance} USDT / 单笔 ${v.stakeAmount} / 费率 ${v.fee}` } catch { return p.id } }
 function percent(value?: number | null) { return value == null ? '-' : `${(Number(value) * 100).toFixed(3)}%` }
 function time(value: number) { return new Date(value).toLocaleString() }

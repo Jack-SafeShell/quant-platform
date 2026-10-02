@@ -165,7 +165,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import StrategyConfigEditor from './StrategyConfigEditor.vue'
-import type { EmaStrategyConfiguration } from '@/api/quant/backtest'
+import { strategyConfigurationLabel } from '@/api/quant/backtest'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrategyVersions, listParameterSets, createParameterSet, compareBacktests, listDatasets, createDatasetDownload, listDatasetDownloads, exportBacktestReport, createOptimization, listOptimizations, getOptimization, reviewOptimization, reviewPaperAdmission, exportResearchReport, createPaperSession, listPaperSessions, getPaperSession, reviewPaperSession, createPaperReadiness, listPaperReadiness, createPaperExecution, listPaperExecutions, stopPaperExecution, createPaperCommandPreview, getPaperCommandPreview, issuePaperStartToken, startPaperExecution, observePaperExecution, listPaperObservationSnapshots, listPaperAlerts, actPaperAlert, listPaperAlertActions, listPaperOrders, listPaperOrderReconciliations, createLiveAdmission, listLiveAdmissions, getLiveAdmission, confirmLiveAdmission, exportLiveAdmission, createLiveControl, listLiveControls, getLiveControl, armLiveControl, emergencyStopLiveControl, checkLiveOrder, verifyOkxPrivateRead, startLiveAutomation, stopLiveAutomation, listLiveAutomations, getLiveAutomation } from '@/api/quant/backtest'
 import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask, OptimizationBatch, OptimizationResult, PaperSession, PaperReadinessSnapshot, PaperExecution, PaperCommandPreview, PaperStartToken, PaperExecutionObservation, PaperObservationSnapshot, PaperAlert, PaperAlertAction, PaperOrder, PaperOrderReconciliation, LiveAdmissionSummary, LiveAdmissionReport, LiveControlPolicy, LiveAutomationSession } from '@/api/quant/backtest'
@@ -335,9 +335,8 @@ async function downloadReport(format: 'md' | 'json') {
   const url = URL.createObjectURL(blob); const link = document.createElement('a')
   link.href = url; link.download = `backtest-${selected.value.id}.${format}`; link.click(); URL.revokeObjectURL(url)
 }
-function strategyLabel(config?: EmaStrategyConfiguration | null) {
-  return config ? `EMA${config.fastPeriod}/${config.slowPeriod} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%` : '配置待加载（以版本摘要为准）'
-}
+const strategyLabel = strategyConfigurationLabel
+
 async function selectCreatedStrategy(id: string) {
   strategyVersions.value = await listStrategyVersions()
   form.strategyVersionId = id

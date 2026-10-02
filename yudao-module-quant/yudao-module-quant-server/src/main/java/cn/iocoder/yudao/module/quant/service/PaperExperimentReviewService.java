@@ -24,7 +24,7 @@ public class PaperExperimentReviewService {
         for(var member:experiments.members(id)){
             String version=(String)member.get("strategyVersionId"),batch=(String)member.get("batchId");
             var row=new LinkedHashMap<String,Object>();row.put("strategyVersionId",version);row.put("batchId",batch);
-            row.put("configuration",EmaStrategyTemplate.readConfiguration((String)backtests.findVersion(tenant,owner,version).get("sourceCode")));
+            row.put("configuration",StrategyTemplates.readConfiguration((String)backtests.findVersion(tenant,owner,version).get("sourceCode")));
             var stage=jdbc.queryForList("SELECT s.id AS sessionId,s.status AS sessionStatus,e.id AS executionId,e.status AS executionStatus FROM quant_paper_session s LEFT JOIN quant_paper_execution e ON e.session_id=s.id AND e.tenant_id=s.tenant_id AND e.owner_id=s.owner_id WHERE s.tenant_id=? AND s.owner_id=? AND s.batch_id=? AND s.strategy_version_id=? AND s.parameter_set_id=? ORDER BY s.created_at DESC,s.id DESC,e.created_at DESC,e.id DESC LIMIT 1",tenant,owner,batch,version,parameterId);
             if(!stage.isEmpty()) for(String key:List.of("sessionId","sessionStatus","executionId","executionStatus"))row.put(key,stage.getFirst().get(key));
             String execution=(String)row.get("executionId");

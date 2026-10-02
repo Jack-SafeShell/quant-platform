@@ -1,5 +1,5 @@
 import request from '@/config/axios'
-import type { EmaStrategyConfiguration } from './backtest'
+import type { StrategyConfiguration } from './backtest'
 
 export interface StrategyExperimentRequest {
   requestKey: string
@@ -22,7 +22,7 @@ export interface StrategyExperiment {
 export interface ExperimentRow {
   strategyVersionId: string
   batchId: string
-  configuration?: EmaStrategyConfiguration | null
+  configuration?: StrategyConfiguration | null
   trainStatus: string
   validationStatus: string
   trainReturn?: number | null
@@ -49,7 +49,7 @@ export const listStrategyExperiments = (): Promise<StrategyExperiment[]> => requ
 export const getStrategyExperiment = (id: string): Promise<StrategyExperimentResult> => request.get({ url: '/quant/backtest/strategy-experiment/get', params: { id } })
 
 export interface PaperReviewRow {
- strategyVersionId: string; batchId: string; configuration?: EmaStrategyConfiguration | null;
+ strategyVersionId: string; batchId: string; configuration?: StrategyConfiguration | null;
  sessionId?: string; sessionStatus?: string; executionId?: string; executionStatus?: string;
  telemetryAvailable: boolean; sampleState: string; snapshotCount: number; firstObservedAt?: number; lastObservedAt?: number; observedAt?: number;
  realizedProfit?: number; realizedReturnRatio?: number; closedTrades?: number; openPositions?: number; openOrders?: number; investedStake?: number;

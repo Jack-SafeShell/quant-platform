@@ -22,7 +22,7 @@ export interface BacktestTask {
   strategyHash: string
   strategyVersionId: string
   strategyName: string
-  strategyConfiguration?: EmaStrategyConfiguration | null
+  strategyConfiguration?: StrategyConfiguration | null
   engineImage: string
   engineVersion?: string
   artifactHash?: string
@@ -48,6 +48,21 @@ export interface EmaStrategyConfiguration {
   stopLossRatio: number
   takeProfitRatio: number
 }
+export interface BreakoutStrategyConfiguration {
+  template: 'CHANNEL_BREAKOUT'
+  entryPeriod: number
+  exitPeriod: number
+  stopLossRatio: number
+  takeProfitRatio: number
+}
+export type StrategyConfiguration = EmaStrategyConfiguration | BreakoutStrategyConfiguration
+export const createBreakoutVersion = (data: Omit<BreakoutStrategyConfiguration, 'template'>): Promise<string> =>
+  request.post({ url: '/quant/backtest/strategy-version/breakout', data })
+export function strategyConfigurationLabel(config?: StrategyConfiguration | null): string {
+  if (!config) return '配置待加载（以版本摘要为准）'
+  const name = 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
+  return `${name} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%`
+}
 export const createStrategyVersion = (data: EmaStrategyConfiguration): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/create', data })
 export interface StrategyVersion {
@@ -55,7 +70,7 @@ export interface StrategyVersion {
   strategyId: string
   strategyName: string
   sourceHash: string
-  configuration?: EmaStrategyConfiguration | null
+  configuration?: StrategyConfiguration | null
 }
 export const listStrategyVersions = (): Promise<StrategyVersion[]> =>
   request.get({ url: '/quant/backtest/strategy-versions' })
