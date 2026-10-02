@@ -74,20 +74,21 @@ public class BacktestRepository {
     }
     public List<Map<String, Object>> listVersions(long tenant, long owner) {
         return jdbc.queryForList("""
-            SELECT v.id, v.strategy_id AS strategyId, s.name AS strategyName, v.source_hash AS sourceHash
+            SELECT v.id, v.strategy_id AS strategyId, s.name AS strategyName, v.source_hash AS sourceHash, v.source_code AS sourceCode
             FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id
             WHERE s.tenant_id=? AND s.owner_id=? ORDER BY s.created_at, v.id
             """, tenant, owner);
     }
     public String ensureVersion(long tenant, long owner, String name, String source, String hash) {
+        List<String> strategies = jdbc.queryForList("SELECT id FROM quant_strategy WHERE tenant_id=? AND owner_id=? AND name=? ORDER BY created_at,id LIMIT 1 FOR UPDATE", String.class, tenant, owner, name);
         List<String> ids = jdbc.queryForList("""
             SELECT v.id FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id
             WHERE s.tenant_id=? AND s.owner_id=? AND s.name=? AND v.source_hash=? LIMIT 1
             """, String.class, tenant, owner, name, hash);
         if (!ids.isEmpty()) return ids.getFirst();
-        String strategy = UUID.randomUUID().toString(), version = UUID.randomUUID().toString();
-        long now = System.currentTimeMillis();
-        jdbc.update("INSERT INTO quant_strategy (id,name,tenant_id,owner_id,created_at) VALUES (?,?,?,?,?)", strategy, name, tenant, owner, now);
+        String strategy = strategies.isEmpty() ? UUID.randomUUID().toString() : strategies.getFirst();
+        String version = UUID.randomUUID().toString();
+        if (strategies.isEmpty()) jdbc.update("INSERT INTO quant_strategy (id,name,tenant_id,owner_id,created_at) VALUES (?,?,?,?,?)", strategy, name, tenant, owner, System.currentTimeMillis());
         jdbc.update("INSERT INTO quant_strategy_version (id,strategy_id,source_code,source_hash) VALUES (?,?,?,?)", version, strategy, source, hash);
         return version;
     }

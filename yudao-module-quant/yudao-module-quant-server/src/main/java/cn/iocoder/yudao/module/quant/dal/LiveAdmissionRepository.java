@@ -18,6 +18,11 @@ public class LiveAdmissionRepository {
         return one("SELECT t.id,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.status='SUCCEEDED' ORDER BY t.finished_at DESC LIMIT 1", tenant, owner);
     }
 
+    public String strategySourceHash(long tenant, long owner, String versionId) {
+        var values = jdbc.queryForList("SELECT v.source_hash FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id WHERE s.tenant_id=? AND s.owner_id=? AND v.id=?", String.class, tenant, owner, versionId);
+        return values.isEmpty() ? null : values.getFirst();
+    }
+
     public Map<String, Object> qualifyingSoak(long tenant, long owner) {
         return one("SELECT s.execution_id AS executionId,COUNT(*) AS snapshotCount,MIN(s.observed_at) AS firstObservedAt,MAX(s.observed_at) AS lastObservedAt,MAX(s.network_error_count) AS networkErrorCount,MAX(s.fatal_error_count) AS fatalErrorCount FROM quant_paper_observation_snapshot s JOIN quant_paper_execution e ON e.id=s.execution_id WHERE s.tenant_id=? AND s.owner_id=? AND e.status='STOPPED' GROUP BY s.execution_id HAVING COUNT(*)>=240 AND MAX(s.observed_at)-MIN(s.observed_at)>=14400000 AND MAX(s.network_error_count)=0 AND MAX(s.fatal_error_count)=0 ORDER BY MAX(s.observed_at) DESC LIMIT 1", tenant, owner);
     }

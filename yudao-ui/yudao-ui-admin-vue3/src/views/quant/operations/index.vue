@@ -145,6 +145,7 @@
     <ContentWrap title="策略版本（最近 100 条回测统计）">
       <el-table :data="strategyRows" v-loading="loading">
         <el-table-column prop="strategyName" label="策略" min-width="180" />
+        <el-table-column label="配置" min-width="230"><template #default="s">{{ s.row.configuration ? `EMA${s.row.configuration.fastPeriod}/${s.row.configuration.slowPeriod} · 止损 ${Number(s.row.configuration.stopLossRatio * 100).toFixed(2)}% · 止盈 ${Number(s.row.configuration.takeProfitRatio * 100).toFixed(2)}%` : '配置待加载' }}</template></el-table-column>
         <el-table-column prop="id" label="版本 ID" min-width="260" show-overflow-tooltip />
         <el-table-column label="源码摘要" min-width="180"><template #default="s"><code>{{ shortHash(s.row.sourceHash) }}</code></template></el-table-column>
         <el-table-column prop="backtests" label="回测数" width="90" />

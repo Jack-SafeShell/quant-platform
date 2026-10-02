@@ -16,6 +16,12 @@ Vue3 → Spring Boot 应用服务 → 领域模型/风险与审批 → 引擎适
 
 已接入 Maven 模块 `yudao-module-quant` / `yudao-module-quant-api` / `yudao-module-quant-server`，Java 包 `cn.iocoder.yudao.module.quant`，表前缀 `quant_`。当前已实现研究、回测、模拟盘准入与执行、周期遥测、告警和人工处置审计，以及绑定双确认报告的实盘安全门禁、DPAPI 凭据、OKX 私有 REST、订单账本和固定策略自动会话。自动会话使用独立总开关、已收盘 K 线唯一信号、持续对账和会话级停机；默认双开关关闭且策略 HALTED。
 
+## 可配置 EMA 版本
+
+`POST /admin-api/quant/backtest/strategy-version/create` 接受 `fastPeriod`、`slowPeriod`、`stopLossRatio`、`takeProfitRatio`。只允许数值配置，由服务端固定模板生成 Python，不接受任意源码。快周期 2～119、慢周期 3～120、快小于慢；止损 0.1%～20%、止盈 0.1%～50%，固定 1h 现货及 240 根预热。
+
+配置以规范化 JSON 注释固化在源码快照中，源码 SHA-256 覆盖配置与执行逻辑，复用既有版本表。默认配置沿用原基线源码和摘要；相同数值精度写法复用同一版本，新配置归属同一策略。列表及回测报告解析并显示配置，但不返回源码。回测和模拟盘均使用保存的源码；当前实盘自动会话仍固定 EMA20/60，因此实盘门禁创建和启用拒绝绑定可配置策略的准入报告。
+
 ## 适配协议
 
 首版 `BacktestEngine` 只暴露历史回测与专属容器终止，Freqtrade 细节限于实现类。统一结果协议 schemaVersion=1，包含 totalTrades、netProfit、returnRatio、maxDrawdownRatio、时间覆盖和标准化 trades；原始引擎归档留在本机，不直接作为业务 API。当前实现与配置见 [BACKTEST](BACKTEST.md)。

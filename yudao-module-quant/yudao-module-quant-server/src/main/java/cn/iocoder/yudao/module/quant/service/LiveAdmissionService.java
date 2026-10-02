@@ -76,6 +76,17 @@ public class LiveAdmissionService {
         return report;
     }
 
+    public void requireFixedLiveStrategy(long tenant, long owner, Map<String, Object> report) {
+        var evidence = JsonUtils.getObjectMapper().readTree((String) report.get("reportJson"));
+        var backtest = evidence.path("evidence").path("backtest");
+        String version = backtest.path("strategyVersionId").asText(backtest.path("strategyversionid").asText());
+        try {
+            String baselineHash = DatasetRegistry.hash(EmaStrategyTemplate.baseline().getBytes(StandardCharsets.UTF_8));
+            if (!baselineHash.equals(repository.strategySourceHash(tenant, owner, version)))
+                throw new IllegalArgumentException("当前实盘仅支持固定 EMA20/60 基线；可配置版本请用于历史回测及模拟盘");
+        } catch (java.io.IOException e) { throw new IllegalStateException("无法加载实盘基线模板", e); }
+    }
+
     public List<Map<String, Object>> list(long tenant, long owner) {
         var reports = repository.list(tenant, owner);
         reports.forEach(report -> {

@@ -23,6 +23,7 @@ public class LiveControlService {
     public String create(long tenant,long owner,String reportId) {
         var report=admissions.get(tenant,owner,reportId);
         if(!"DOUBLE_CONFIRMED".equals(report.get("confirmationState"))) throw new IllegalArgumentException("准入报告尚未完成双确认");
+        admissions.requireFixedLiveStrategy(tenant,owner,report);
         return repository.createOrGet(tenant,owner,reportId,(String)report.get("reportHash"),properties.getLiveRiskPolicyVersion(),properties.getLiveExchange(),properties.getLivePair(),properties.getLiveMaxOrderNotional(),properties.getLiveMaxDailyNotional(),properties.getLiveMaxTotalExposure(),properties.getLiveMaxOpenOrders());
     }
 
@@ -35,6 +36,7 @@ public class LiveControlService {
         if(!"HALTED".equals(policy.get("status")))throw new IllegalArgumentException("仅停机状态可启用离线门禁");
         var report=admissions.get(tenant,owner,(String)policy.get("admissionReportId"));
         if(!"DOUBLE_CONFIRMED".equals(report.get("confirmationState"))||!Objects.equals(report.get("reportHash"),policy.get("admissionReportHash")))throw new IllegalArgumentException("准入报告状态或摘要已变化");
+        admissions.requireFixedLiveStrategy(tenant,owner,report);
         if(!repository.arm(id))throw new IllegalArgumentException("策略状态已变化，请刷新");
         repository.audit(id,tenant,owner,owner,"OFFLINE_GATE_ARMED","HALTED","ARMED_OFFLINE",request.comment().trim());
         return "ARMED_OFFLINE";

@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.DatasetDownloadRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ResearchReviewRequest;
@@ -100,6 +101,11 @@ public class BacktestController {
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String, Object>>> strategyVersions() throws Exception {
         return success(service.listStrategyVersions(tenant(), owner()));
+    }
+    @PostMapping("/strategy-version/create")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createStrategyVersion(@Valid @RequestBody EmaStrategyRequest request) throws Exception {
+        return success(service.createStrategyVersion(tenant(), owner(), request));
     }
     @GetMapping("/parameter-sets")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")

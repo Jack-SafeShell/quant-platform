@@ -22,6 +22,7 @@ export interface BacktestTask {
   strategyHash: string
   strategyVersionId: string
   strategyName: string
+  strategyConfiguration?: EmaStrategyConfiguration | null
   engineImage: string
   engineVersion?: string
   artifactHash?: string
@@ -41,11 +42,20 @@ export const exportBacktestReport = (id: string, format: 'md' | 'json'): Promise
   request.download({ url: '/quant/backtest/report', params: { id, format } })
 export const getCapabilities = (): Promise<{ enabled: boolean; executionEnabled: boolean; liveExecutionEnabled: boolean; liveAutomationEnabled: boolean; riskPolicyVersion: string; snapshotRetentionDays: number }> =>
   request.get({ url: '/quant/backtest/capabilities' })
+export interface EmaStrategyConfiguration {
+  fastPeriod: number
+  slowPeriod: number
+  stopLossRatio: number
+  takeProfitRatio: number
+}
+export const createStrategyVersion = (data: EmaStrategyConfiguration): Promise<string> =>
+  request.post({ url: '/quant/backtest/strategy-version/create', data })
 export interface StrategyVersion {
   id: string
   strategyId: string
   strategyName: string
   sourceHash: string
+  configuration?: EmaStrategyConfiguration | null
 }
 export const listStrategyVersions = (): Promise<StrategyVersion[]> =>
   request.get({ url: '/quant/backtest/strategy-versions' })
@@ -56,6 +66,8 @@ export interface ParameterSet {
 }
 export interface BacktestComparison {
   id: string
+  strategyVersionId: string
+  strategyHash: string
   strategyName: string
   datasetId: string
   totalTrades: number

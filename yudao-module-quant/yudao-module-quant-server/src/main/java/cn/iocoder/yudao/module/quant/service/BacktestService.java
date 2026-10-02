@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.quant.service;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest;
 import cn.iocoder.yudao.module.quant.dal.BacktestRepository;
 import cn.iocoder.yudao.module.quant.engine.DatasetRegistry;
 import cn.iocoder.yudao.module.quant.framework.QuantProperties;
@@ -18,6 +19,8 @@ import java.util.*;
 
 @Service
 public class BacktestService {
+    // The platform supports one monolith instance; serialize first strategy registration as well as later versions.
+    private static final Object[] VERSION_LOCKS = java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
     public record ReportFile(String filename, String contentType, byte[] content) { }
     private final BacktestRepository repository;
     private final DatasetRegistry datasets;
@@ -64,8 +67,23 @@ public class BacktestService {
     public List<Map<String, Object>> listStrategyVersions(long tenant, long owner) throws Exception {
         String source = new ClassPathResource("quant/QuantEmaBaseline.py").getContentAsString(StandardCharsets.UTF_8);
         String hash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
-        transaction.executeWithoutResult(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));
-        return repository.listVersions(tenant, owner);
+        ensureStrategyVersion(tenant, owner, source, hash);
+        return repository.listVersions(tenant, owner).stream().map(version -> {
+            var view = new LinkedHashMap<String, Object>();
+            for (String key : List.of("id", "strategyId", "strategyName", "sourceHash")) view.put(key, version.get(key));
+            view.put("configuration", EmaStrategyTemplate.readConfiguration((String) version.get("sourceCode")));
+            return (Map<String, Object>) view;
+        }).toList();
+    }
+    public String createStrategyVersion(long tenant, long owner, EmaStrategyRequest request) throws Exception {
+        String source = EmaStrategyTemplate.render(request);
+        String hash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        return ensureStrategyVersion(tenant, owner, source, hash);
+    }
+    private String ensureStrategyVersion(long tenant, long owner, String source, String hash) {
+        synchronized (VERSION_LOCKS[Math.floorMod(Objects.hash(tenant, owner), VERSION_LOCKS.length)]) {
+            return transaction.execute(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));
+        }
     }
     public List<Map<String, Object>> listParameterSets(long tenant, long owner) {
         String json = parameterJson(new java.math.BigDecimal("1000"), new java.math.BigDecimal("100"), new java.math.BigDecimal("0.001"));
@@ -89,7 +107,7 @@ public class BacktestService {
             Map<String, Object> task = get(tenant, owner, id);
             if (!"SUCCEEDED".equals(task.get("status"))) throw new IllegalArgumentException("只能对比已完成任务");
             var result = JsonUtils.getObjectMapper().readTree((String) task.get("resultJson"));
-            comparison.add(Map.of("id", id, "strategyName", task.get("strategyName"), "datasetId", task.get("datasetId"),
+            comparison.add(Map.of("id", id, "strategyName", task.get("strategyName"), "strategyVersionId", task.get("strategyVersionId"), "strategyHash", task.get("strategyHash"), "datasetId", task.get("datasetId"),
                     "totalTrades", result.path("totalTrades").asInt(), "netProfit", result.path("netProfit").decimalValue(),
                     "returnRatio", result.path("returnRatio").decimalValue(), "maxDrawdownRatio", result.path("maxDrawdownRatio").decimalValue()));
         }
@@ -104,7 +122,10 @@ public class BacktestService {
         Map<String, Object> manifest = new TreeMap<>();
         manifest.put("schemaVersion", "quant-backtest-report/v1");
         manifest.put("taskId", id);
-        manifest.put("strategy", Map.of("name", task.get("strategyName"), "versionId", task.get("strategyVersionId"), "sha256", task.get("strategyHash")));
+        var strategy = new TreeMap<String, Object>();
+        strategy.put("name", task.get("strategyName")); strategy.put("versionId", task.get("strategyVersionId")); strategy.put("sha256", task.get("strategyHash"));
+        strategy.put("configuration", task.get("strategyConfiguration"));
+        manifest.put("strategy", strategy);
         manifest.put("dataset", Map.of("id", task.get("datasetId"), "exchange", task.get("exchangeName"), "sha256", task.get("datasetHash"), "source", task.get("datasetSource")));
         manifest.put("engine", Map.of("image", task.get("engineImage"), "version", task.get("engineVersion"), "artifactSha256", task.get("artifactHash")));
         manifest.put("request", JsonUtils.getObjectMapper().convertValue(request, Map.class));
@@ -119,6 +140,7 @@ public class BacktestService {
                 "- 任务编号：`" + id + "`\n- 策略：" + task.get("strategyName") + " (`" + task.get("strategyHash") + "`)\n" +
                 "- 数据集：" + task.get("datasetId") + " / " + task.get("exchangeName") + " (`" + task.get("datasetHash") + "`)\n" +
                 "- 引擎：" + task.get("engineVersion") + " / `" + task.get("engineImage") + "`\n- 产物 SHA-256：`" + task.get("artifactHash") + "`\n\n" +
+                "## 策略配置\n\n```json\n" + JsonUtils.toJsonPrettyString(task.get("strategyConfiguration")) + "\n```\n\n" +
                 "## 可复现参数\n\n```json\n" + JsonUtils.toJsonPrettyString(manifest.get("request")) + "\n```\n\n" +
                 "## 核心指标\n\n| 成交数 | 净收益 | 收益率 | 最大回撤 |\n|---:|---:|---:|---:|\n| " + metricMap.get("totalTrades") + " | " + metricMap.get("netProfit") + " | " + metricMap.get("returnRatio") + " | " + metricMap.get("maxDrawdownRatio") + " |\n\n" +
                 "清单 SHA-256：`" + manifest.get("manifestSha256") + "`\n\n> 仅为历史回测技术记录，不构成投资建议或盈利证明。\n";
@@ -145,6 +167,7 @@ public class BacktestService {
         for (String key : List.of("id", "status", "requestKey", "datasetId", "datasetHash", "datasetSource",
                 "exchangeName", "engineImage", "errorMessage", "createdAt", "startedAt", "finishedAt",
                 "strategyVersionId", "strategyName", "strategyHash", "parametersJson", "engineVersion", "artifactHash")) result.put(key, task.get(key));
+        result.put("strategyConfiguration", EmaStrategyTemplate.readConfiguration((String) task.get("strategySource")));
         if (detail) result.put("resultJson", task.get("resultJson"));
         return result;
     }
