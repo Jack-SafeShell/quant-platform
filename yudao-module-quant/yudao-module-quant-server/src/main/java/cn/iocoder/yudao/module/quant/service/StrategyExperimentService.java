@@ -50,6 +50,40 @@ public class StrategyExperimentService {
             return sameRequest(existing, hash);
         }
     }
+    public Map<String, Object> costs(long tenant, long owner, String id, int feeBps, int slippageBps) {
+        if (feeBps < 0 || feeBps > 100 || slippageBps < 0 || slippageBps > 100)
+            throw new IllegalArgumentException("手续费和滑点须为 0～100 个基点的整数");
+        var experiment = get(tenant, owner, id);
+        var parameters = JsonUtils.getObjectMapper().readTree((String) experiment.get("parametersJson"));
+        var balance = parameters.path("startingBalance").decimalValue();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (var member : repo.members(id)) {
+            var batch = optimizations.get(tenant, owner, (String) member.get("batchId"));
+            for (var value : (List<?>) batch.get("members")) {
+                var task = (Map<?, ?>) value;
+                if (!"VALIDATION".equals(task.get("phase"))) continue;
+                var row = new LinkedHashMap<String, Object>();
+                row.put("strategyVersionId", member.get("strategyVersionId")); row.put("taskId", task.get("taskId"));
+                row.put("status", task.get("status"));
+                if ("SUCCEEDED".equals(task.get("status"))) {
+                    var owned = backtests.find(tenant, owner, (String) task.get("taskId"));
+                    row.putAll(TradeCostSensitivity.calculate((String) owned.get("resultJson"), balance, feeBps, slippageBps));
+                    row.put("artifactHash", owned.get("artifactHash"));
+                } else { row.put("available", false); row.put("reason", "VALIDATION_NOT_SUCCEEDED"); }
+                rows.add(row);
+            }
+        }
+        var evidence = new TreeMap<String, Object>();
+        evidence.put("experimentId", id); evidence.put("model", "FIXED_TRADE_CASHFLOW_V1"); evidence.put("rows", rows);
+        evidence.put("feeBps", feeBps); evidence.put("slippageBps", slippageBps); evidence.put("startingBalance", balance);
+        evidence.put("datasetId", experiment.get("datasetId")); evidence.put("validationStart", experiment.get("splitDate"));
+        evidence.put("validationEnd", experiment.get("validationEnd")); evidence.put("baseFeeRate", parameters.path("fee").decimalValue());
+        evidence.put("limitations", List.of("原成交序列固定，不重跑交易信号、ROI 或资金约束", "买入价上调、卖出价下调；按调整后成交金额计算每边手续费",
+                "回撤只按已平仓权益计算，不含持仓浮亏，与原逐 K 线回撤口径不同", "不改变原排名、研究审批或运行参数"));
+        var result = new LinkedHashMap<String, Object>(evidence);
+        result.put("evidenceHash", DatasetRegistry.hash(JsonUtils.toJsonByte(evidence))); result.put("autoApplied", false);
+        return result;
+    }
     private static String sameRequest(Map<String, Object> previous, String hash) {
         if (!hash.equals(previous.get("requestHash"))) throw new IllegalArgumentException("同一请求标识已用于不同实验条件");
         return (String) previous.get("id");

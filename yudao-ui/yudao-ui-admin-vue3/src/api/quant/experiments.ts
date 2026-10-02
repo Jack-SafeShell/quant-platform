@@ -57,3 +57,15 @@ export interface PaperReviewRow {
 }
 export interface PaperExperimentReview { experimentId: string; startingBalance: number; rows: PaperReviewRow[]; generatedAt: number; autoSelected: false; basis: string }
 export const getPaperExperimentReview = (id: string): Promise<PaperExperimentReview> => request.get({ url: '/quant/backtest/strategy-experiment/paper-review', params: { id } })
+
+export interface CostSensitivityRow {
+  strategyVersionId: string; taskId: string; status: string; available: boolean; reason?: string;
+  baseNetProfit?: number; adjustedNetProfit?: number; adjustedReturn?: number; estimatedFees?: number;
+  estimatedSlippageCost?: number; costImpact?: number; realizedDrawdown?: number; tradeCount?: number;
+}
+export interface CostSensitivity {
+  experimentId: string; model: string; feeBps: number; slippageBps: number; startingBalance: number;
+  evidenceHash: string; autoApplied: false; rows: CostSensitivityRow[];
+}
+export const getCostSensitivity = (id: string, feeBps: number, slippageBps: number): Promise<CostSensitivity> =>
+  request.get({ url: '/quant/backtest/strategy-experiment/costs', params: { id, feeBps, slippageBps } })

@@ -92,6 +92,12 @@ public class BacktestController {
     public CommonResult<String> createStrategyExperiment(@Valid @RequestBody StrategyExperimentRequest request) {
         return success(experiments.create(tenant(), owner(), request));
     }
+    @GetMapping("/strategy-experiment/costs")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String, Object>> strategyCosts(@RequestParam String id,
+            @RequestParam(defaultValue="10") int feeBps, @RequestParam(defaultValue="5") int slippageBps) {
+        return success(experiments.costs(tenant(), owner(), id, feeBps, slippageBps));
+    }
     @GetMapping("/strategy-experiment/list")
     @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String, Object>>> strategyExperiments() { return success(experiments.list(tenant(), owner())); }

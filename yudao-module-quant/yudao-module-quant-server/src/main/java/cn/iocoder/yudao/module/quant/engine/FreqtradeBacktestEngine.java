@@ -139,9 +139,14 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
             for (JsonNode trade : summary.path("trades")) {
                 if (!trade.path("profit_abs").isNumber() || !Double.isFinite(trade.path("profit_abs").asDouble())
                         || !"BTC/USDT".equals(trade.path("pair").asText())) throw new IllegalStateException("成交字段无效");
-                trades.add(Map.of("instrument", trade.path("pair").asText(), "openedAt", trade.path("open_date").asText(),
-                        "closedAt", trade.path("close_date").asText(), "netProfit", trade.path("profit_abs").decimalValue(),
-                        "exitReason", trade.path("exit_reason").asText()));
+                var row = new LinkedHashMap<String, Object>();
+                row.put("instrument", trade.path("pair").asText()); row.put("openedAt", trade.path("open_date").asText());
+                row.put("closedAt", trade.path("close_date").asText()); row.put("netProfit", trade.path("profit_abs").decimalValue());
+                row.put("exitReason", trade.path("exit_reason").asText());
+                for (String field : List.of("amount", "open_rate", "close_rate", "fee_open", "fee_close"))
+                    if (trade.path(field).isNumber() && Double.isFinite(trade.path(field).asDouble())) row.put(field, trade.path(field).decimalValue());
+                row.put("isShort", trade.path("is_short").asBoolean()); row.put("isOpen", trade.path("is_open").asBoolean());
+                trades.add(row);
             }
             normalized.put("trades", trades);
             return new Output(version, JsonUtils.toJsonString(normalized), DatasetRegistry.hash(Files.readAllBytes(archive)));

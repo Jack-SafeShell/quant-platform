@@ -48,6 +48,31 @@
     <p class="text-gray-500">历史排名用于筛选候选方案，需结合样本外表现与模拟运行。此处的收益率已计入所选费率，不能等同于未来实盘收益。</p>
   </ContentWrap>
 
+  <ContentWrap v-if="result" title="费用与滑点敏感性">
+    <p>固定原成交序列，估算双边费用和不利滑点。1 基点 = 0.01%；费用按每边成交金额计入。</p>
+    <el-form :inline="true" @submit.prevent="loadCosts">
+      <el-form-item label="单边手续费（基点）"><el-input-number v-model="costAssumptions.feeBps" :min="0" :max="100" :precision="0" /></el-form-item>
+      <el-form-item label="每边滑点（基点）"><el-input-number v-model="costAssumptions.slippageBps" :min="0" :max="100" :precision="0" /></el-form-item>
+      <el-button :loading="costLoading" @click="loadCosts">计算比较</el-button>
+      <el-button :disabled="!costs" @click="exportCosts">导出证据 JSON</el-button>
+    </el-form>
+    <el-alert v-if="costError" :title="costError" type="warning" :closable="false" />
+    <template v-if="costs">
+      <p>本次假设：手续费 {{ costs.feeBps }} / 滑点 {{ costs.slippageBps }} 基点 · 初始 {{ costs.startingBalance }} USDT</p>
+      <el-table :data="costs.rows">
+        <el-table-column label="方案" min-width="230"><template #default="s">{{ label(result.rows.find(r => r.strategyVersionId === s.row.strategyVersionId)?.configuration) }}</template></el-table-column>
+        <el-table-column label="原净收益"><template #default="s">{{ money(s.row.baseNetProfit) }}</template></el-table-column>
+        <el-table-column label="调整后净收益"><template #default="s">{{ money(s.row.adjustedNetProfit) }}</template></el-table-column>
+        <el-table-column label="调整后收益率"><template #default="s">{{ percent(s.row.adjustedReturn) }}</template></el-table-column>
+        <el-table-column label="估算手续费"><template #default="s">{{ money(s.row.estimatedFees) }}</template></el-table-column>
+        <el-table-column label="估算滑点成本"><template #default="s">{{ money(s.row.estimatedSlippageCost) }}</template></el-table-column>
+        <el-table-column label="已平仓权益回撤"><template #default="s">{{ percent(s.row.realizedDrawdown) }}</template></el-table-column>
+        <el-table-column label="证据"><template #default="s">{{ s.row.available ? `${s.row.tradeCount} 笔` : (s.row.status === 'SUCCEEDED' ? '旧结果缺少成交金额或不支持该账本，请重新回测' : s.row.status) }}</template></el-table-column>
+      </el-table>
+    </template>
+    <p>已平仓权益回撤只在退出时计算，与原回测逐 K 线回撤口径不同。费用变化可能改变入场、退出及资金可用性，此处不重跑信号或撮合，也不修改原排名、审批和运行参数。</p>
+  </ContentWrap>
+
   <ContentWrap v-if="result" title="候选方案模拟运行与复盘">
     <el-alert v-if="paperReviewError" title="模拟复盘读取失败，请确认新增接口已部署后重试。" type="warning" :closable="false" />
     <template v-if="paperReview">
@@ -95,7 +120,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
-import { getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
+import { getCostSensitivity, type CostSensitivity, getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
 import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, strategyConfigurationLabel, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantExperiments' })
@@ -108,6 +133,26 @@ const enabled = ref(false), loading = ref(false), submitting = ref(false), prese
 const errorMessage = ref(''), reviewVisible = ref(false), reviewComment = ref('')
 const paperReview = ref<PaperExperimentReview>()
 const paperReviewError = ref('')
+const costs = ref<CostSensitivity>(), costLoading = ref(false), costError = ref('')
+const costAssumptions = reactive({ feeBps: 10, slippageBps: 5 })
+let costRequest = 0
+function money(value?: number) { return value == null ? '-' : Number(value).toFixed(6) }
+async function loadCosts() {
+  const id = result.value?.id
+  if (!id) return
+  const requestId = ++costRequest
+  costLoading.value = true; costs.value = undefined; costError.value = ''
+  try {
+    const data = await getCostSensitivity(id, costAssumptions.feeBps, costAssumptions.slippageBps)
+    if (!disposed && requestId === costRequest && result.value?.id === id) costs.value = data
+  } catch { if (requestId === costRequest) costError.value = '成本比较读取失败，请重试。' }
+  finally { if (requestId === costRequest) costLoading.value = false }
+}
+function exportCosts() {
+  if (!costs.value) return
+  const url = URL.createObjectURL(new Blob([JSON.stringify(costs.value, null, 2)], { type: 'application/json' }))
+  const a = document.createElement('a'); a.href = url; a.download = `costs-${costs.value.experimentId}.json`; a.click(); URL.revokeObjectURL(url)
+}
 const activeBatch = ref<OptimizationResult>(), activeRow = ref<ExperimentRow>()
 let pendingRequest: { signature: string; key: string } | undefined
 let timer: number | undefined
@@ -141,6 +186,7 @@ function stage(row: ExperimentRow) {
   return row.researchDecision === 'ACCEPTED' ? '已评审，条件待满足' : '待评审'
 }
 async function loadPaperReview(id: string) {
+  if (costs.value?.experimentId !== id) { costs.value = undefined; costError.value = ''; ++costRequest; costLoading.value = false }
   try { paperReview.value = await getPaperExperimentReview(id); paperReviewError.value = '' }
   catch { paperReview.value = undefined; paperReviewError.value = 'SIMULATION_REVIEW_UNAVAILABLE' }
 }

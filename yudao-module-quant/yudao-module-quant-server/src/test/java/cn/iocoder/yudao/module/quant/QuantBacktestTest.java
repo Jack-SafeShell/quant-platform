@@ -88,6 +88,13 @@ class QuantBacktestTest {
         assertTrue(experiments.list(2, 10).isEmpty());
         assertThrows(IllegalArgumentException.class, () -> experiments.get(1, 11, id));
         assertThrows(IllegalArgumentException.class, () -> experiments.get(2, 10, id));
+        var costs = experiments.costs(1, 10, id, 10, 5);
+        assertEquals(false, costs.get("autoApplied"));
+        assertTrue(((List<Map<String, Object>>) costs.get("rows")).stream().allMatch(row -> Boolean.FALSE.equals(row.get("available"))));
+        assertEquals(costs.get("evidenceHash"), experiments.costs(1, 10, id, 10, 5).get("evidenceHash"));
+        assertNotEquals(costs.get("evidenceHash"), experiments.costs(1, 10, id, 10, 10).get("evidenceHash"));
+        assertThrows(IllegalArgumentException.class, () -> experiments.costs(2, 10, id, 10, 5));
+        assertThrows(IllegalArgumentException.class, () -> experiments.costs(1, 11, id, 10, 5));
     }
     @Test void experimentsRollbackInvalidDataAndRejectForeignVersionsAndCapacity() throws Exception {
         var experiments = experiments(); String second = secondVersion();
