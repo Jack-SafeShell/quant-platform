@@ -48,6 +48,29 @@
     <p class="text-gray-500">历史排名用于筛选候选方案，需结合样本外表现与模拟运行。此处的收益率已计入所选费率，不能等同于未来实盘收益。</p>
   </ContentWrap>
 
+  <ContentWrap v-if="result" title="候选方案模拟运行与复盘">
+    <el-alert v-if="paperReviewError" title="模拟复盘读取失败，请确认新增接口已部署后重试。" type="warning" :closable="false" />
+    <template v-if="paperReview">
+      <p>共同初始资金 {{ paperReview.startingBalance }} USDT · 数据生成 {{ time(paperReview.generatedAt) }}</p>
+      <p class="text-gray-500">每个方案展示最新模拟会话的最新执行；观测起止和保留快照数分别列出。运行时长、市场区间及成交样本可能不同，暂不自动排名或选用。收益仅为引擎报告的已平仓收益，未包含当前持仓浮盈亏；零成交不能代表方案有效。</p>
+      <el-button @click="exportPaperReview">导出复盘 JSON</el-button>
+      <el-button @click="router.push('/quant/backtest')">进入模拟审批与运行</el-button>
+      <el-table :data="paperReview.rows" class="mt-3" row-key="strategyVersionId">
+        <el-table-column label="方案" min-width="250"><template #default="s">{{ label(s.row.configuration) }}</template></el-table-column>
+        <el-table-column label="运行阶段" min-width="150"><template #default="s">{{ s.row.executionStatus || s.row.sessionStatus || '尚未准备模拟盘' }}</template></el-table-column>
+        <el-table-column label="已平仓收益 USDT" width="155"><template #default="s">{{ s.row.realizedProfit == null ? '-' : Number(s.row.realizedProfit).toFixed(6) }}</template></el-table-column>
+        <el-table-column label="相对初始资金" width="130"><template #default="s">{{ percent(s.row.realizedReturnRatio) }}</template></el-table-column>
+        <el-table-column label="成交 / 持仓 / 挂单" width="175"><template #default="s">{{ s.row.closedTrades ?? '-' }} / {{ s.row.openPositions ?? '-' }} / {{ s.row.openOrders ?? '-' }}</template></el-table-column>
+        <el-table-column prop="snapshotCount" label="保留快照" width="100" />
+        <el-table-column label="观测起止" min-width="210"><template #default="s">{{ s.row.firstObservedAt ? time(s.row.firstObservedAt) : '-' }}<br />{{ s.row.lastObservedAt ? time(s.row.lastObservedAt) : '-' }}</template></el-table-column>
+        <el-table-column label="对账 / 未知订单" width="160"><template #default="s">{{ s.row.reconciliationStatus || '-' }} / {{ s.row.unknownOrders ?? '-' }}</template></el-table-column>
+        <el-table-column label="未解决告警" width="105"><template #default="s">{{ s.row.executionId ? s.row.unresolvedAlerts : '-' }}</template></el-table-column>
+        <el-table-column label="样本情况" width="155"><template #default="s">{{ s.row.sampleState === 'NO_READABLE_TELEMETRY' ? '无可读观测' : s.row.sampleState === 'NO_CLOSED_TRADES' ? '尚无已平仓成交' : '有成交，待复盘' }}</template></el-table-column>
+      </el-table>
+      <p class="text-gray-500">这是保留快照的历史摘要，不调用交易所或启动容器。历史执行停止后数据不会继续更新；快照保留清理可能缩短可见区间。未读取到遥测时收益显示为空，不按零收益填补。</p>
+    </template>
+  </ContentWrap>
+
   <el-dialog v-model="reviewVisible" title="评审与模拟盘准备" width="80%">
     <template v-if="activeBatch && activeRow">
       <p>{{ label(activeRow.configuration) }} · 版本 {{ activeRow.strategyVersionId }}</p>
@@ -72,7 +95,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
-import { createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
+import { getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
 import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, type EmaStrategyConfiguration, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantExperiments' })
@@ -83,6 +106,8 @@ const versions = ref<StrategyVersion[]>([]), parameters = ref<ParameterSet[]>([]
 const experiments = ref<StrategyExperiment[]>([]), result = ref<StrategyExperimentResult>()
 const enabled = ref(false), loading = ref(false), submitting = ref(false), presetLoading = ref(false), acting = ref(false)
 const errorMessage = ref(''), reviewVisible = ref(false), reviewComment = ref('')
+const paperReview = ref<PaperExperimentReview>()
+const paperReviewError = ref('')
 const activeBatch = ref<OptimizationResult>(), activeRow = ref<ExperimentRow>()
 let pendingRequest: { signature: string; key: string } | undefined
 let timer: number | undefined
@@ -115,6 +140,16 @@ function stage(row: ExperimentRow) {
   if (row.researchDecision === 'REJECTED') return '方案已拒绝'
   return row.researchDecision === 'ACCEPTED' ? '已评审，条件待满足' : '待评审'
 }
+async function loadPaperReview(id: string) {
+  try { paperReview.value = await getPaperExperimentReview(id); paperReviewError.value = '' }
+  catch { paperReview.value = undefined; paperReviewError.value = 'SIMULATION_REVIEW_UNAVAILABLE' }
+}
+function exportPaperReview() {
+  if (!paperReview.value) return
+  const blob = new Blob([JSON.stringify(paperReview.value, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob), a = document.createElement('a')
+  a.href = url; a.download = `paper-review-${paperReview.value.experimentId}.json`; a.click(); URL.revokeObjectURL(url)
+}
 async function refresh() {
   if (loading.value) return
   loading.value = true
@@ -122,7 +157,7 @@ async function refresh() {
     const list = await listStrategyExperiments()
     const detail = result.value ? await getStrategyExperiment(result.value.id) : undefined
     experiments.value = list
-    if (detail) result.value = detail
+    if (detail) { result.value = detail; await loadPaperReview(detail.id) }
     errorMessage.value = ''
   } catch { errorMessage.value = '工作台刷新失败；已有结果可能不是最新数据，请重试。' }
   finally { loading.value = false }
@@ -130,7 +165,7 @@ async function refresh() {
 async function selectExperiment(id: string) {
   if (loading.value) return
   loading.value = true
-  try { result.value = await getStrategyExperiment(id); errorMessage.value = '' }
+  try { result.value = await getStrategyExperiment(id); await loadPaperReview(id); errorMessage.value = '' }
   finally { loading.value = false }
 }
 async function addPresets() {
@@ -192,6 +227,7 @@ onMounted(async () => {
     const [caps, v, p, d] = await Promise.all([getCapabilities(), listStrategyVersions(), listParameterSets(), listDatasets()])
     enabled.value = caps.enabled; versions.value = v; parameters.value = p; datasets.value = d; form.parameterSetId = p[0]?.id || ''
     await refresh()
+    if (!disposed && experiments.value[0]) await selectExperiment(experiments.value[0].id)
     if (!disposed) timer = window.setInterval(refresh, 15000)
   } catch { errorMessage.value = '工作台加载失败，请确认新增接口已部署后刷新。' }
 })

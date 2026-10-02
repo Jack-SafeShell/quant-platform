@@ -47,3 +47,13 @@ export interface StrategyExperimentResult extends StrategyExperiment {
 export const createStrategyExperiment = (data: StrategyExperimentRequest): Promise<string> => request.post({ url: '/quant/backtest/strategy-experiment/create', data })
 export const listStrategyExperiments = (): Promise<StrategyExperiment[]> => request.get({ url: '/quant/backtest/strategy-experiment/list' })
 export const getStrategyExperiment = (id: string): Promise<StrategyExperimentResult> => request.get({ url: '/quant/backtest/strategy-experiment/get', params: { id } })
+
+export interface PaperReviewRow {
+ strategyVersionId: string; batchId: string; configuration?: EmaStrategyConfiguration | null;
+ sessionId?: string; sessionStatus?: string; executionId?: string; executionStatus?: string;
+ telemetryAvailable: boolean; sampleState: string; snapshotCount: number; firstObservedAt?: number; lastObservedAt?: number; observedAt?: number;
+ realizedProfit?: number; realizedReturnRatio?: number; closedTrades?: number; openPositions?: number; openOrders?: number; investedStake?: number;
+ unresolvedAlerts: number; reconciliationStatus?: string; unknownOrders?: number; networkErrors?: number; fatalErrors?: number;
+}
+export interface PaperExperimentReview { experimentId: string; startingBalance: number; rows: PaperReviewRow[]; generatedAt: number; autoSelected: false; basis: string }
+export const getPaperExperimentReview = (id: string): Promise<PaperExperimentReview> => request.get({ url: '/quant/backtest/strategy-experiment/paper-review', params: { id } })

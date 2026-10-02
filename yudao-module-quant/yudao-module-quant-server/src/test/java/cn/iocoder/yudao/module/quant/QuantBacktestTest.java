@@ -148,6 +148,33 @@ class QuantBacktestTest {
         best = ((List<Map<String, Object>>) experiments.get(1, 10, id).get("rows")).getFirst();
         assertEquals(session, best.get("paperSessionId")); assertEquals("PENDING_APPROVAL", best.get("paperSessionStatus"));
         assertEquals(second, sessions.get(1, 10, session).get("strategy_version_id"));
+        var reviewService=new PaperExperimentReviewService(new cn.iocoder.yudao.module.quant.dal.StrategyExperimentRepository(jdbc),repository,jdbc);
+        var review=reviewService.get(1,10,id);
+        assertEquals(2,((List<?>)review.get("rows")).size());
+        assertThrows(IllegalArgumentException.class,()->reviewService.get(2,10,id));
+        assertThrows(IllegalArgumentException.class,()->reviewService.get(1,11,id));
+        var before=((List<Map<String,Object>>)review.get("rows")).stream().filter(r->second.equals(r.get("strategyVersionId"))).findFirst().orElseThrow();
+        assertNull(before.get("realizedProfit"));assertEquals("NO_READABLE_TELEMETRY",before.get("sampleState"));
+        var paperRepo=new cn.iocoder.yudao.module.quant.dal.PaperSessionRepository(jdbc);
+        String readiness=UUID.randomUUID().toString(),execution=UUID.randomUUID().toString();
+        paperRepo.readiness(readiness,session,"{}","test",true);
+        new cn.iocoder.yudao.module.quant.dal.PaperExecutionRepository(jdbc).create(execution,1,10,session,readiness,"test","test-container");
+        var observations=new cn.iocoder.yudao.module.quant.dal.PaperObservationRepository(jdbc);
+        var runtime=Map.<String,Object>of("heartbeatAgeSeconds",1L,"lastHeartbeatAt",100L,"lastMarketDataAt",100L,"networkErrorCount",0,"fatalErrorCount",0,"soakSeconds",100L,"soakPassed",true);
+        var portfolio=new HashMap<String,Object>();portfolio.put("available",true);portfolio.put("estimatedAvailableBalance",998);portfolio.put("openPositions",0);portfolio.put("closedTrades",2);portfolio.put("openOrders",0);portfolio.put("totalOrders",4);portfolio.put("realizedProfit",-2);portfolio.put("investedStake",0);
+        for(int i=0;i<105;i++)observations.snapshot(execution,1,10,"STOPPED",runtime,portfolio,"test",1000+i);
+        observations.raise(execution,1,10,"NETWORK_ERROR","WARN","test");
+        jdbc.update("UPDATE quant_paper_alert SET status='ACKNOWLEDGED' WHERE execution_id=?",execution);
+        var observed=((List<Map<String,Object>>)reviewService.get(1,10,id).get("rows")).stream().filter(r->second.equals(r.get("strategyVersionId"))).findFirst().orElseThrow();
+        assertEquals(105,((Number)observed.get("snapshotCount")).intValue());assertEquals(1000L,((Number)observed.get("firstObservedAt")).longValue());
+        assertEquals(1,observed.get("unresolvedAlerts"));assertEquals(-2.0,((Number)observed.get("realizedProfit")).doubleValue());
+        assertEquals(-0.002,((Number)observed.get("realizedReturnRatio")).doubleValue(),0.000001);assertEquals("OBSERVED_TRADES",observed.get("sampleState"));
+        // Latest unreadable telemetry must not silently reuse the prior profit or publish fake zero.
+        portfolio.put("available",false);portfolio.put("realizedProfit",0);
+        observations.snapshot(execution,1,10,"STOPPED",runtime,portfolio,"test",2000);
+        var unavailable=((List<Map<String,Object>>)reviewService.get(1,10,id).get("rows")).stream().filter(r->second.equals(r.get("strategyVersionId"))).findFirst().orElseThrow();
+        assertNull(unavailable.get("realizedProfit"));assertNull(unavailable.get("realizedReturnRatio"));assertEquals(106,((Number)unavailable.get("snapshotCount")).intValue());
+
     }
     void writeDataset() throws Exception {
         Path dir = root.resolve("datasets/test"); Files.createDirectories(dir);
