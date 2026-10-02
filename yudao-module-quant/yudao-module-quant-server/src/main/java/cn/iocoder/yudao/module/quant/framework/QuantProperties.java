@@ -45,6 +45,7 @@ public class QuantProperties {
     @Pattern(regexp = "freqtradeorg/freqtrade@sha256:[0-9a-f]{64}")
     private String image = "freqtradeorg/freqtrade@sha256:7031bca43ed7668ebf421725dd5016acade6ef88b0771db3e08c96e6d19a42db";
     private String exchangeProxy = "";
+    private String datasetHttpProxy = "";
     @NotBlank private String pythonExecutable = "python";
     @NotBlank private String datasetScript = "script/quant/prepare_dataset.py";
     @Min(30) @Max(3600) private int timeoutSeconds = 600;

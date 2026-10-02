@@ -18,10 +18,10 @@ import urllib.request
 import urllib.error
 
 
-def fetch_json(request, attempts=4):
+def fetch_json(request, attempts=4, opener=None):
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with (opener.open(request, timeout=30) if opener else urllib.request.urlopen(request, timeout=30)) as response:
                 return json.load(response)
         except (urllib.error.URLError, http.client.IncompleteRead, TimeoutError, ConnectionError):
             if attempt + 1 == attempts:
@@ -35,7 +35,14 @@ def main():
     parser.add_argument('--start', required=True)
     parser.add_argument('--end', required=True)
     parser.add_argument('--workspace', default=str(Path(__file__).resolve().parents[2] / '.runtime/quant'))
+    parser.add_argument('--proxy', default='', help='Host Python HTTP(S) proxy; no account credentials')
     args = parser.parse_args()
+    opener = None
+    if args.proxy:
+        proxy = urllib.parse.urlparse(args.proxy)
+        if proxy.scheme not in ('http', 'https') or not proxy.hostname or proxy.username or proxy.password:
+            parser.error('Use an HTTP(S) proxy without embedded credentials')
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({'http': args.proxy, 'https': args.proxy}))
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', args.id):
         parser.error('Invalid dataset ID')
     start = dt.datetime.strptime(args.start, '%Y-%m-%d').replace(tzinfo=dt.timezone.utc)
@@ -53,7 +60,7 @@ def main():
     while cursor > first:
         query = urllib.parse.urlencode({'instId': 'BTC-USDT', 'bar': '1H', 'limit': '100', 'after': cursor})
         request = urllib.request.Request(endpoint + '?' + query, headers={'User-Agent': 'Mozilla/5.0'})
-        payload = fetch_json(request)
+        payload = fetch_json(request, opener=opener)
         if payload.get('code') != '0' or not payload.get('data'):
             raise RuntimeError('Public candle API did not return data')
         oldest = min(int(row[0]) for row in payload['data'])

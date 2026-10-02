@@ -41,4 +41,6 @@ yudao:
     exchange-proxy: ${QUANT_EXCHANGE_PROXY:}
     python-executable: ${QUANT_PYTHON_EXECUTABLE:python}
     dataset-script: ${QUANT_DATASET_SCRIPT:D:/0000/quant-platform/script/quant/prepare_dataset.py}
+    # Host Python uses a host-reachable proxy, separately from the Docker exchange proxy.
+    dataset-http-proxy: ${QUANT_DATASET_HTTP_PROXY:}
     timeout-seconds: ${QUANT_BACKTEST_TIMEOUT:600}

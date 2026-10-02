@@ -19,6 +19,7 @@ class QuantMonolithConfigurationTest {
                     assertThat(properties.isPaperExecutionEnabled()).isFalse();
                     assertThat(context.getEnvironment().getProperty("yudao.quant.paper-execution-enabled")).isEqualTo("false");
                     assertThat(properties.getPaperStartTokenTtlSeconds()).isEqualTo(300);
+                    assertThat(properties.getDatasetHttpProxy()).isEmpty();
                     assertThat(properties.getPaperSnapshotRetentionDays()).isEqualTo(30);
                     assertThat(properties.getPaperRiskPolicyVersion()).isEqualTo("paper-risk-v1");
                     assertThat(properties.getPaperMaxOrderNotional()).isEqualByComparingTo("100");
