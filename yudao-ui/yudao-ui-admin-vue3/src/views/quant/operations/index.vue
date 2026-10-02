@@ -20,27 +20,36 @@
         :closable="false"
         show-icon
       />
+      <el-alert v-if="refreshError" class="mt-3" :title="refreshError" type="error" :closable="false" show-icon />
+      <div class="session-picker mt-3">
+        <span>查看会话</span>
+        <el-select v-model="selectedSessionId" :disabled="loading" placeholder="暂无实盘会话" @change="refresh">
+          <el-option v-for="session in sessions" :key="session.id" :value="session.id"
+            :label="`${formatTime(session.startedAt)} · ${session.status} · ${session.id.slice(0, 8)}`" />
+        </el-select>
+        <el-tag v-if="activeSession" :type="sessionTag(activeSession.status)">{{ activeSession.status }}</el-tag>
+      </div>
       <div class="metric-grid">
         <div class="metric-card"><span>策略版本</span><strong>{{ strategyVersions.length }}</strong><small>{{ strategyCount }} 个策略</small></div>
         <div class="metric-card"><span>运行环境</span><strong>{{ runningCount }}</strong><small>实盘与模拟盘</small></div>
         <div class="metric-card"><span>账户权益</span><strong>{{ money(latestReconciliation?.totalEquity) }}</strong><small>USDT</small></div>
         <div class="metric-card"><span>BTC 敞口</span><strong>{{ money(latestReconciliation?.btcExposure) }}</strong><small>USDT</small></div>
-        <div class="metric-card" :class="{ danger: openAlerts > 0 }"><span>未处理告警</span><strong>{{ openAlerts }}</strong><small>{{ openAlerts ? '需要处理' : '当前正常' }}</small></div>
+        <div class="metric-card" :class="{ danger: openAlerts > 0 }"><span>未处理告警</span><strong>{{ openAlerts }}</strong><small>{{ refreshError ? '数据待更新' : activeSession ? (openAlerts ? '需要处理' : '所选会话无 OPEN 告警') : '暂无会话数据' }}</small></div>
       </div>
     </ContentWrap>
 
     <el-row :gutter="16">
       <el-col :xs="24" :xl="16">
-        <ContentWrap title="当前自动实盘会话">
+        <ContentWrap title="所选自动实盘会话">
           <template #header>
             <div class="section-head">
-              <span>当前自动实盘会话</span>
               <el-tag :type="sessionTag(activeSession?.status)">{{ statusLabel(activeSession?.status) }}</el-tag>
             </div>
           </template>
           <el-empty v-if="!activeSession" description="暂无自动实盘会话" />
           <template v-else>
             <el-descriptions :column="3" border>
+              <el-descriptions-item label="会话 ID" :span="3">{{ activeSession.id }}</el-descriptions-item>
               <el-descriptions-item label="策略">{{ activeSession.strategyName }}</el-descriptions-item>
               <el-descriptions-item label="周期">{{ activeSession.timeframe }}</el-descriptions-item>
               <el-descriptions-item label="开始时间">{{ formatTime(activeSession.startedAt) }}</el-descriptions-item>
@@ -87,7 +96,53 @@
       </el-col>
     </el-row>
 
-    <ContentWrap title="策略版本">
+    <ContentWrap v-if="activeSession" title="会话运行证据">
+      <el-tabs v-model="evidenceTab">
+        <el-tab-pane label="权益与敞口" name="equity">
+          <p class="evidence-note">最近 {{ reconciliations.length }} 条对账快照：{{ formatTime(reconciliations[reconciliations.length - 1]?.reconciledAt) }} 至 {{ formatTime(reconciliations[0]?.reconciledAt) }}。账户权益包含已有资产及价格变化，不等同于策略收益。</p>
+          <Echart v-if="reconciliations.length" :key="activeSession.id" :options="equityOptions" height="300px" :not-merge="true" />
+          <el-empty v-else description="暂无对账快照" />
+        </el-tab-pane>
+        <el-tab-pane :label="`信号 (${signals.length})`" name="signals">
+          <el-table :data="signals" max-height="420" row-key="id">
+            <el-table-column label="收盘 K 线" width="180"><template #default="s">{{ formatTime(s.row.candleAt) }}</template></el-table-column>
+            <el-table-column prop="signalType" label="信号" width="80" />
+            <el-table-column prop="status" label="执行结果" width="150" />
+            <el-table-column prop="closePrice" label="收盘价" width="120" />
+            <el-table-column prop="fastEma" label="EMA20" width="130" />
+            <el-table-column prop="slowEma" label="EMA60" width="130" />
+            <el-table-column prop="message" label="执行说明" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" show-overflow-tooltip />
+            <el-table-column prop="signalHash" label="证据摘要" min-width="200" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane :label="`对账 (${reconciliations.length})`" name="reconciliations">
+          <el-table :data="reconciliations" max-height="420" row-key="id">
+            <el-table-column label="时间" width="180"><template #default="s">{{ formatTime(s.row.reconciledAt) }}</template></el-table-column>
+            <el-table-column label="状态" width="110"><template #default="s"><el-tag :type="s.row.reconciliationStatus === 'PASSED' ? 'success' : 'danger'">{{ s.row.reconciliationStatus }}</el-tag></template></el-table-column>
+            <el-table-column prop="totalEquity" label="权益 USDT" width="130" />
+            <el-table-column prop="btcExposure" label="BTC 敞口 USDT" width="150" />
+            <el-table-column prop="sessionLoss" label="会话亏损 USDT" width="150" />
+            <el-table-column label="交易所 / 平台挂单" width="165"><template #default="s">{{ s.row.exchangeOpenOrders }} / {{ s.row.platformOpenOrders }}</template></el-table-column>
+            <el-table-column prop="errorMessage" label="异常说明" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="evidenceHash" label="证据摘要" min-width="200" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+        <el-tab-pane :label="`告警 (${alerts.length})`" name="alerts">
+          <el-table :data="alerts" max-height="420" row-key="id">
+            <el-table-column prop="alertType" label="类型" min-width="180" />
+            <el-table-column label="状态" width="120"><template #default="s"><el-tag :type="s.row.status === 'OPEN' ? 'danger' : 'success'">{{ s.row.status }}</el-tag></template></el-table-column>
+            <el-table-column prop="message" label="告警说明" min-width="260" />
+            <el-table-column label="首次发生" width="180"><template #default="s">{{ formatTime(s.row.firstSeenAt) }}</template></el-table-column>
+            <el-table-column label="最后发生" width="180"><template #default="s">{{ formatTime(s.row.lastSeenAt) }}</template></el-table-column>
+            <el-table-column label="恢复时间" width="180"><template #default="s">{{ formatTime(s.row.resolvedAt) }}</template></el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+      <p class="evidence-note">信号及对账各显示最近 100 条，完整验收以数据库留存证据为准。</p>
+    </ContentWrap>
+
+    <ContentWrap title="策略版本（最近 100 条回测统计）">
       <el-table :data="strategyRows" v-loading="loading">
         <el-table-column prop="strategyName" label="策略" min-width="180" />
         <el-table-column prop="id" label="版本 ID" min-width="260" show-overflow-tooltip />
@@ -122,7 +177,11 @@
     </el-row>
 
     <ContentWrap title="真实订单账本">
-      <el-table :data="liveOrders" max-height="360">
+      <template #header>
+        <el-switch v-model="sessionOrdersOnly" active-text="仅所选会话" />
+      </template>
+      <p class="evidence-note">{{ sessionOrdersOnly ? '按所选会话信号关联的客户端订单 ID 筛选。' : '显示所选会话所属风险策略的最近订单，可能包含其他会话及人工测试订单。' }}</p>
+      <el-table :data="displayedOrders" max-height="360">
         <el-table-column label="更新时间" width="180"><template #default="s">{{ formatTime(s.row.updatedAt) }}</template></el-table-column>
         <el-table-column prop="instrumentId" label="交易对" width="120" />
         <el-table-column label="方向" width="80"><template #default="s"><el-tag :type="s.row.side === 'BUY' ? 'success' : 'warning'">{{ s.row.side }}</el-tag></template></el-table-column>
@@ -141,6 +200,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { Echart } from '@/components/Echart'
+import type { EChartsOption } from 'echarts'
 import {
   getCapabilities,
   getLiveAutomation,
@@ -177,7 +238,39 @@ const policies = ref<LiveControlPolicy[]>([])
 const sessions = ref<LiveAutomationSession[]>([])
 const activeSession = ref<LiveAutomationSession>()
 const liveOrders = ref<LiveExchangeOrder[]>([])
+const selectedSessionId = ref<string>()
+const evidenceTab = ref('equity')
+const sessionOrdersOnly = ref(true)
+const refreshError = ref('')
 let timer: number | undefined
+let disposed = false
+
+const signals = computed(() => activeSession.value?.signals || [])
+const reconciliations = computed(() => activeSession.value?.reconciliations || [])
+const alerts = computed(() => activeSession.value?.alerts || [])
+const displayedOrders = computed(() => {
+  if (!sessionOrdersOnly.value) return liveOrders.value
+  const clients = new Set(signals.value.map((signal) => signal.clientOrderId).filter(Boolean))
+  return liveOrders.value.filter((order) => clients.has(order.clientOrderId))
+})
+const equityOptions = computed<EChartsOption>(() => {
+  const points = [...reconciliations.value].sort((a, b) => a.reconciledAt - b.reconciledAt)
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['账户权益', 'BTC 敞口'] },
+    grid: { left: 65, right: 65, top: 45, bottom: 70 },
+    xAxis: { type: 'time' },
+    yAxis: [
+      { type: 'value', name: '权益 USDT', scale: true },
+      { type: 'value', name: '敞口 USDT', scale: true }
+    ],
+    dataZoom: [{ type: 'inside' }, { type: 'slider', bottom: 5 }],
+    series: [
+      { name: '账户权益', type: 'line', showSymbol: false, data: points.map((p) => [p.reconciledAt, Number(p.totalEquity)]) },
+      { name: 'BTC 敞口', type: 'line', yAxisIndex: 1, showSymbol: false, data: points.map((p) => [p.reconciledAt, Number(p.btcExposure)]) }
+    ]
+  }
+})
 
 const activePolicy = computed(() => policies.value.find((item) => item.id === activeSession.value?.policyId) || policies.value[0])
 const latestReconciliation = computed(() => activeSession.value?.reconciliations?.[0])
@@ -212,29 +305,42 @@ async function refresh() {
     const [caps, versions, params, tasks, paper, controls] = await Promise.all([
       getCapabilities(), listStrategyVersions(), listParameterSets(), listBacktests(), listPaperExecutions(), listLiveControls()
     ])
+    const groups = await Promise.all(controls.map((policy) => listLiveAutomations(policy.id)))
+    const availableSessions = groups.flat().sort((a, b) => b.startedAt - a.startedAt)
+    const selected = availableSessions.find((item) => item.id === selectedSessionId.value)
+      || availableSessions.find((item) => item.status === 'RUNNING') || availableSessions[0]
+    const detail = selected ? await getLiveAutomation(selected.id) : undefined
+    const policyId = detail?.policyId || controls[0]?.id
+    const orders = policyId ? await listLiveOrders(policyId) : []
+    if (disposed) return
     capabilities.value = caps; strategyVersions.value = versions; parameterSets.value = params
     backtests.value = tasks; paperExecutions.value = paper; policies.value = controls
-    const groups = await Promise.all(controls.map((policy) => listLiveAutomations(policy.id)))
-    sessions.value = groups.flat().sort((a, b) => b.startedAt - a.startedAt)
-    const selected = sessions.value.find((item) => item.status === 'RUNNING') || sessions.value[0]
-    activeSession.value = selected ? await getLiveAutomation(selected.id) : undefined
-    const policyId = activeSession.value?.policyId || controls[0]?.id
-    liveOrders.value = policyId ? await listLiveOrders(policyId) : []
+    sessions.value = availableSessions
+    selectedSessionId.value = selected?.id
+    activeSession.value = detail
+    liveOrders.value = orders
+    refreshError.value = ''
     lastUpdated.value = Date.now()
   } catch (error) {
     console.error(error)
-    ElMessage.error('运行面板刷新失败')
+    selectedSessionId.value = activeSession.value?.id
+    refreshError.value = '刷新失败，当前显示上次成功获取的数据，请核对更新时间后重试。'
   } finally { loading.value = false }
 }
 
 async function stopCurrentSession() {
-  if (!activeSession.value) return
-  const { value } = await ElMessageBox.prompt('请输入停止原因', '停止自动实盘会话', {
-    confirmButtonText: '确认停止', cancelButtonText: '取消', type: 'warning', inputPattern: /\S+/, inputErrorMessage: '停止原因不能为空'
-  })
-  await stopLiveAutomation(activeSession.value.id, value.trim())
-  ElMessage.success('自动实盘会话已停止')
-  await refresh()
+  const session = activeSession.value
+  if (!session || session.status !== 'RUNNING') return
+  try {
+    const { value } = await ElMessageBox.prompt(`会话 ${session.id}：请输入停止原因`, '停止自动实盘会话', {
+      confirmButtonText: '确认停止', cancelButtonText: '取消', type: 'warning', inputPattern: /\S+/, inputErrorMessage: '停止原因不能为空'
+    })
+    await stopLiveAutomation(session.id, value.trim())
+    ElMessage.success('自动实盘会话已停止')
+    await refresh()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error('停止失败，请刷新核对会话状态')
+  }
 }
 
 function openResearch() { router.push('/quant/backtest') }
@@ -255,10 +361,13 @@ watch(autoRefresh, (enabled) => {
   timer = enabled ? window.setInterval(refresh, 15000) : undefined
 })
 onMounted(() => { refresh(); timer = window.setInterval(refresh, 15000) })
-onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
+onBeforeUnmount(() => { disposed = true; if (timer) window.clearInterval(timer) })
 </script>
 
 <style scoped>
+.session-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.session-picker .el-select { width: 440px; max-width: 100%; }
+.evidence-note { color: var(--muted); font-size: 13px; margin: 8px 0 14px; }
 .operations-page { --ink: #172033; --muted: #64748b; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .page-head h1 { margin: 3px 0 6px; color: var(--ink); font-size: 28px; }
