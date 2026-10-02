@@ -27,8 +27,14 @@ public class LiveControlService {
         return repository.createOrGet(tenant,owner,reportId,(String)report.get("reportHash"),properties.getLiveRiskPolicyVersion(),properties.getLiveExchange(),properties.getLivePair(),properties.getLiveMaxOrderNotional(),properties.getLiveMaxDailyNotional(),properties.getLiveMaxTotalExposure(),properties.getLiveMaxOpenOrders());
     }
 
-    public List<Map<String,Object>> list(long tenant,long owner){var rows=repository.list(tenant,owner);rows.forEach(this::decorate);return rows;}
-    public Map<String,Object> get(long tenant,long owner,String id){var policy=repository.get(tenant,owner,id);if(policy==null)throw new IllegalArgumentException("实盘安全策略不存在");decorate(policy);policy.put("decisions",repository.decisions(tenant,owner,id));policy.put("audits",repository.audits(tenant,owner,id));return policy;}
+    public Map<String,Object> strategy(long tenant,long owner,String id){
+        var policy=repository.get(tenant,owner,id);if(policy==null)throw new IllegalArgumentException("Policy not found");
+        var report=admissions.get(tenant,owner,(String)policy.get("admissionReportId"));
+        if(!"DOUBLE_CONFIRMED".equals(report.get("confirmationState"))||!Objects.equals(report.get("reportHash"),policy.get("admissionReportHash")))throw new IllegalArgumentException("Policy admission changed");
+        return admissions.liveStrategy(tenant,owner,report);
+    }
+    public List<Map<String,Object>> list(long tenant,long owner){var rows=repository.list(tenant,owner);rows.forEach(row->decorate(tenant,owner,row));return rows;}
+    public Map<String,Object> get(long tenant,long owner,String id){var policy=repository.get(tenant,owner,id);if(policy==null)throw new IllegalArgumentException("实盘安全策略不存在");decorate(tenant,owner,policy);policy.put("decisions",repository.decisions(tenant,owner,id));policy.put("audits",repository.audits(tenant,owner,id));return policy;}
 
     @Transactional public String arm(long tenant,long owner,String id,LiveControlArmRequest request){
         if(!"CONFIRM_OFFLINE_GATE_ARM".equals(request.confirmation()))throw new IllegalArgumentException("离线门禁确认语不匹配");
@@ -67,6 +73,6 @@ public class LiveControlService {
         return repository.decision(tenant,owner,request.clientOrderId());
     }
 
-    private void decorate(Map<String,Object> policy){policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",properties.isLiveExecutionEnabled()&&credentials.configured());policy.put("activationAllowed",properties.isLiveExecutionEnabled()&&credentials.configured()&&"ARMED_OFFLINE".equals(policy.get("status")));}
+    private void decorate(long tenant,long owner,Map<String,Object> policy){policy.put("strategy",strategy(tenant,owner,String.valueOf(policy.get("id"))));policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",properties.isLiveExecutionEnabled()&&credentials.configured());policy.put("activationAllowed",properties.isLiveExecutionEnabled()&&credentials.configured()&&"ARMED_OFFLINE".equals(policy.get("status")));}
     private static BigDecimal decimal(Map<String,Object> map,String key){return new BigDecimal(String.valueOf(map.get(key)));}
 }

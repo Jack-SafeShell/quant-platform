@@ -137,8 +137,8 @@
             <el-table-column prop="signalType" label="信号" width="80" />
             <el-table-column prop="status" label="执行结果" width="150" />
             <el-table-column prop="closePrice" label="收盘价" width="120" />
-            <el-table-column prop="fastEma" label="EMA20" width="130" />
-            <el-table-column prop="slowEma" label="EMA60" width="130" />
+            <el-table-column prop="fastEma" label="快 EMA" width="130" />
+            <el-table-column prop="slowEma" label="慢 EMA" width="130" />
             <el-table-column prop="message" label="执行说明" min-width="220" show-overflow-tooltip />
             <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" show-overflow-tooltip />
             <el-table-column prop="signalHash" label="证据摘要" min-width="200" show-overflow-tooltip />

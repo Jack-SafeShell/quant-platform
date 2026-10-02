@@ -208,7 +208,7 @@ public class BacktestController {
     @GetMapping("/paper-execution/reconciliations") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> paperReconciliations(@RequestParam String id){return success(paperOrderReconciliation.reconciliations(tenant(),owner(),id));}
     @PostMapping("/live-admission/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
-    public CommonResult<String> createLiveAdmission(){return success(liveAdmissions.create(tenant(),owner()));}
+    public CommonResult<String> createLiveAdmission(@RequestParam(required=false) String backtestId){return success(liveAdmissions.create(tenant(),owner(),backtestId));}
     @GetMapping("/live-admission/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> listLiveAdmissions(){return success(liveAdmissions.list(tenant(),owner()));}
     @GetMapping("/live-admission/get") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")

@@ -22,7 +22,13 @@ public class LiveAdmissionService {
     }
 
     public String create(long tenant, long owner) {
-        var backtest = repository.latestSuccessfulBacktest(tenant, owner);
+        return create(tenant,owner,null);
+    }
+    public String create(long tenant,long owner,String backtestId){
+        var backtest = backtestId==null?repository.latestSuccessfulBacktest(tenant,owner):repository.successfulBacktest(tenant,owner,backtestId);
+        if(backtestId!=null&&backtest==null)throw new IllegalArgumentException("Successful owned backtest not found");
+        var strategy=backtest==null?Map.<String,Object>of():strategyBinding(tenant,owner,String.valueOf(backtest.get("strategyVersionId")));
+        var candidate=backtest==null?null:repository.candidatePaper(tenant,owner,String.valueOf(backtest.get("strategyVersionId")),String.valueOf(backtest.get("parameterSetId")));
         var soak = repository.qualifyingSoak(tenant, owner);
         var orders = repository.qualifyingOrderRehearsal(tenant, owner);
         var riskStop = repository.latestRiskStop(tenant, owner);
@@ -33,6 +39,7 @@ public class LiveAdmissionService {
         check(checks, "ORDER_RECONCILIATION_REHEARSAL", orders != null, orders == null ? "缺少含失败恢复的订单对账演练" : "执行 " + orders.get("executionId") + " / PASSED " + orders.get("passedCount") + " / FAILED " + orders.get("failedCount"));
         check(checks, "RISK_STOP", riskStop != null, riskStop == null ? "缺少风险精确停机审计" : "执行 " + riskStop.get("executionId") + " / 审计 " + riskStop.get("auditId"));
         check(checks, "NO_UNRESOLVED_ALERTS", unresolvedAlerts == 0, "未解决告警 " + unresolvedAlerts);
+        check(checks,"VERSION_PAPER_RUN",candidate!=null,candidate==null?"Missing same-version, same-parameter readable paper run":"Execution "+candidate.get("executionId")+" / readable snapshots "+candidate.get("readableSnapshots"));
         boolean evidenceComplete = checks.stream().allMatch(item -> Boolean.TRUE.equals(item.get("passed")));
 
         Map<String, Object> keyBoundary = new TreeMap<>();
@@ -46,7 +53,10 @@ public class LiveAdmissionService {
         keyBoundary.put("environmentIsolation", "模拟盘与实盘使用不同密钥；实盘密钥只允许绑定受控出口 IP");
 
         Map<String, Object> manifest = new TreeMap<>();
-        manifest.put("schema", "quant-live-admission/v1");
+        manifest.put("schema", "quant-live-admission/v2");
+        manifest.put("strategy",strategy);
+        manifest.put("candidatePaper",nullable(candidate));
+        manifest.put("exitEvaluation","CLOSED_1H_CANDLE_GROSS_ENTRY_RETURN; not intrabar Freqtrade execution");
         manifest.put("evidence", new TreeMap<>(Map.of(
                 "backtest", nullable(backtest),
                 "dryRunSoak", nullable(soak),
@@ -76,15 +86,30 @@ public class LiveAdmissionService {
         return report;
     }
 
-    public void requireFixedLiveStrategy(long tenant, long owner, Map<String, Object> report) {
-        var evidence = JsonUtils.getObjectMapper().readTree((String) report.get("reportJson"));
-        var backtest = evidence.path("evidence").path("backtest");
-        String version = backtest.path("strategyVersionId").asText(backtest.path("strategyversionid").asText());
-        try {
-            String baselineHash = DatasetRegistry.hash(EmaStrategyTemplate.baseline().getBytes(StandardCharsets.UTF_8));
-            if (!baselineHash.equals(repository.strategySourceHash(tenant, owner, version)))
-                throw new IllegalArgumentException("当前实盘仅支持固定 EMA20/60 基线；可配置版本请用于历史回测及模拟盘");
-        } catch (java.io.IOException e) { throw new IllegalStateException("无法加载实盘基线模板", e); }
+    public Map<String,Object> liveStrategy(long tenant,long owner,Map<String,Object> report){
+        String json=(String)report.get("reportJson");
+        if(!DatasetRegistry.hash(json.getBytes(StandardCharsets.UTF_8)).equals(report.get("reportHash")))throw new IllegalArgumentException("Admission report hash changed");
+        var manifest=JsonUtils.getObjectMapper().readTree(json);
+        var backtest=manifest.path("evidence").path("backtest");
+        String version=backtest.path("strategyVersionId").asText(backtest.path("strategyversionid").asText());
+        var current=strategyBinding(tenant,owner,version);
+        if("quant-live-admission/v2".equals(manifest.path("schema").asText())){
+            if(!manifest.path("evidenceComplete").asBoolean())throw new IllegalArgumentException("Admission evidence incomplete");
+            if(!JsonUtils.getObjectMapper().readTree(JsonUtils.toJsonString(current)).equals(manifest.path("strategy")))throw new IllegalArgumentException("Strategy evidence changed; reconfirm a new report");
+        }else{
+            try{if(!DatasetRegistry.hash(EmaStrategyTemplate.baseline().getBytes(StandardCharsets.UTF_8)).equals(current.get("sourceHash")))throw new IllegalArgumentException("Legacy report only supports baseline");}
+            catch(java.io.IOException e){throw new IllegalStateException(e);}
+        }
+        return current;
+    }
+    public void requireFixedLiveStrategy(long tenant,long owner,Map<String,Object> report){liveStrategy(tenant,owner,report);}
+    private Map<String,Object> strategyBinding(long tenant,long owner,String version){
+        var snapshot=repository.strategySnapshot(tenant,owner,version);
+        if(snapshot==null)throw new IllegalArgumentException("Owned strategy version missing");
+        String source=String.valueOf(snapshot.get("sourceCode")),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        var configuration=EmaStrategyTemplate.readConfiguration(source);
+        if(configuration==null||!hash.equals(snapshot.get("sourceHash")))throw new IllegalArgumentException("Only an intact server-owned EMA template is supported");
+        return new TreeMap<>(Map.of("strategyVersionId",version,"sourceHash",hash,"configuration",configuration));
     }
 
     public List<Map<String, Object>> list(long tenant, long owner) {

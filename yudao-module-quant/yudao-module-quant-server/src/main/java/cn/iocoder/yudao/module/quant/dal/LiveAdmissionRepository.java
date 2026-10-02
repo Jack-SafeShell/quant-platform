@@ -18,6 +18,16 @@ public class LiveAdmissionRepository {
         return one("SELECT t.id,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.status='SUCCEEDED' ORDER BY t.finished_at DESC LIMIT 1", tenant, owner);
     }
 
+    public Map<String,Object> successfulBacktest(long tenant,long owner,String id){
+        return one("SELECT t.id,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.id=? AND t.status='SUCCEEDED'",tenant,owner,id);
+    }
+    public Map<String,Object> strategySnapshot(long tenant,long owner,String version){
+        return one("SELECT v.id,v.source_hash AS sourceHash,v.source_code AS sourceCode FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id WHERE s.tenant_id=? AND s.owner_id=? AND v.id=?",tenant,owner,version);
+    }
+    public Map<String,Object> candidatePaper(long tenant,long owner,String version,String parameter){
+        return one("SELECT e.id AS executionId,COUNT(*) AS readableSnapshots,MIN(o.observed_at) AS firstObservedAt,MAX(o.observed_at) AS lastObservedAt FROM quant_paper_execution e JOIN quant_paper_session s ON s.id=e.session_id JOIN quant_paper_observation_snapshot o ON o.execution_id=e.id WHERE e.tenant_id=? AND e.owner_id=? AND s.strategy_version_id=? AND s.parameter_set_id=? AND e.status='STOPPED' AND o.database_available=true AND o.network_error_count=0 AND o.fatal_error_count=0 AND NOT EXISTS(SELECT 1 FROM quant_paper_observation_snapshot bad WHERE bad.execution_id=e.id AND (bad.network_error_count>0 OR bad.fatal_error_count>0)) AND EXISTS(SELECT 1 FROM quant_paper_observation_snapshot lasto WHERE lasto.execution_id=e.id AND lasto.database_available=true AND lasto.observed_at=(SELECT MAX(last2.observed_at) FROM quant_paper_observation_snapshot last2 WHERE last2.execution_id=e.id)) AND NOT EXISTS(SELECT 1 FROM quant_paper_alert a WHERE a.execution_id=e.id AND a.status<>'RESOLVED') AND EXISTS(SELECT 1 FROM quant_paper_order_reconciliation c WHERE c.execution_id=e.id AND c.reconciliation_status='PASSED' AND c.unknown_order_count=0 AND c.reconciled_at=(SELECT MAX(c2.reconciled_at) FROM quant_paper_order_reconciliation c2 WHERE c2.execution_id=e.id)) GROUP BY e.id HAVING COUNT(*)>=2 ORDER BY MAX(o.observed_at) DESC LIMIT 1",tenant,owner,version,parameter);
+    }
+
     public String strategySourceHash(long tenant, long owner, String versionId) {
         var values = jdbc.queryForList("SELECT v.source_hash FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id WHERE s.tenant_id=? AND s.owner_id=? AND v.id=?", String.class, tenant, owner, versionId);
         return values.isEmpty() ? null : values.getFirst();

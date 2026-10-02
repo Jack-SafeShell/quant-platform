@@ -9,7 +9,7 @@
         <el-form-item label="止盈 %"><el-input-number v-model="form.takeProfitPercent" :min="0.1" :max="50" :step="0.1" :precision="4" /></el-form-item>
         <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="saving" @click="save">保存并选择版本</el-button></el-form-item>
       </el-form>
-      <p>模拟盘沿用评审批次绑定的策略版本与参数集；实盘自动会话目前使用固定 EMA20/60，保存此处配置不会改变实盘运行。</p>
+      <p>模拟盘沿用评审批次绑定的策略版本与参数集；实盘须以该版本的回测和模拟证据生成新准入报告并重新确认；保存配置不会改变已有实盘会话。</p>
     </el-collapse-item>
   </el-collapse>
 </template>
