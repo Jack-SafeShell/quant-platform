@@ -98,6 +98,48 @@
 
     <ContentWrap v-if="activeSession" title="会话运行证据">
       <el-tabs v-model="evidenceTab">
+        <el-tab-pane label="交易执行与收益" name="trace">
+          <el-alert v-if="performanceError" :title="performanceError" type="warning" :closable="false" />
+          <template v-if="performance">
+            <el-descriptions :column="3" border>
+              <el-descriptions-item label="会话净收益贡献">{{ performanceMoney(performance.netContribution) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="已知费用与返佣折算">{{ performanceMoney(performance.knownSignedCostsUsdt) }} USDT（扣费负）</el-descriptions-item>
+              <el-descriptions-item label="剩余持仓估值">{{ performanceMoney(performance.markedPositionValue) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="绑定版本">{{ performance.strategy?.strategyVersionId || performance.legacyStrategyVersionId || '未记录' }}</el-descriptions-item>
+              <el-descriptions-item label="EMA / 止损 / 止盈">{{ performance.strategy ? `EMA${performance.strategy.configuration.fastPeriod}/${performance.strategy.configuration.slowPeriod} / ${performance.strategy.configuration.stopLossRatio * 100}% / ${performance.strategy.configuration.takeProfitRatio * 100}%` : '旧报告未保存配置快照' }}</el-descriptions-item>
+              <el-descriptions-item label="准入证据">{{ shortHash(performance.admissionReportHash) }}</el-descriptions-item>
+            </el-descriptions>
+            <el-alert v-if="!performance.valuationComplete" class="mt-3" title="费用或估值证据不完整，净收益暂不可计算。" type="warning" :closable="false" />
+            <el-alert v-if="performance.filledOrderCount === 0" class="mt-3" title="该会话尚无成交，零收益不构成策略有效证据。" type="info" :closable="false" />
+            <p class="evidence-note">净收益基于完整会话账本；下方显示最近 {{ performance.executionTrace?.length || 0 }} / 共 {{ performance.signalCount }} 条信号，最多 {{ performance.traceLimit }} 条。历史触发原因缺失时不作推断；停止会话的估值不是当前实时价格。单笔买卖成交额不等同于该笔利润。</p>
+            <div class="head-actions mb-3">
+              <el-switch v-model="traceOrdersOnly" active-text="仅显示有关联订单" />
+              <el-button :disabled="!!refreshError || !!performanceError || loading" @click="exportExecutionReview">导出执行与收益快照</el-button>
+            </div>
+            <el-table :data="traceRows" max-height="520" row-key="id">
+              <el-table-column type="expand"><template #default="s">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="信号证据">{{ s.row.signalHash }}</el-descriptions-item>
+                  <el-descriptions-item label="门禁决定">{{ s.row.decisionId || '-' }} / {{ s.row.gateReason || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="交易所订单">{{ s.row.order?.exchangeOrderId || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="账本关联">{{ s.row.linkState }}</el-descriptions-item>
+                  <el-descriptions-item label="快 / 慢 EMA">{{ s.row.fastEma }} / {{ s.row.slowEma }}</el-descriptions-item>
+                  <el-descriptions-item label="收盘价格">{{ s.row.closePrice }}</el-descriptions-item>
+                  <el-descriptions-item label="执行说明" :span="2">{{ s.row.message || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </template></el-table-column>
+              <el-table-column label="收盘 K 线" width="180"><template #default="s">{{ formatTime(s.row.candleAt) }}</template></el-table-column>
+              <el-table-column prop="signalType" label="信号" width="80" />
+              <el-table-column label="触发原因" width="140"><template #default="s">{{ reasonLabel(s.row.signalReason) }}</template></el-table-column>
+              <el-table-column prop="status" label="信号结果" min-width="140" />
+              <el-table-column prop="gateReason" label="门禁结果" min-width="140" />
+              <el-table-column label="订单状态" width="135"><template #default="s">{{ s.row.order?.status || '-' }}</template></el-table-column>
+              <el-table-column label="累计成交 / 均价" min-width="190"><template #default="s">{{ s.row.order?.filledAmount ?? '-' }} / {{ s.row.order?.averagePrice ?? '-' }}</template></el-table-column>
+              <el-table-column label="实际费用 / 返佣" min-width="190"><template #default="s">{{ s.row.order ? `${s.row.order.feeAmount ?? '缺失'} ${s.row.order.feeCurrency || ''} / ${s.row.order.rebateAmount ?? '缺失'} ${s.row.order.rebateCurrency || ''}` : '-' }}</template></el-table-column>
+              <el-table-column prop="clientOrderId" label="客户端订单" min-width="220" show-overflow-tooltip />
+            </el-table>
+          </template>
+        </el-tab-pane>
         <el-tab-pane label="策略收益与成本" name="performance">
           <el-alert v-if="performanceError" :title="performanceError" type="warning" :closable="false" />
           <template v-if="performance">
@@ -209,7 +251,7 @@
       <template #header>
         <el-switch v-model="sessionOrdersOnly" active-text="仅所选会话" />
       </template>
-      <p class="evidence-note">{{ sessionOrdersOnly ? '按所选会话信号关联的客户端订单 ID 筛选。' : '显示所选会话所属风险策略的最近订单，可能包含其他会话及人工测试订单。' }}</p>
+      <p class="evidence-note">{{ sessionOrdersOnly ? '显示完整会话账本，不受最近信号窗口限制；收益数据读取失败时不显示旧订单。' : '显示所选会话所属风险策略的最近订单，可能包含其他会话及人工测试订单。' }}</p>
       <el-table :data="displayedOrders" max-height="360">
         <el-table-column label="更新时间" width="180"><template #default="s">{{ formatTime(s.row.updatedAt) }}</template></el-table-column>
         <el-table-column prop="instrumentId" label="交易对" width="120" />
@@ -269,9 +311,11 @@ const sessions = ref<LiveAutomationSession[]>([])
 const activeSession = ref<LiveAutomationSession>()
 const liveOrders = ref<LiveExchangeOrder[]>([])
 const performance = ref<LivePerformance>()
+const traceOrdersOnly = ref(false)
+const traceRows = computed(() => (performance.value?.executionTrace || []).filter(row => !traceOrdersOnly.value || !!row.order))
 const performanceError = ref('')
 const selectedSessionId = ref<string>()
-const evidenceTab = ref('equity')
+const evidenceTab = ref('trace')
 const sessionOrdersOnly = ref(true)
 const refreshError = ref('')
 let timer: number | undefined
@@ -282,8 +326,7 @@ const reconciliations = computed(() => activeSession.value?.reconciliations || [
 const alerts = computed(() => activeSession.value?.alerts || [])
 const displayedOrders = computed(() => {
   if (!sessionOrdersOnly.value) return liveOrders.value
-  const clients = new Set(signals.value.map((signal) => signal.clientOrderId).filter(Boolean))
-  return liveOrders.value.filter((order) => clients.has(order.clientOrderId))
+  return performance.value?.orders || []
 })
 const equityOptions = computed<EChartsOption>(() => {
   const points = [...reconciliations.value].sort((a, b) => a.reconciledAt - b.reconciledAt)
@@ -330,6 +373,15 @@ const parameterRows = computed(() => parameterSets.value.map((item) => {
   catch { return { ...item, startingBalance: '-', stakeAmount: '-', fee: '-' } }
 }))
 
+function reasonLabel(reason:string) {
+  return ({ STOP_LOSS:'止损阈值', TAKE_PROFIT:'止盈阈值', EMA_CROSS:'EMA 交叉', NO_CROSS:'无交叉', HOLDING_POSITION:'持仓中不追加买入', UNRECORDED:'历史未记录' } as Record<string,string>)[reason] || reason
+}
+function exportExecutionReview() {
+  if (!performance.value || refreshError.value || performanceError.value) return
+  const blob = new Blob([JSON.stringify(performance.value, null, 2)], { type:'application/json' })
+  const url=URL.createObjectURL(blob), link=document.createElement('a')
+  link.href=url; link.download=`execution-review-${performance.value.sessionId}.json`; link.click(); URL.revokeObjectURL(url)
+}
 function performanceMoney(value?: number | null) { return value == null ? '-' : Number(value).toFixed(6) }
 async function refresh() {
   if (loading.value) return

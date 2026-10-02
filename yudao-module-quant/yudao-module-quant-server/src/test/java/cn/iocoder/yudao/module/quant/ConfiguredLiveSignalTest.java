@@ -25,6 +25,16 @@ class ConfiguredLiveSignalTest {
         assertEquals("NONE",LiveAutomationService.positionExit(buy,config,new BigDecimal("100")).type());
         assertEquals("BUY",LiveAutomationService.positionExit(buy,config,null).type());
     }
+    @Test void triggerReasonsAreExplicitAndLegacyMessagesAreNotGuessed(){
+        var stop=new LiveAutomationService.MarketSignal(1,"NONE",new BigDecimal("98"),BigDecimal.ONE,BigDecimal.ONE);
+        assertEquals("STOP_LOSS",LiveAutomationService.signalReason(stop,config,new BigDecimal("100")));
+        var roi=new LiveAutomationService.MarketSignal(1,"NONE",new BigDecimal("104"),BigDecimal.ONE,BigDecimal.ONE);
+        assertEquals("TAKE_PROFIT",LiveAutomationService.signalReason(roi,config,new BigDecimal("100")));
+        assertEquals("NO_CROSS",LiveAutomationService.signalReason(roi,config,null));
+        assertEquals("STOP_LOSS",LivePerformanceService.recordedReason("[STOP_LOSS] FILLED"));
+        assertEquals("UNRECORDED",LivePerformanceService.recordedReason("FILLED"));
+        assertEquals("UNRECORDED",LivePerformanceService.recordedReason("[UNTRUSTED] FILLED"));
+    }
     @Test void entryCostSurvivesPartialSalesAndResetsAfterFlat(){
         var buy=Map.<String,Object>of("side","BUY","amount","2","price","100");
         var sell=Map.<String,Object>of("side","SELL","amount","1","price","150");
