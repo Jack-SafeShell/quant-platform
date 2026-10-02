@@ -52,6 +52,10 @@
     <el-button v-hasPermi="['quant:backtest:create']" class="mt-3" type="primary" @click="generateLiveAdmission">生成不可变准入报告</el-button>
     <el-table :data="liveAdmissions" class="mt-3"><el-table-column prop="reportHash" label="报告 SHA-256" min-width="360" /><el-table-column prop="confirmationState" label="确认状态" width="180" /><el-table-column label="生成时间" width="180"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column><el-table-column label="操作" width="180"><template #default="s"><el-button link type="primary" @click="showLiveAdmission(s.row.id)">查看与确认</el-button><el-button link @click="downloadLiveAdmission(s.row.id)">导出</el-button></template></el-table-column></el-table>
   </ContentWrap>
+  <ContentWrap title="策略运行配置与资金预算">
+    <el-select v-model="runPlanReportId" filterable placeholder="选择准入报告查看准备缺口" style="width: 100%"><el-option v-for="r in liveAdmissions" :key="r.id" :value="r.id" :label="`${r.id} / ${r.confirmationState}`" /></el-select>
+    <LiveRunPlanEditor :report-id="runPlanReportId" />
+  </ContentWrap>
   <ContentWrap title="受控实盘与固定策略自动执行">
     <el-alert title="真实执行由后端双开关控制；默认关闭。自动会话使用准入报告绑定的 EMA 或突破配置版本，限定 OKX BTC/USDT 现货；止损止盈按已收盘 1h K 线毛收益判断，不等同于回测盘中成交。" type="warning" :closable="false" />
     <el-table :data="liveAdmissions.filter(x=>x.confirmationState==='DOUBLE_CONFIRMED')" class="mt-3"><el-table-column prop="reportHash" label="已双确认报告" min-width="360" /><el-table-column label="操作" width="180"><template #default="s"><el-button type="primary" link @click="generateLiveControl(s.row.id)">创建/查看门禁</el-button></template></el-table-column></el-table>
@@ -78,10 +82,11 @@
         <el-form-item label="停机原因"><el-input v-model="liveControlStopComment" /></el-form-item>
         <el-form-item><el-button type="danger" @click="stopControl">紧急停机</el-button></el-form-item>
         <el-divider content-position="left">固定策略自动会话</el-divider>
-        <el-alert :title="liveAutomationEnabled ? '自动执行开关已启用；订单金额由后端固定配置。' : '自动执行开关关闭；需用临时启用配置启动单体。'" :type="liveAutomationEnabled ? 'error' : 'info'" :closable="false" />
+        <el-alert :title="liveAutomationEnabled ? '自动执行开关已启用；预算由当前表单提交并经后端上限复核。' : '自动执行开关关闭；需用临时启用配置启动单体。'" :type="liveAutomationEnabled ? 'error' : 'info'" :closable="false" />
+        <LiveRunPlanEditor :report-id="selectedLiveControl.admissionReportId" @budget="liveRunBudget = $event" />
         <el-form-item label="启动意见" class="mt-3"><el-input v-model="liveAutomationComment" maxlength="500" /></el-form-item>
         <el-form-item label="启动确认语"><el-input v-model="liveAutomationPhrase" placeholder="输入 CONFIRM_AUTO_LIVE_START" /></el-form-item>
-        <el-form-item><el-button type="danger" :disabled="selectedLiveControl.status!=='ARMED_OFFLINE'||!selectedLiveControl.liveExecutionEnabled||!liveAutomationEnabled" @click="startAutomation">启动自动实盘</el-button></el-form-item>
+        <el-form-item><el-button type="danger" :disabled="!liveRunBudget||selectedLiveControl.status!=='ARMED_OFFLINE'||!selectedLiveControl.liveExecutionEnabled||!liveAutomationEnabled" @click="startAutomation">启动自动实盘</el-button></el-form-item>
       </el-form>
       <el-table :data="liveAutomationSessions" class="mt-3">
         <el-table-column prop="id" label="会话" min-width="280" />
@@ -96,6 +101,8 @@
           <el-descriptions-item label="策略">{{ selectedLiveAutomation.strategyName }}</el-descriptions-item>
           <el-descriptions-item label="周期">{{ selectedLiveAutomation.timeframe }}</el-descriptions-item>
           <el-descriptions-item label="最大会话亏损">{{ selectedLiveAutomation.maxSessionLoss }} USDT</el-descriptions-item>
+          <el-descriptions-item label="每单金额">{{ selectedLiveAutomation.orderNotional }} USDT</el-descriptions-item>
+          <el-descriptions-item label="研究费率 / 滑点基点">{{ selectedLiveAutomation.runConfiguration ? `${selectedLiveAutomation.runConfiguration.feeBps} / ${selectedLiveAutomation.runConfiguration.slippageBps}` : '历史会话无成本假设快照' }}</el-descriptions-item>
           <el-descriptions-item label="停止原因">{{ selectedLiveAutomation.stopReason || '-' }}</el-descriptions-item>
         </el-descriptions>
         <h3>策略信号</h3>
@@ -163,6 +170,9 @@
 </template>
 
 <script setup lang="ts">
+import LiveRunPlanEditor from './LiveRunPlanEditor.vue'
+import type { LiveRunBudget } from '@/api/quant/backtest'
+
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import StrategyConfigEditor from './StrategyConfigEditor.vue'
 import { strategyConfigurationLabel } from '@/api/quant/backtest'
@@ -238,6 +248,8 @@ const liveControlStopComment=ref('')
 const liveAutomationEnabled=ref(false)
 const liveAutomationSessions=ref<LiveAutomationSession[]>([])
 const selectedLiveAutomation=ref<LiveAutomationSession>()
+const runPlanReportId=ref<string>()
+const liveRunBudget=ref<LiveRunBudget>()
 const liveAutomationComment=ref('')
 const liveAutomationPhrase=ref('')
 const okxReadComment=ref('')
@@ -318,7 +330,7 @@ async function armControl(){if(!selectedLiveControl.value)return;if(!liveControl
 async function stopControl(){if(!selectedLiveControl.value||!liveControlStopComment.value.trim()){ElMessage.warning('请填写停机原因');return}await emergencyStopLiveControl(selectedLiveControl.value.id,liveControlStopComment.value.trim());await showLiveControl(selectedLiveControl.value.id);await refresh();ElMessage.success('紧急停机已生效')}
 async function runLiveOrderCheck(){if(!selectedLiveControl.value)return;await checkLiveOrder(selectedLiveControl.value.id,{...liveOrderForm});await showLiveControl(selectedLiveControl.value.id);liveOrderForm.clientOrderId=`offline-${Date.now()}`;ElMessage.success('离线订单门禁检查完成，未发送真实订单')}
 async function verifyOkxRead(){if(!selectedLiveControl.value||!okxReadComment.value.trim()){ElMessage.warning('请填写确认意见');return}if(okxReadPhrase.value.trim()!=='CONFIRM_OKX_PRIVATE_READ'){ElMessage.warning('请输入 CONFIRM_OKX_PRIVATE_READ');return}const result=await verifyOkxPrivateRead(selectedLiveControl.value.id,{confirmation:'CONFIRM_OKX_PRIVATE_READ',comment:okxReadComment.value.trim()});await showLiveControl(selectedLiveControl.value.id);ElMessage.success(`OKX 私有只读连接通过，返回 ${result.dataCount} 组账户数据，未发送订单`)}
-async function startAutomation(){if(!selectedLiveControl.value||!liveAutomationComment.value.trim()){ElMessage.warning('请填写启动意见');return}if(liveAutomationPhrase.value.trim()!=='CONFIRM_AUTO_LIVE_START'){ElMessage.warning('请输入 CONFIRM_AUTO_LIVE_START');return}const id=await startLiveAutomation(selectedLiveControl.value.id,{confirmation:'CONFIRM_AUTO_LIVE_START',comment:liveAutomationComment.value.trim()});liveAutomationComment.value='';liveAutomationPhrase.value='';await showLiveControl(selectedLiveControl.value.id);await showAutomation(id);ElMessage.success('自动实盘会话已启动')}
+async function startAutomation(){if(!selectedLiveControl.value||!liveRunBudget.value||!liveAutomationComment.value.trim()){ElMessage.warning('请填写启动意见');return}if(liveAutomationPhrase.value.trim()!=='CONFIRM_AUTO_LIVE_START'){ElMessage.warning('请输入 CONFIRM_AUTO_LIVE_START');return}const id=await startLiveAutomation(selectedLiveControl.value.id,{confirmation:'CONFIRM_AUTO_LIVE_START',comment:liveAutomationComment.value.trim(),...liveRunBudget.value});liveAutomationComment.value='';liveAutomationPhrase.value='';await showLiveControl(selectedLiveControl.value.id);await showAutomation(id);ElMessage.success('自动实盘会话已启动')}
 async function showAutomation(id:string){selectedLiveAutomation.value=await getLiveAutomation(id)}
 async function stopAutomation(id:string){const {value}=await ElMessageBox.prompt('请输入停止原因','停止自动实盘',{inputPattern:/\S+/,inputErrorMessage:'停止原因不能为空'});await stopLiveAutomation(id,value.trim());if(selectedLiveControl.value)await showLiveControl(selectedLiveControl.value.id);selectedLiveAutomation.value=await getLiveAutomation(id);ElMessage.success('自动实盘会话已停止，门禁已转为 HALTED')}
 async function downloadResearch(){if(!optimizationResult.value)return;const blob=await exportResearchReport(optimizationResult.value.id);const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`research-${optimizationResult.value.id}.md`;link.click();URL.revokeObjectURL(url)}

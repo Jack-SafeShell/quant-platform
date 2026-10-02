@@ -19,18 +19,33 @@ public class LiveAutomationService {
     private final LiveAutomationRepository repository;private final LiveControlRepository controlRepository;private final LiveControlService controls;private final LiveOrderService orders;private final LiveTradingClient client;private final QuantProperties properties;
     public LiveAutomationService(LiveAutomationRepository repository,LiveControlRepository controlRepository,LiveControlService controls,LiveOrderService orders,LiveTradingClient client,QuantProperties properties){this.repository=repository;this.controlRepository=controlRepository;this.controls=controls;this.orders=orders;this.client=client;this.properties=properties;}
 
+    @org.springframework.transaction.annotation.Transactional
     public String start(long tenant,long owner,String policyId,LiveAutomationStartRequest request){
         if(!"CONFIRM_AUTO_LIVE_START".equals(request.confirmation()))throw new IllegalArgumentException("自动实盘确认语不匹配");
         if(!properties.isLiveExecutionEnabled()||!properties.isLiveAutomationEnabled())throw new IllegalArgumentException("真实执行或自动策略总开关关闭");
-        var policy=controlRepository.get(tenant,owner,policyId);if(policy==null||!"ARMED_OFFLINE".equals(policy.get("status")))throw new IllegalArgumentException("实盘策略未启用");if(properties.getLiveAutomationOrderNotional().compareTo(decimal(policy,"maxOrderNotional"))>0)throw new IllegalArgumentException("自动单笔金额超过策略上限");
+        var policy=controlRepository.getForUpdate(tenant,owner,policyId);if(policy==null||!"ARMED_OFFLINE".equals(policy.get("status")))throw new IllegalArgumentException("实盘策略未启用");var budget=LiveRunBudget.resolve(properties,decimal(policy,"maxOrderNotional"),request.orderNotional(),request.maxSessionLoss(),request.feeBps(),request.slippageBps());
         controls.strategy(tenant,owner,policyId);
-        if(!client.configured())throw new IllegalArgumentException("OKX 凭据未配置");var existing=repository.active(tenant,owner,policyId);if(existing!=null)return String.valueOf(existing.get("id"));
-        Account account=account();String id=repository.create(policyId,tenant,owner,properties.getLiveAutomationOrderNotional(),properties.getLiveMaxSessionLoss(),account.totalEquity());controlRepository.audit(policyId,tenant,owner,owner,"AUTO_SESSION_STARTED","ARMED_OFFLINE","ARMED_OFFLINE",id+" / "+request.comment());return id;
+        if(!client.configured())throw new IllegalArgumentException("OKX 凭据未配置");var existing=repository.active(tenant,owner,policyId);if(existing!=null){
+            if(budget.orderNotional().compareTo(decimal(existing,"orderNotional"))!=0 || budget.maxSessionLoss().compareTo(decimal(existing,"maxSessionLoss"))!=0)
+                throw new IllegalArgumentException("已有运行会话使用不同预算，请先停止原会话");
+            var recorded=get(tenant,owner,String.valueOf(existing.get("id"))).get("runConfiguration");
+            if(recorded instanceof tools.jackson.databind.JsonNode config) {
+                if(config.path("feeBps").asInt()!=budget.feeBps() || config.path("slippageBps").asInt()!=budget.slippageBps())
+                    throw new IllegalArgumentException("已有会话使用不同成本假设，请先停止原会话");
+            } else if(request.feeBps()!=null || request.slippageBps()!=null)
+                throw new IllegalArgumentException("旧会话没有成本快照，不能修改其运行配置");
+            return String.valueOf(existing.get("id"));
+        }
+        Account account=account();String id=repository.create(policyId,tenant,owner,budget.orderNotional(),budget.maxSessionLoss(),account.totalEquity());controlRepository.audit(policyId,tenant,owner,owner,"AUTO_SESSION_STARTED","ARMED_OFFLINE","ARMED_OFFLINE",request.comment());
+        var config=new TreeMap<String,Object>(budget.snapshot());config.put("sessionId",id);config.put("reportHash",policy.get("admissionReportHash"));
+        controlRepository.audit(policyId,tenant,owner,owner,"AUTO_SESSION_CONFIG","ARMED_OFFLINE","ARMED_OFFLINE",JsonUtils.toJsonString(config));return id;
     }
 
     public String stop(long tenant,long owner,String sessionId,String reason){var session=owned(tenant,owner,sessionId);String policy=String.valueOf(session.get("policyId"));repository.stop(sessionId,"STOPPED",reason);orders.emergencyStop(tenant,owner,policy,new LiveControlStopRequest("自动会话停止: "+reason));return "STOPPED";}
     public List<Map<String,Object>> list(long tenant,long owner,String policy){if(controlRepository.get(tenant,owner,policy)==null)throw new IllegalArgumentException("实盘安全策略不存在");return repository.list(tenant,owner,policy);}
-    public Map<String,Object> get(long tenant,long owner,String id){var session=owned(tenant,owner,id);session.put("strategy",controls.strategy(tenant,owner,String.valueOf(session.get("policyId"))));session.put("signals",repository.signals(tenant,owner,id));session.put("reconciliations",repository.snapshots(tenant,owner,id));session.put("alerts",repository.alerts(tenant,owner,id));return session;}
+    public Map<String,Object> get(long tenant,long owner,String id){var session=owned(tenant,owner,id);session.put("strategy",controls.strategy(tenant,owner,String.valueOf(session.get("policyId"))));for(var audit:controlRepository.audits(tenant,owner,String.valueOf(session.get("policyId"))))
+            if("AUTO_SESSION_CONFIG".equals(audit.get("eventType"))){var config=JsonUtils.getObjectMapper().readTree(String.valueOf(audit.get("message")));if(id.equals(config.path("sessionId").asText()))session.put("runConfiguration",config);}
+        session.put("signals",repository.signals(tenant,owner,id));session.put("reconciliations",repository.snapshots(tenant,owner,id));session.put("alerts",repository.alerts(tenant,owner,id));return session;}
 
     @Scheduled(fixedDelayString="#{${yudao.quant.live-automation-interval-seconds:15} * 1000}") public void tick(){if(!properties.isLiveExecutionEnabled()||!properties.isLiveAutomationEnabled()||!client.configured())return;for(var session:repository.active())try{process(session);}catch(RuntimeException e){fail(session,"AUTOMATION_FAILURE",safe(e.getMessage()));}}
     public void tick(String id,long tenant,long owner){process(owned(tenant,owner,id));}

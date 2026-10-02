@@ -216,6 +216,12 @@ public class BacktestController {
     public CommonResult<List<Map<String,Object>>> paperOrders(@RequestParam String id){return success(paperOrderReconciliation.orders(tenant(),owner(),id));}
     @GetMapping("/paper-execution/reconciliations") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> paperReconciliations(@RequestParam String id){return success(paperOrderReconciliation.reconciliations(tenant(),owner(),id));}
+    @GetMapping("/live-control/run-plan") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String,Object>> liveRunPlan(@RequestParam String reportId,
+            @RequestParam(required=false) java.math.BigDecimal orderNotional, @RequestParam(required=false) java.math.BigDecimal maxSessionLoss,
+            @RequestParam(required=false) Integer feeBps, @RequestParam(required=false) Integer slippageBps) {
+        return success(liveControls.runPlan(tenant(),owner(),reportId,orderNotional,maxSessionLoss,feeBps,slippageBps));
+    }
     @PostMapping("/live-admission/create") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> createLiveAdmission(@RequestParam(required=false) String backtestId){return success(liveAdmissions.create(tenant(),owner(),backtestId));}
     @GetMapping("/live-admission/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")

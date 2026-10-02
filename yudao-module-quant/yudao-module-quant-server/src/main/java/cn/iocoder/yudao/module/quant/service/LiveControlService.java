@@ -27,6 +27,30 @@ public class LiveControlService {
         return repository.createOrGet(tenant,owner,reportId,(String)report.get("reportHash"),properties.getLiveRiskPolicyVersion(),properties.getLiveExchange(),properties.getLivePair(),properties.getLiveMaxOrderNotional(),properties.getLiveMaxDailyNotional(),properties.getLiveMaxTotalExposure(),properties.getLiveMaxOpenOrders());
     }
 
+    public Map<String,Object> runPlan(long tenant, long owner, String reportId, BigDecimal order, BigDecimal loss, Integer fee, Integer slip) {
+        var report=admissions.get(tenant,owner,reportId);
+        var manifest=JsonUtils.getObjectMapper().readTree((String)report.get("reportJson"));
+        var policies=repository.list(tenant,owner).stream().filter(p->reportId.equals(p.get("admissionReportId"))).toList();
+        var policy=policies.isEmpty()?null:policies.getFirst();
+        BigDecimal orderCap=policy==null?properties.getLiveMaxOrderNotional():decimal(policy,"maxOrderNotional").min(properties.getLiveMaxOrderNotional());
+        var budget=LiveRunBudget.resolve(properties,orderCap,order,loss,fee,slip);
+        var checks=new ArrayList<Map<String,Object>>();
+        for(var check:manifest.path("checks"))checks.add(Map.of("id",check.path("id").asText(),"passed",check.path("passed").asBoolean(),"evidence",check.path("evidence").asText()));
+        boolean current=false;try{admissions.liveStrategy(tenant,owner,report);current=true;}catch(IllegalArgumentException ignored){}
+        checks.add(Map.of("id","STRATEGY_CURRENT","passed",current,"evidence","报告完整且绑定源码未变"));
+        checks.add(Map.of("id","DOUBLE_CONFIRMED","passed","DOUBLE_CONFIRMED".equals(report.get("confirmationState")),"evidence",report.get("confirmationState")));
+        checks.add(Map.of("id","GATE_ARMED","passed",policy!=null&&"ARMED_OFFLINE".equals(policy.get("status")),"evidence",policy==null?"尚未创建门禁":policy.get("status")));
+        checks.add(Map.of("id","LIVE_EXECUTION_ENABLED","passed",properties.isLiveExecutionEnabled(),"evidence","真实执行开关"));
+        checks.add(Map.of("id","LIVE_AUTOMATION_ENABLED","passed",properties.isLiveAutomationEnabled(),"evidence","自动执行开关"));
+        checks.add(Map.of("id","CREDENTIAL_CONFIGURED","passed",credentials.configured(),"evidence","仅检查配置存在；不读取密钥或请求交易所"));
+        var plan=new TreeMap<String,Object>();plan.put("reportId",reportId);plan.put("reportHash",report.get("reportHash"));plan.put("strategy",manifest.path("strategy"));
+        plan.put("budget",budget.snapshot());plan.put("limits",Map.of("maxOrderNotional",orderCap,"maxSessionLoss",properties.getLiveMaxSessionLoss(),
+                "maxDailyNotional",policy==null?properties.getLiveMaxDailyNotional():policy.get("maxDailyNotional"),"maxTotalExposure",policy==null?properties.getLiveMaxTotalExposure():policy.get("maxTotalExposure")));
+        plan.put("checks",checks);plan.put("policyId",policy==null?null:policy.get("id"));
+        plan.put("readyForStartRequest",checks.stream().allMatch(c->Boolean.TRUE.equals(c.get("passed"))));
+        plan.put("costAssumptionsOnly",true);plan.put("readOnly",true);
+        plan.put("evidenceHash",DatasetRegistry.hash(JsonUtils.toJsonByte(plan)));return plan;
+    }
     public Map<String,Object> strategy(long tenant,long owner,String id){
         var policy=repository.get(tenant,owner,id);if(policy==null)throw new IllegalArgumentException("Policy not found");
         var report=admissions.get(tenant,owner,(String)policy.get("admissionReportId"));

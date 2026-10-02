@@ -177,10 +177,20 @@ export const verifyOkxPrivateRead=(id:string,data:{confirmation:'CONFIRM_OKX_PRI
 export interface LiveAutomationSignal { id:string;candleAt:number;signalType:'NONE'|'BUY'|'SELL';closePrice:number;fastEma:number;slowEma:number;signalHash:string;clientOrderId?:string;decisionId?:string;exchangeOrderId?:string;status:string;message?:string;createdAt:number;updatedAt:number }
 export interface LiveAutomationReconciliation { id:string;totalEquity:number;btcExposure:number;exchangeOpenOrders:number;platformOpenOrders:number;sessionLoss:number;reconciliationStatus:'PASSED'|'MISMATCH';evidenceHash:string;errorMessage?:string;reconciledAt:number }
 export interface LiveAutomationAlert { id:string;alertType:string;severity:'HIGH';status:'OPEN'|'RESOLVED';message:string;firstSeenAt:number;lastSeenAt:number;resolvedAt?:number }
-export interface LiveAutomationSession { strategy?:LiveStrategyBinding; id:string;policyId:string;strategyName:string;timeframe:string;orderNotional:number;maxSessionLoss:number;startEquity:number;highEquity:number;lastEquity:number;status:'RUNNING'|'STOPPED'|'FAILED'|'RISK_STOPPED';lastHeartbeatAt?:number;lastCandleAt?:number;stopReason?:string;startedAt:number;stoppedAt?:number;updatedAt:number;signals?:LiveAutomationSignal[];reconciliations?:LiveAutomationReconciliation[];alerts?:LiveAutomationAlert[] }
+export interface LiveAutomationSession { runConfiguration?:LiveRunBudget & {sessionId:string;reportHash:string}; strategy?:LiveStrategyBinding; id:string;policyId:string;strategyName:string;timeframe:string;orderNotional:number;maxSessionLoss:number;startEquity:number;highEquity:number;lastEquity:number;status:'RUNNING'|'STOPPED'|'FAILED'|'RISK_STOPPED';lastHeartbeatAt?:number;lastCandleAt?:number;stopReason?:string;startedAt:number;stoppedAt?:number;updatedAt:number;signals?:LiveAutomationSignal[];reconciliations?:LiveAutomationReconciliation[];alerts?:LiveAutomationAlert[] }
 export interface LiveExchangeOrder { id:string;clientOrderId:string;exchangeOrderId?:string;instrumentId:string;side:'BUY'|'SELL';price:number;amount:number;notional:number;status:string;filledAmount:number;averagePrice?:number;submittedAt?:number;updatedAt:number;cancelDeadlineAt?:number }
-export const startLiveAutomation=(id:string,data:{confirmation:'CONFIRM_AUTO_LIVE_START';comment:string}):Promise<string>=>request.post({url:'/quant/backtest/live-control/automation/start',params:{id},data})
+export const startLiveAutomation=(id:string,data:{confirmation:'CONFIRM_AUTO_LIVE_START';comment:string}&Partial<LiveRunBudget>):Promise<string>=>request.post({url:'/quant/backtest/live-control/automation/start',params:{id},data})
 export const stopLiveAutomation=(sessionId:string,comment:string):Promise<string>=>request.post({url:'/quant/backtest/live-control/automation/stop',params:{sessionId},data:{comment}})
 export const listLiveAutomations=(id:string):Promise<LiveAutomationSession[]>=>request.get({url:'/quant/backtest/live-control/automation/list',params:{id}})
 export const getLiveAutomation=(sessionId:string):Promise<LiveAutomationSession>=>request.get({url:'/quant/backtest/live-control/automation/get',params:{sessionId}})
 export const listLiveOrders=(id:string):Promise<LiveExchangeOrder[]>=>request.get({url:'/quant/backtest/live-control/order/list',params:{id}})
+
+export interface LiveRunBudget { orderNotional:number; maxSessionLoss:number; feeBps:number; slippageBps:number }
+export interface LiveRunPlan {
+  reportId:string; reportHash:string; strategy?:LiveStrategyBinding; policyId?:string;
+  budget:LiveRunBudget; limits:{maxOrderNotional:number;maxSessionLoss:number;maxDailyNotional:number;maxTotalExposure:number};
+  checks:{id:string;passed:boolean;evidence:string}[]; readyForStartRequest:boolean; evidenceHash:string;
+  costAssumptionsOnly:true; readOnly:true;
+}
+export const getLiveRunPlan=(reportId:string,budget?:LiveRunBudget):Promise<LiveRunPlan>=>
+  request.get({url:'/quant/backtest/live-control/run-plan',params:{reportId,...budget}})

@@ -466,6 +466,11 @@ class QuantBacktestTest {
         String configuredReport=admissions.create(1,10,configuredTask);
         assertNotEquals(missingPaper,configuredReport);
         var configuredView=admissions.get(1,10,configuredReport);
+        var plan=controls.runPlan(1,10,configuredReport,new BigDecimal("3"),new BigDecimal("2"),10,5);
+        assertEquals(false,plan.get("readyForStartRequest"));assertEquals(true,plan.get("readOnly"));
+        assertEquals(plan.get("evidenceHash"),controls.runPlan(1,10,configuredReport,new BigDecimal("3"),new BigDecimal("2"),10,5).get("evidenceHash"));
+        assertThrows(IllegalArgumentException.class,()->controls.runPlan(2,10,configuredReport,null,null,null,null));
+        assertThrows(IllegalArgumentException.class,()->controls.runPlan(1,11,configuredReport,null,null,null,null));
         assertEquals(configured,admissions.liveStrategy(1,10,configuredView).get("strategyVersionId"));
         assertThrows(IllegalArgumentException.class,()->controls.create(1,10,configuredReport));
         String configuredHash=String.valueOf(configuredView.get("reportHash"));
