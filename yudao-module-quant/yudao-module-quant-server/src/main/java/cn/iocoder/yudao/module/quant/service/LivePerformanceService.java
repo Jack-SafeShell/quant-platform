@@ -46,7 +46,7 @@ public class LivePerformanceService {
         return result;
     }
     public static String recordedReason(String message){
-        if(message!=null)for(String reason:List.of("STOP_LOSS","TAKE_PROFIT","EMA_CROSS","NO_CROSS","HOLDING_POSITION"))if(message.startsWith("["+reason+"] "))return reason;
+        if(message!=null)for(String reason:List.of("STOP_LOSS","TAKE_PROFIT","EMA_CROSS","NO_CROSS","HOLDING_POSITION","CHANNEL_ENTRY","CHANNEL_EXIT","NO_BREAKOUT"))if(message.startsWith("["+reason+"] "))return reason;
         return "UNRECORDED";
     }
     public static Map<String,Object> calculate(List<Map<String,Object>> rows,BigDecimal mark,Long markAt) {

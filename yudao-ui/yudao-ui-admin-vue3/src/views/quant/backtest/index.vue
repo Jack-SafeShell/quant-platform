@@ -1,6 +1,6 @@
 <template>
   <ContentWrap title="历史回测">
-    <el-alert title="EMA 交叉策略 · BTC/USDT 现货 · 1 小时 · 可配置版本" type="info" :closable="false" />
+    <el-alert title="EMA 交叉 / 通道突破 · BTC/USDT 现货 · 1 小时 · 可配置版本" type="info" :closable="false" />
     <p class="text-gray-500">配置保存为不可变策略版本，回测和模拟盘使用所选版本；包含 240 根预热，日期按 UTC，结束日不包含。</p>
     <el-alert v-if="!enabled" title="回测尚未启用。请先完成数据准备，并在 yudao-server 中启用量化回测配置。" type="warning" :closable="false" />
     <StrategyConfigEditor :versions="strategyVersions" :selected-version-id="form.strategyVersionId" @created="selectCreatedStrategy" />
@@ -53,7 +53,7 @@
     <el-table :data="liveAdmissions" class="mt-3"><el-table-column prop="reportHash" label="报告 SHA-256" min-width="360" /><el-table-column prop="confirmationState" label="确认状态" width="180" /><el-table-column label="生成时间" width="180"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column><el-table-column label="操作" width="180"><template #default="s"><el-button link type="primary" @click="showLiveAdmission(s.row.id)">查看与确认</el-button><el-button link @click="downloadLiveAdmission(s.row.id)">导出</el-button></template></el-table-column></el-table>
   </ContentWrap>
   <ContentWrap title="受控实盘与固定策略自动执行">
-    <el-alert title="真实执行由后端双开关控制；默认关闭。自动会话使用准入报告绑定的 EMA 配置版本，限定 OKX BTC/USDT 现货；止损止盈按已收盘 1h K 线毛收益判断，不等同于回测盘中成交。" type="warning" :closable="false" />
+    <el-alert title="真实执行由后端双开关控制；默认关闭。自动会话使用准入报告绑定的 EMA 或突破配置版本，限定 OKX BTC/USDT 现货；止损止盈按已收盘 1h K 线毛收益判断，不等同于回测盘中成交。" type="warning" :closable="false" />
     <el-table :data="liveAdmissions.filter(x=>x.confirmationState==='DOUBLE_CONFIRMED')" class="mt-3"><el-table-column prop="reportHash" label="已双确认报告" min-width="360" /><el-table-column label="操作" width="180"><template #default="s"><el-button type="primary" link @click="generateLiveControl(s.row.id)">创建/查看门禁</el-button></template></el-table-column></el-table>
     <el-table :data="liveControls" class="mt-3"><el-table-column prop="policyVersion" label="策略" /><el-table-column prop="exchangeName" label="交易所" /><el-table-column prop="pairSymbol" label="交易对" /><el-table-column prop="status" label="状态" /><el-table-column label="单笔/单日/总仓位" min-width="220"><template #default="s">{{ s.row.maxOrderNotional }} / {{ s.row.maxDailyNotional }} / {{ s.row.maxTotalExposure }} USDT</template></el-table-column><el-table-column label="操作"><template #default="s"><el-button link type="primary" @click="showLiveControl(s.row.id)">管理与查看证据</el-button></template></el-table-column></el-table>
   </ContentWrap>
@@ -63,7 +63,7 @@
       <el-descriptions :column="3" border class="mt-3">
         <el-descriptions-item label="状态">{{ selectedLiveControl.status }}</el-descriptions-item>
         <el-descriptions-item label="绑定策略版本">{{ selectedLiveControl.strategy?.strategyVersionId }}</el-descriptions-item>
-        <el-descriptions-item label="EMA / 止损 / 止盈">{{ selectedLiveControl.strategy?.configuration.fastPeriod }}/{{ selectedLiveControl.strategy?.configuration.slowPeriod }} / {{ selectedLiveControl.strategy?.configuration.stopLossRatio }} / {{ selectedLiveControl.strategy?.configuration.takeProfitRatio }}</el-descriptions-item>
+        <el-descriptions-item label="策略配置">{{ strategyLabel(selectedLiveControl.strategy?.configuration) }}</el-descriptions-item>
         <el-descriptions-item label="交易范围">{{ selectedLiveControl.exchangeName }} / {{ selectedLiveControl.pairSymbol }} / 现货</el-descriptions-item>
         <el-descriptions-item label="凭据">{{ selectedLiveControl.credentialProvider==='UNCONFIGURED'?'未配置':'Windows DPAPI' }}</el-descriptions-item>
         <el-descriptions-item label="单笔上限">{{ selectedLiveControl.maxOrderNotional }} USDT</el-descriptions-item>

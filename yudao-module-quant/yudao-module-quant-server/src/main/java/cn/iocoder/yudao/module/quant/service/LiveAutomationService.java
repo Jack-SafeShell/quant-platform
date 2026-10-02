@@ -49,13 +49,55 @@ public class LiveAutomationService {
     private int pendingCount(){Map<String,Object> response=parse(client.pendingOrders());if(!"0".equals(text(response,"code")))throw new IllegalStateException("OKX 挂单核对失败");Object data=response.get("data");return data instanceof List<?> list?list.size():Integer.MAX_VALUE;}
     private BigDecimal dailyNotional(String policy){long start=java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();return orders.dailyNotional(policy,start);}
     public static MarketSignal evaluate(String json){return evaluate(json,EmaStrategyTemplate.configuration(EmaStrategyTemplate.defaults()));}
-    public static MarketSignal evaluate(String json,Map<String,Object> configuration){int fastPeriod=((Number)configuration.get("fastPeriod")).intValue(),slowPeriod=((Number)configuration.get("slowPeriod")).intValue();if(fastPeriod<2||slowPeriod>120||fastPeriod>=slowPeriod)throw new IllegalArgumentException("Invalid EMA periods");Map<String,Object> response=parse(json);if(!"0".equals(text(response,"code")))throw new IllegalArgumentException("OKX K 线请求失败");Object data=response.get("data");if(!(data instanceof List<?> raw))throw new IllegalArgumentException("OKX K 线数据缺失");List<Candle> candles=new ArrayList<>();for(Object value:raw)if(value instanceof List<?> row&&row.size()>=9&&"1".equals(String.valueOf(row.get(8))))candles.add(new Candle(Long.parseLong(String.valueOf(row.get(0))),new BigDecimal(String.valueOf(row.get(4))),new BigDecimal(String.valueOf(row.get(5)))));candles.sort(Comparator.comparingLong(Candle::at));if(candles.size()<slowPeriod+1)throw new IllegalArgumentException("Insufficient closed candles for selected slow EMA");double[] fast=ema(candles,fastPeriod),slow=ema(candles,slowPeriod);int i=candles.size()-1,p=i-1;String type="NONE";if(candles.get(i).volume().signum()>0&&fast[i]>slow[i]&&fast[p]<=slow[p])type="BUY";else if(candles.get(i).volume().signum()>0&&fast[i]<slow[i]&&fast[p]>=slow[p])type="SELL";return new MarketSignal(candles.get(i).at(),type,candles.get(i).close(),BigDecimal.valueOf(fast[i]),BigDecimal.valueOf(slow[i]));}
+    public static MarketSignal evaluate(String json, Map<String,Object> configuration) {
+        boolean breakout = "CHANNEL_BREAKOUT".equals(configuration.get("template"));
+        int first = ((Number) configuration.get(breakout ? "entryPeriod" : "fastPeriod")).intValue();
+        int second = ((Number) configuration.get(breakout ? "exitPeriod" : "slowPeriod")).intValue();
+        if (first < 2 || first > 120 || second < 2 || second > 120 || (!breakout && first >= second))
+            throw new IllegalArgumentException("Invalid strategy periods");
+        Map<String,Object> response = parse(json);
+        if (!"0".equals(text(response,"code"))) throw new IllegalArgumentException("OKX candle request failed");
+        if (!(response.get("data") instanceof List<?> raw)) throw new IllegalArgumentException("Missing candle data");
+        List<Candle> candles = new ArrayList<>(); Set<Long> timestamps = new HashSet<>();
+        for (Object value : raw) if (value instanceof List<?> row && row.size() >= 9 && "1".equals(String.valueOf(row.get(8)))) {
+            long at = Long.parseLong(String.valueOf(row.get(0)));
+            if (!timestamps.add(at)) throw new IllegalArgumentException("Duplicate closed candle");
+            var candle = new Candle(at, new BigDecimal(String.valueOf(row.get(4))), new BigDecimal(String.valueOf(row.get(5))),
+                    new BigDecimal(String.valueOf(row.get(2))), new BigDecimal(String.valueOf(row.get(3))));
+            if (breakout && (candle.low().signum() <= 0 || candle.high().compareTo(candle.low()) < 0
+                    || candle.close().compareTo(candle.low()) < 0 || candle.close().compareTo(candle.high()) > 0 || candle.volume().signum() < 0))
+                throw new IllegalArgumentException("Invalid channel candle");
+            candles.add(candle);
+        }
+        candles.sort(Comparator.comparingLong(Candle::at));
+        int minimum = breakout ? Math.max(first, second) + 1 : second + 1;
+        if (candles.size() < minimum) throw new IllegalArgumentException("Insufficient closed candles");
+        int i = candles.size() - 1; var current = candles.get(i);
+        if (breakout) {
+            BigDecimal high = candles.get(i - first).high(), low = candles.get(i - second).low();
+            for (int j = i - first; j < i; j++) high = high.max(candles.get(j).high());
+            for (int j = i - second; j < i; j++) low = low.min(candles.get(j).low());
+            String type = "NONE";
+            if (current.volume().signum() > 0) {
+                if (current.close().compareTo(high) > 0) type = "BUY";
+                else if (current.close().compareTo(low) < 0) type = "SELL";
+            }
+            return new MarketSignal(current.at(), type, current.close(), high, low);
+        }
+        double[] fast = ema(candles, first), slow = ema(candles, second); int previous = i - 1;
+        String type = "NONE";
+        if (current.volume().signum() > 0 && fast[i] > slow[i] && fast[previous] <= slow[previous]) type = "BUY";
+        else if (current.volume().signum() > 0 && fast[i] < slow[i] && fast[previous] >= slow[previous]) type = "SELL";
+        return new MarketSignal(current.at(), type, current.close(), BigDecimal.valueOf(fast[i]), BigDecimal.valueOf(slow[i]));
+    }
     public static String signalReason(MarketSignal signal,Map<String,Object> config,BigDecimal entry){
         if(entry!=null){
             if(signal.close().compareTo(entry.multiply(BigDecimal.ONE.subtract(new BigDecimal(String.valueOf(config.get("stopLossRatio"))))))<=0)return "STOP_LOSS";
             if(signal.close().compareTo(entry.multiply(BigDecimal.ONE.add(new BigDecimal(String.valueOf(config.get("takeProfitRatio"))))))>=0)return "TAKE_PROFIT";
             if("BUY".equals(signal.type()))return "HOLDING_POSITION";
         }
+        if ("CHANNEL_BREAKOUT".equals(config.get("template")))
+            return "BUY".equals(signal.type()) ? "CHANNEL_ENTRY" : "SELL".equals(signal.type()) ? "CHANNEL_EXIT" : "NO_BREAKOUT";
         return "NONE".equals(signal.type())?"NO_CROSS":"EMA_CROSS";
     }
     // Exit thresholds use closed-candle gross return, not exchange-native stops or intrabar fills.
@@ -86,7 +128,7 @@ public class LiveAutomationService {
     private static String plain(BigDecimal value){return value.stripTrailingZeros().toPlainString();}
     public static BigDecimal sellAmount(BigDecimal sessionPosition,BigDecimal availableBtc,BigDecimal orderNotional,BigDecimal close){if(sessionPosition==null||availableBtc==null||orderNotional==null||close==null||sessionPosition.signum()<=0||availableBtc.signum()<=0||orderNotional.signum()<=0||close.signum()<=0)return BigDecimal.ZERO.setScale(8);BigDecimal cap=orderNotional.divide(close,8,RoundingMode.DOWN);return sessionPosition.min(availableBtc).min(cap).max(BigDecimal.ZERO).setScale(8,RoundingMode.DOWN);}
     private static String safe(String value){if(value==null)return "未知错误";return value.length()>500?value.substring(0,500):value;}
-    private record Candle(long at,BigDecimal close,BigDecimal volume){}
+    private record Candle(long at,BigDecimal close,BigDecimal volume,BigDecimal high,BigDecimal low){}
     public record MarketSignal(long candleAt,String type,BigDecimal close,BigDecimal fast,BigDecimal slow){}
     private record Account(BigDecimal totalEquity,BigDecimal btcExposure,BigDecimal availableBtc){}
 

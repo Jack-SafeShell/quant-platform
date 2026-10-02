@@ -107,8 +107,8 @@ public class LiveAdmissionService {
         var snapshot=repository.strategySnapshot(tenant,owner,version);
         if(snapshot==null)throw new IllegalArgumentException("Owned strategy version missing");
         String source=String.valueOf(snapshot.get("sourceCode")),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
-        var configuration=EmaStrategyTemplate.readConfiguration(source);
-        if(configuration==null||!hash.equals(snapshot.get("sourceHash")))throw new IllegalArgumentException("Only an intact server-owned EMA template is supported");
+        var configuration=StrategyTemplates.readConfiguration(source);
+        if(configuration==null||!hash.equals(snapshot.get("sourceHash")))throw new IllegalArgumentException("Only an intact server-owned strategy template is supported");
         return new TreeMap<>(Map.of("strategyVersionId",version,"sourceHash",hash,"configuration",configuration));
     }
 

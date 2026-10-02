@@ -282,7 +282,9 @@ class QuantBacktestTest {
         assertEquals(20, ((Map<?, ?>) service.get(1, 10, id).get("strategyConfiguration")).get("entryPeriod"));
         var report = JsonUtils.getObjectMapper().readTree(new String(service.exportReport(1, 10, id, "json").content(), java.nio.charset.StandardCharsets.UTF_8));
         assertEquals(10, report.path("strategy").path("configuration").path("exitPeriod").asInt());
-        assertThrows(IllegalArgumentException.class, () -> new LiveAdmissionService(new cn.iocoder.yudao.module.quant.dal.LiveAdmissionRepository(jdbc)).create(1, 10, id));
+        var admissions = new LiveAdmissionService(new cn.iocoder.yudao.module.quant.dal.LiveAdmissionRepository(jdbc));
+        String incomplete = admissions.create(1, 10, id);
+        assertThrows(IllegalArgumentException.class, () -> admissions.requireFixedLiveStrategy(1, 10, admissions.get(1, 10, incomplete)));
     }
     @Test void configuredVersionsAreImmutableReusedAndFlowThroughReports() throws Exception {
         var config = new cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest(12, 48, new BigDecimal("0.015"), new BigDecimal("0.03"));
@@ -415,7 +417,9 @@ class QuantBacktestTest {
         assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,id));
     }
 
-    @Test void liveAdmissionReportIsImmutableReadOnlyAndDoubleConfirmed() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void liveAdmissionReportIsImmutableReadOnlyAndDoubleConfirmed(boolean breakout) throws Exception {
         String task=service.create(1,10,request("live-admission"));assertTrue(repository.claim(task));repository.complete(task,new BacktestEngine.Output("freqtrade-test","{\"totalTrades\":4}","artifact-live"));
         String batch=UUID.randomUUID().toString(),session=UUID.randomUUID().toString(),readiness=UUID.randomUUID().toString(),execution=UUID.randomUUID().toString();long now=System.currentTimeMillis();
         jdbc.update("INSERT INTO quant_optimization_batch(id,tenant_id,owner_id,dataset_id,strategy_version_id,train_start,split_date,validation_end,created_at) VALUES(?,?,?,?,?,?,?,?,?)",batch,1,10,"test",versionId,"2025-01-01","2025-01-08","2025-01-15",now);
@@ -448,7 +452,9 @@ class QuantBacktestTest {
         assertEquals(1,limited.get("orderCount")); // Full ledger totals are independent of trace pagination.
 
         // Configured admission cannot borrow another version's paper evidence.
-        String configured=service.createStrategyVersion(1,10,new cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest(12,48,new BigDecimal("0.015"),new BigDecimal("0.03")));
+        String configured = breakout
+                ? service.createBreakoutVersion(1,10,new cn.iocoder.yudao.module.quant.api.backtest.BreakoutStrategyRequest(20,10,new BigDecimal("0.015"),new BigDecimal("0.03")))
+                : service.createStrategyVersion(1,10,new cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest(12,48,new BigDecimal("0.015"),new BigDecimal("0.03")));
         var base=request("configured-live-binding");
         String configuredTask=service.create(1,10,new BacktestRequest(base.requestKey(),configured,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee()));
         assertTrue(repository.claim(configuredTask));repository.complete(configuredTask,new BacktestEngine.Output("test","{\"totalTrades\":20}","configured-live-artifact"));
@@ -467,7 +473,7 @@ class QuantBacktestTest {
         admissions.confirm(1,10,configuredReport,new cn.iocoder.yudao.module.quant.api.backtest.LiveAdmissionConfirmationRequest("KEY_BOUNDARY_REVIEW","CONFIRM_KEY_BOUNDARY_ACCEPTED","test binding",configuredHash));
         String configuredPolicy=controls.create(1,10,configuredReport);
         assertEquals("HALTED",controls.get(1,10,configuredPolicy).get("status"));
-        assertEquals(12,((Map<?,?>)controls.strategy(1,10,configuredPolicy).get("configuration")).get("fastPeriod"));
+        assertEquals(breakout ? 20 : 12,((Map<?,?>)controls.strategy(1,10,configuredPolicy).get("configuration")).get(breakout ? "entryPeriod" : "fastPeriod"));
         jdbc.update("UPDATE quant_strategy_version SET source_code=CONCAT(source_code,'# changed') WHERE id=?",configured);
         assertThrows(IllegalArgumentException.class,()->controls.arm(1,10,configuredPolicy,new cn.iocoder.yudao.module.quant.api.backtest.LiveControlArmRequest("CONFIRM_OFFLINE_GATE_ARM","must reject changed source")));
 

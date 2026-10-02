@@ -12,7 +12,7 @@
         <el-form-item label="止盈 %"><el-input-number v-model="form.takeProfitPercent" :min="0.1" :max="50" :step="0.1" :precision="4" /></el-form-item>
         <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="saving" @click="save">保存并选择版本</el-button></el-form-item>
       </el-form>
-      <p>模拟盘沿用评审批次绑定的策略版本与参数集；实盘须以该版本的回测和模拟证据生成新准入报告并重新确认；保存配置不会改变已有实盘会话。突破模板当前用于研究和模拟，尚未接入自动实盘。</p>
+      <p>模拟盘沿用评审批次绑定的策略版本与参数集；EMA 和突破实盘均须绑定同版本回测与模拟证据、确认准入报告并通过资金门禁。保存配置不会改变已有会话。实盘止损止盈按已收盘 1h K 线判断，可能延迟至下一小时，不等同于引擎盘中撮合。</p>
     </el-collapse-item>
   </el-collapse>
 </template>

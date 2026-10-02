@@ -106,7 +106,7 @@
               <el-descriptions-item label="已知费用与返佣折算">{{ performanceMoney(performance.knownSignedCostsUsdt) }} USDT（扣费负）</el-descriptions-item>
               <el-descriptions-item label="剩余持仓估值">{{ performanceMoney(performance.markedPositionValue) }} USDT</el-descriptions-item>
               <el-descriptions-item label="绑定版本">{{ performance.strategy?.strategyVersionId || performance.legacyStrategyVersionId || '未记录' }}</el-descriptions-item>
-              <el-descriptions-item label="EMA / 止损 / 止盈">{{ performance.strategy ? `EMA${performance.strategy.configuration.fastPeriod}/${performance.strategy.configuration.slowPeriod} / ${performance.strategy.configuration.stopLossRatio * 100}% / ${performance.strategy.configuration.takeProfitRatio * 100}%` : '旧报告未保存配置快照' }}</el-descriptions-item>
+              <el-descriptions-item label="策略配置">{{ strategyConfigurationLabel(performance.strategy?.configuration) }}</el-descriptions-item>
               <el-descriptions-item label="准入证据">{{ shortHash(performance.admissionReportHash) }}</el-descriptions-item>
             </el-descriptions>
             <el-alert v-if="!performance.valuationComplete" class="mt-3" title="费用或估值证据不完整，净收益暂不可计算。" type="warning" :closable="false" />
@@ -123,7 +123,8 @@
                   <el-descriptions-item label="门禁决定">{{ s.row.decisionId || '-' }} / {{ s.row.gateReason || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="交易所订单">{{ s.row.order?.exchangeOrderId || '-' }}</el-descriptions-item>
                   <el-descriptions-item label="账本关联">{{ s.row.linkState }}</el-descriptions-item>
-                  <el-descriptions-item label="快 / 慢 EMA">{{ s.row.fastEma }} / {{ s.row.slowEma }}</el-descriptions-item>
+                  <el-descriptions-item label="快 EMA / 入场上沿">{{ s.row.fastEma }}</el-descriptions-item>
+                  <el-descriptions-item label="慢 EMA / 退出下沿">{{ s.row.slowEma }}</el-descriptions-item>
                   <el-descriptions-item label="收盘价格">{{ s.row.closePrice }}</el-descriptions-item>
                   <el-descriptions-item label="执行说明" :span="2">{{ s.row.message || '-' }}</el-descriptions-item>
                 </el-descriptions>
@@ -179,8 +180,8 @@
             <el-table-column prop="signalType" label="信号" width="80" />
             <el-table-column prop="status" label="执行结果" width="150" />
             <el-table-column prop="closePrice" label="收盘价" width="120" />
-            <el-table-column prop="fastEma" label="快 EMA" width="130" />
-            <el-table-column prop="slowEma" label="慢 EMA" width="130" />
+            <el-table-column prop="fastEma" label="快 EMA / 入场上沿" width="165" />
+            <el-table-column prop="slowEma" label="慢 EMA / 退出下沿" width="165" />
             <el-table-column prop="message" label="执行说明" min-width="220" show-overflow-tooltip />
             <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" show-overflow-tooltip />
             <el-table-column prop="signalHash" label="证据摘要" min-width="200" show-overflow-tooltip />
@@ -375,7 +376,7 @@ const parameterRows = computed(() => parameterSets.value.map((item) => {
 }))
 
 function reasonLabel(reason:string) {
-  return ({ STOP_LOSS:'止损阈值', TAKE_PROFIT:'止盈阈值', EMA_CROSS:'EMA 交叉', NO_CROSS:'无交叉', HOLDING_POSITION:'持仓中不追加买入', UNRECORDED:'历史未记录' } as Record<string,string>)[reason] || reason
+  return ({ STOP_LOSS:'止损阈值', TAKE_PROFIT:'止盈阈值', EMA_CROSS:'EMA 交叉', NO_CROSS:'无交叉', CHANNEL_ENTRY:'通道突破买入', CHANNEL_EXIT:'通道跌破退出', NO_BREAKOUT:'未突破通道', HOLDING_POSITION:'持仓中不追加买入', UNRECORDED:'历史未记录' } as Record<string,string>)[reason] || reason
 }
 function exportExecutionReview() {
   if (!performance.value || refreshError.value || performanceError.value) return
