@@ -53,12 +53,100 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/019_live_control.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/020_live_order_execution.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/021_live_automation.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/023_strategy_experiment.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
         writeDataset();
         versionId = (String) service.listStrategyVersions(1, 10).getFirst().get("id");
         parameterSetId = (String) service.listParameterSets(1, 10).getFirst().get("id");
+    }
+    StrategyExperimentService experiments() {
+        return new StrategyExperimentService(new cn.iocoder.yudao.module.quant.dal.StrategyExperimentRepository(jdbc), repository,
+                new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc), repository, service), transactions);
+    }
+    cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest experimentRequest(String key, List<String> versions, String dataset) {
+        return new cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest(key, versions, parameterSetId, dataset, "2025-01-11", "2025-01-18", "2025-01-25");
+    }
+    String secondVersion() throws Exception {
+        return service.createStrategyVersion(1, 10, new cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest(12, 48, new BigDecimal("0.015"), new BigDecimal("0.03")));
+    }
+    @Test void experimentsShareConditionsAndAreIdempotentAndScoped() throws Exception {
+        var experiments = experiments(); String second = secondVersion();
+        var request = experimentRequest("experiment", List.of(versionId, second), "test");
+        String id = experiments.create(1, 10, request);
+        assertEquals(id, experiments.create(1, 10, experimentRequest("experiment", List.of(second, versionId), "test")));
+        assertThrows(IllegalArgumentException.class, () -> experiments.create(1, 10, experimentRequest("experiment", List.of(second, versionId), "missing")));
+        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM quant_optimization_batch", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(DISTINCT parameter_set_id) FROM quant_backtest_task", Integer.class));
+        var view = experiments.get(1, 10, id);
+        assertEquals(false, view.get("terminal")); assertEquals(false, view.get("autoSelected"));
+        assertFalse(view.containsKey("requestHash"));
+        assertEquals(2, ((List<?>) view.get("rows")).size());
+        assertTrue(experiments.list(2, 10).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> experiments.get(1, 11, id));
+        assertThrows(IllegalArgumentException.class, () -> experiments.get(2, 10, id));
+    }
+    @Test void experimentsRollbackInvalidDataAndRejectForeignVersionsAndCapacity() throws Exception {
+        var experiments = experiments(); String second = secondVersion();
+        assertThrows(IllegalArgumentException.class, () -> experiments.create(1, 10, experimentRequest("missing", List.of(versionId, second), "missing")));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_strategy_experiment", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_optimization_batch", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task", Integer.class));
+        String foreign = (String) service.listStrategyVersions(2, 10).getFirst().get("id");
+        assertThrows(IllegalArgumentException.class, () -> experiments.create(1, 10, experimentRequest("foreign", List.of(versionId, foreign), "test")));
+        assertThrows(IllegalArgumentException.class, () -> experiments.create(1, 10, experimentRequest("duplicate", List.of(versionId, versionId), "test")));
+        for (int i = 0; i < 7; i++) service.create(1, 10, request("queued-" + i));
+        assertThrows(IllegalArgumentException.class, () -> experiments.create(1, 10, experimentRequest("capacity", List.of(versionId, second), "test")));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM quant_strategy_experiment", Integer.class));
+        assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM quant_backtest_task", Integer.class));
+    }
+    @Test @SuppressWarnings("unchecked") void experimentFailureStaysVisibleAndRankingWaitsForAllTasks() throws Exception {
+        var experiments = experiments(); String second = secondVersion();
+        String id = experiments.create(1, 10, experimentRequest("failed-variant", List.of(versionId, second), "test"));
+        var taskIds = jdbc.queryForList("SELECT id FROM quant_backtest_task ORDER BY id", String.class);
+        for (int i = 0; i < taskIds.size(); i++) {
+            String task = taskIds.get(i); assertTrue(repository.claim(task));
+            if (i == 0) repository.fail(task, "controlled failure");
+            else repository.complete(task, new BacktestEngine.Output("test", "{\"totalTrades\":14,\"returnRatio\":0.02,\"maxDrawdownRatio\":0.01}", "hash-" + task));
+            if (i < 3) {
+                var view = experiments.get(1, 10, id); assertEquals(false, view.get("terminal"));
+                assertTrue(((List<Map<String, Object>>) view.get("rows")).stream().noneMatch(row -> row.containsKey("rank")));
+            }
+        }
+        var view = experiments.get(1, 10, id); assertEquals(true, view.get("terminal"));
+        var rows = (List<Map<String, Object>>) view.get("rows");
+        assertEquals(2, rows.size()); assertEquals(1, rows.getFirst().get("rank"));
+        assertNull(rows.getLast().get("rank")); assertEquals(false, rows.getLast().get("paperEligible"));
+        assertTrue("FAILED".equals(rows.getLast().get("trainStatus")) || "FAILED".equals(rows.getLast().get("validationStatus")));
+    }
+    @Test @SuppressWarnings("unchecked") void experimentRankingAndPaperPreparationRetainSelectedVersion() throws Exception {
+        var experiments = experiments(); String second = secondVersion();
+        String id = experiments.create(1, 10, experimentRequest("ranking", List.of(versionId, second), "test"));
+        var optimization = new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc), repository, service);
+        var rows = (List<Map<String, Object>>) experiments.get(1, 10, id).get("rows");
+        for (var row : rows) {
+            var batch = optimization.get(1, 10, (String) row.get("batchId"));
+            for (var task : (List<Map<String, Object>>) batch.get("members")) {
+                String taskId = (String) task.get("taskId"); assertTrue(repository.claim(taskId));
+                double profit = "TRAIN".equals(task.get("phase")) ? 0.03 : (second.equals(row.get("strategyVersionId")) ? 0.025 : 0.02);
+                repository.complete(taskId, new BacktestEngine.Output("test", "{\"totalTrades\":14,\"netProfit\":1,\"returnRatio\":" + profit + ",\"maxDrawdownRatio\":0.01}", "hash-" + taskId));
+            }
+        }
+        var view = experiments.get(1, 10, id); assertEquals(true, view.get("terminal"));
+        rows = (List<Map<String, Object>>) view.get("rows"); var best = rows.getFirst();
+        assertEquals(second, best.get("strategyVersionId")); assertEquals(1, best.get("rank"));
+        String batchId = (String) best.get("batchId"); var batch = optimization.get(1, 10, batchId);
+        optimization.review(1, 10, batchId, new cn.iocoder.yudao.module.quant.api.backtest.ResearchReviewRequest("ACCEPTED", "test", (String)((Map<?,?>) batch.get("researchDraft")).get("evidenceSha256")));
+        var admission = (Map<String, Object>) optimization.get(1, 10, batchId).get("paperAdmission");
+        assertEquals(true, admission.get("eligible"));
+        optimization.reviewAdmission(1, 10, batchId, new cn.iocoder.yudao.module.quant.api.backtest.PaperAdmissionReviewRequest("READY", "test", (String) admission.get("evidenceSha256")));
+        var sessions = new PaperSessionService(new cn.iocoder.yudao.module.quant.dal.PaperSessionRepository(jdbc), optimization);
+        String session = sessions.create(1, 10, new cn.iocoder.yudao.module.quant.api.backtest.PaperSessionRequest(batchId, parameterSetId));
+        best = ((List<Map<String, Object>>) experiments.get(1, 10, id).get("rows")).getFirst();
+        assertEquals(session, best.get("paperSessionId")); assertEquals("PENDING_APPROVAL", best.get("paperSessionStatus"));
+        assertEquals(second, sessions.get(1, 10, session).get("strategy_version_id"));
     }
     void writeDataset() throws Exception {
         Path dir = root.resolve("datasets/test"); Files.createDirectories(dir);

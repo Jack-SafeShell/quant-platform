@@ -6,6 +6,8 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.quant.api.backtest.BacktestRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest;
+import cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest;
+import cn.iocoder.yudao.module.quant.service.StrategyExperimentService;
 import cn.iocoder.yudao.module.quant.api.backtest.DatasetDownloadRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest;
 import cn.iocoder.yudao.module.quant.api.backtest.ResearchReviewRequest;
@@ -54,6 +56,7 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 @RestController
 @RequestMapping("/quant/backtest")
 public class BacktestController {
+    private final StrategyExperimentService experiments;
     private final BacktestService service;
     private final QuantProperties properties;
     private final DatasetDownloadService downloads;
@@ -72,7 +75,18 @@ public class BacktestController {
     private final OkxPrivateReadService okxPrivateRead;
     private final LiveOrderService liveOrders;
     private final LiveAutomationService liveAutomation;
-    public BacktestController(BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation,LiveAdmissionService liveAdmissions,LiveControlService liveControls,OkxPrivateReadService okxPrivateRead,LiveOrderService liveOrders,LiveAutomationService liveAutomation) { this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation;this.liveAdmissions=liveAdmissions;this.liveControls=liveControls;this.okxPrivateRead=okxPrivateRead;this.liveOrders=liveOrders;this.liveAutomation=liveAutomation; }
+    public BacktestController(StrategyExperimentService experiments,BacktestService service, QuantProperties properties, DatasetDownloadService downloads, OptimizationService optimizations, PaperSessionService paperSessions, PaperReadinessService paperReadiness, PaperExecutionService paperExecutions, PaperDryRunPreviewService paperPreviews, PaperStartTokenService paperStartTokens, PaperRuntimeService paperRuntime, PaperExecutionObservationService paperObservations, PaperObservationMonitorService paperObservationMonitor,PaperOrderReconciliationService paperOrderReconciliation,LiveAdmissionService liveAdmissions,LiveControlService liveControls,OkxPrivateReadService okxPrivateRead,LiveOrderService liveOrders,LiveAutomationService liveAutomation) { this.experiments = experiments; this.service = service; this.properties = properties; this.downloads = downloads; this.optimizations=optimizations; this.paperSessions=paperSessions; this.paperReadiness=paperReadiness; this.paperExecutions=paperExecutions; this.paperPreviews=paperPreviews; this.paperStartTokens=paperStartTokens; this.paperRuntime=paperRuntime; this.paperObservations=paperObservations; this.paperObservationMonitor=paperObservationMonitor;this.paperOrderReconciliation=paperOrderReconciliation;this.liveAdmissions=liveAdmissions;this.liveControls=liveControls;this.okxPrivateRead=okxPrivateRead;this.liveOrders=liveOrders;this.liveAutomation=liveAutomation; }
+    @PostMapping("/strategy-experiment/create")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createStrategyExperiment(@Valid @RequestBody StrategyExperimentRequest request) {
+        return success(experiments.create(tenant(), owner(), request));
+    }
+    @GetMapping("/strategy-experiment/list")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<List<Map<String, Object>>> strategyExperiments() { return success(experiments.list(tenant(), owner())); }
+    @GetMapping("/strategy-experiment/get")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String, Object>> strategyExperiment(@RequestParam String id) { return success(experiments.get(tenant(), owner(), id)); }
     @PostMapping("/create")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> create(@Valid @RequestBody BacktestRequest request) throws Exception {

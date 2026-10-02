@@ -10,7 +10,10 @@ import java.util.*;
 @Service public class OptimizationService {
  private final OptimizationRepository repo; private final BacktestRepository backtests; private final BacktestService service;
  public OptimizationService(OptimizationRepository repo,BacktestRepository backtests,BacktestService service){this.repo=repo;this.backtests=backtests;this.service=service;}
- public String create(long tenant,long owner,OptimizationRequest r)throws Exception{
+ public String create(long tenant,long owner,OptimizationRequest r)throws Exception{return createChecked(tenant,owner,r,2);}
+ public String createSingleParameter(long tenant,long owner,OptimizationRequest r)throws Exception{return createChecked(tenant,owner,r,1);}
+ private String createChecked(long tenant,long owner,OptimizationRequest r,int minimum)throws Exception{
+  if(r.parameterSetIds()==null||r.parameterSetIds().size()<minimum||r.parameterSetIds().size()>5)throw new IllegalArgumentException("参数集数量不符合批次要求");
   LocalDate start=date(r.trainStart()),split=date(r.splitDate()),end=date(r.validationEnd());
   if(ChronoUnit.DAYS.between(start,split)<7||ChronoUnit.DAYS.between(split,end)<7||ChronoUnit.DAYS.between(start,end)>366)throw new IllegalArgumentException("训练集和验证集各至少 7 天，总区间不超过 366 天");
   if(r.parameterSetIds().stream().distinct().count()!=r.parameterSetIds().size())throw new IllegalArgumentException("参数集不可重复");
