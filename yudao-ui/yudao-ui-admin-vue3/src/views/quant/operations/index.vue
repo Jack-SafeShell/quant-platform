@@ -23,7 +23,7 @@
       <el-alert v-if="refreshError" class="mt-3" :title="refreshError" type="error" :closable="false" show-icon />
       <div class="session-picker mt-3">
         <span>查看会话</span>
-        <el-select v-model="selectedSessionId" :disabled="loading" placeholder="暂无实盘会话" @change="refresh">
+        <el-select v-model="selectedSessionId" :disabled="loading || !!repairingOrderId" placeholder="暂无实盘会话" @change="refresh">
           <el-option v-for="session in sessions" :key="session.id" :value="session.id"
             :label="`${formatTime(session.startedAt)} · ${session.status} · ${session.id.slice(0, 8)}`" />
         </el-select>
@@ -114,7 +114,7 @@
             <p class="evidence-note">净收益基于完整会话账本；下方显示最近 {{ performance.executionTrace?.length || 0 }} / 共 {{ performance.signalCount }} 条信号，最多 {{ performance.traceLimit }} 条。历史触发原因缺失时不作推断；停止会话的估值不是当前实时价格。单笔买卖成交额不等同于该笔利润。</p>
             <div class="head-actions mb-3">
               <el-switch v-model="traceOrdersOnly" active-text="仅显示有关联订单" />
-              <el-button :disabled="!!refreshError || !!performanceError || loading" @click="exportExecutionReview">导出执行与收益快照</el-button>
+              <el-button :disabled="!!refreshError || !!performanceError || loading || !!repairingOrderId" @click="exportExecutionReview">导出执行与收益快照</el-button>
             </div>
             <el-table :data="traceRows" max-height="520" row-key="id">
               <el-table-column type="expand"><template #default="s">
@@ -147,6 +147,8 @@
             <p class="evidence-note">仅归属本会话的全部 BTC/USDT 订单，不包含账户原有资产及入金。收益贡献 = 卖出收入 − 买入支出 + USDT 费用/返佣 + 扣除 BTC 费用后的持仓估值。当前订单累计成交记录不提供逐笔已实现收益拆分。</p>
             <el-descriptions :column="3" border>
               <el-descriptions-item label="净收益贡献">{{ performanceMoney(performance.netContribution) }} USDT</el-descriptions-item>
+              <el-descriptions-item label="退出与结算状态">{{ settlementLabel(performance.settlementState) }}</el-descriptions-item>
+              <el-descriptions-item label="全部退出后净收益">{{ performanceMoney(performance.closedPositionNetPnl) }} USDT</el-descriptions-item>
               <el-descriptions-item label="净交易现金流">{{ performanceMoney(performance.netCashFlow) }} USDT</el-descriptions-item>
               <el-descriptions-item label="剩余持仓估值">{{ performanceMoney(performance.markedPositionValue) }} USDT</el-descriptions-item>
               <el-descriptions-item label="会话净持仓 BTC">{{ performance.netPositionBtc ?? '数据不完整' }}</el-descriptions-item>
@@ -158,6 +160,7 @@
             </el-descriptions>
             <p class="evidence-note">估值使用该会话最近已收盘 K 线价格，停止后的历史会话不刷新实时价格。费用按成交均价折算，估值未计入未来平仓费用；活动订单后续成交会改变结果。缺少实际费用的 {{ performance.missingCostOrderCount }} 个成交订单不会按零费用计算。</p>
             <el-alert v-if="!performance.valuationComplete" title="数据不完整，净收益暂不可计算；请核对成交、手续费及估值证据。" type="warning" :closable="false" />
+            <p class="evidence-note">全部退出后净收益仅在有成交、实际费用完整、无活动订单且会话净持仓为零时计算，不包含未退出持仓估值。费用补查仅查询交易所并更新该订单账本；不会下单、撤单或启动策略。当前凭据未配置时不可补查。</p>
             <el-table :data="performance.orders" max-height="420" row-key="id">
               <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" />
               <el-table-column prop="side" label="方向" width="80" />
@@ -166,6 +169,12 @@
               <el-table-column prop="averagePrice" label="成交均价" width="130" />
               <el-table-column label="实际费用" min-width="150"><template #default="s">{{ s.row.feeAmount ?? '缺失' }} {{ s.row.feeCurrency }}</template></el-table-column>
               <el-table-column label="返佣" min-width="150"><template #default="s">{{ s.row.rebateAmount ?? '缺失' }} {{ s.row.rebateCurrency }}</template></el-table-column>
+              <el-table-column label="费用证据" width="145"><template #default="s">
+                <el-button v-if="needsCostRepair(s.row)" v-hasPermi="['quant:backtest:create']" link type="primary"
+                  :loading="repairingOrderId === s.row.id" :disabled="!costRepairAvailable || loading || !!repairingOrderId || !!refreshError || !!performanceError"
+                  @click="repairOrderCosts(s.row)">补查实际费用</el-button>
+                <span v-else>{{ s.row.costEvidenceComplete === false ? '证据待核对' : '无需补查' }}</span>
+              </template></el-table-column>
             </el-table>
           </template>
         </el-tab-pane>
@@ -270,7 +279,7 @@
 
 <script setup lang="ts">
 import { strategyConfigurationLabel } from '@/api/quant/backtest'
-import { getLivePerformance, type LivePerformance } from '@/api/quant/performance'
+import { getLivePerformance, refreshPerformanceOrder, type LivePerformance, type PerformanceOrder } from '@/api/quant/performance'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -316,6 +325,7 @@ const performance = ref<LivePerformance>()
 const traceOrdersOnly = ref(false)
 const traceRows = computed(() => (performance.value?.executionTrace || []).filter(row => !traceOrdersOnly.value || !!row.order))
 const performanceError = ref('')
+const repairingOrderId = ref('')
 const selectedSessionId = ref<string>()
 const evidenceTab = ref('trace')
 const sessionOrdersOnly = ref(true)
@@ -350,6 +360,7 @@ const equityOptions = computed<EChartsOption>(() => {
 })
 
 const activePolicy = computed(() => policies.value.find((item) => item.id === activeSession.value?.policyId) || policies.value[0])
+const costRepairAvailable = computed(() => !!capabilities.value?.liveExecutionEnabled && !!activePolicy.value?.credentialProvider && activePolicy.value.credentialProvider !== 'UNCONFIGURED')
 const latestReconciliation = computed(() => activeSession.value?.reconciliations?.[0])
 const latestSignal = computed(() => activeSession.value?.signals?.[0])
 const openAlerts = computed(() => activeSession.value?.alerts?.filter((item) => item.status === 'OPEN').length || 0)
@@ -379,14 +390,38 @@ function reasonLabel(reason:string) {
   return ({ STOP_LOSS:'止损阈值', TAKE_PROFIT:'止盈阈值', EMA_CROSS:'EMA 交叉', NO_CROSS:'无交叉', CHANNEL_ENTRY:'通道突破买入', CHANNEL_EXIT:'通道跌破退出', NO_BREAKOUT:'未突破通道', HOLDING_POSITION:'持仓中不追加买入', UNRECORDED:'历史未记录' } as Record<string,string>)[reason] || reason
 }
 function exportExecutionReview() {
-  if (!performance.value || refreshError.value || performanceError.value) return
+  if (!performance.value || refreshError.value || performanceError.value || repairingOrderId.value) return
   const blob = new Blob([JSON.stringify(performance.value, null, 2)], { type:'application/json' })
   const url=URL.createObjectURL(blob), link=document.createElement('a')
   link.href=url; link.download=`execution-review-${performance.value.sessionId}.json`; link.click(); URL.revokeObjectURL(url)
 }
 function performanceMoney(value?: number | null) { return value == null ? '-' : Number(value).toFixed(6) }
+function settlementLabel(state?: string) {
+  return ({ INCOMPLETE_EVIDENCE:'成交或费用证据不完整', ACTIVE_ORDERS:'仍有活动订单', NO_FILLS:'无成交', OPEN_POSITION:'尚有持仓，收益含估值', CLOSED_POSITION:'净持仓为零，账本已结算' } as Record<string,string>)[state || ''] || '旧服务未提供结算状态'
+}
+function needsCostRepair(order: PerformanceOrder) {
+  return ['FILLED','CANCELED'].includes(order.status) && Number(order.filledAmount) > 0 &&
+    (order.costEvidenceComplete === false || order.feeAmount == null || order.rebateAmount == null)
+}
+async function repairOrderCosts(order: PerformanceOrder) {
+  if (!needsCostRepair(order) || !costRepairAvailable.value || loading.value || repairingOrderId.value || refreshError.value || performanceError.value) return
+  const sessionId = performance.value?.sessionId
+  repairingOrderId.value = order.id
+  try {
+    await refreshPerformanceOrder(order.id)
+    const reviewed = sessionId ? await getLivePerformance(sessionId) : undefined
+    if (!disposed && performance.value?.sessionId === sessionId && reviewed) {
+      performance.value = reviewed
+      const repaired = reviewed.orders.find(item => item.id === order.id)
+      if (repaired?.costEvidenceComplete === true) ElMessage.success('实际费用已补齐，收益复盘已更新')
+      else ElMessage.warning('订单已查询，费用证据仍不完整，请核对交易所记录')
+    }
+  } catch {
+    ElMessage.error('补查或收益复盘更新失败，请刷新核对；未重新下单')
+  } finally { repairingOrderId.value = '' }
+}
 async function refresh() {
-  if (loading.value) return
+  if (loading.value || repairingOrderId.value) return
   loading.value = true
   try {
     const [caps, versions, params, tasks, paper, controls] = await Promise.all([

@@ -57,10 +57,11 @@ public class LivePerformanceService {
             var detail=new LinkedHashMap<String,Object>();
             for(String key:List.of("id","instrumentId","price","amount","notional","submittedAt","exchangeOrderId","clientOrderId","side","status","filledAmount","averagePrice","feeAmount","feeCurrency","rebateAmount","rebateCurrency","updatedAt")) detail.put(key,row.get(key));
             details.add(detail);
+            detail.put("costEvidenceComplete",true);
             if(Set.of("SUBMITTING","SUBMIT_UNKNOWN","LIVE","PARTIALLY_FILLED","CANCEL_REQUESTED").contains(String.valueOf(row.get("status")))) open++;
             BigDecimal amount=decimal(row,"filledAmount"); if(amount.signum()==0) continue;
             fills++; BigDecimal price=(BigDecimal)row.get("averagePrice"); String side=String.valueOf(row.get("side"));
-            if(amount.signum()<0||price==null||price.signum()<=0||!Set.of("BUY","SELL").contains(side)){complete=false;warnings.add("Invalid fill amount, price or side");continue;}
+            if(amount.signum()<0||price==null||price.signum()<=0||!Set.of("BUY","SELL").contains(side)){detail.put("costEvidenceComplete",false);complete=false;warnings.add("Invalid fill amount, price or side");continue;}
             BigDecimal cash=amount.multiply(price);
             if("BUY".equals(side)){buys=buys.add(cash);position=position.add(amount);}else{sells=sells.add(cash);position=position.subtract(amount);}
             boolean known=true;
@@ -73,6 +74,7 @@ public class LivePerformanceService {
                 else {known=false;warnings.add("Unsupported cost currency: "+currency);}
             }
             if(!known){missing++;complete=false;warnings.add("Actual fee/rebate evidence is incomplete");}
+            detail.put("costEvidenceComplete",known);
         }
         BigDecimal grossPosition=position; position=position.add(baseCosts);
         if(position.signum()<0){complete=false;warnings.add("Session sold more BTC than its attributed inventory");}
@@ -88,6 +90,9 @@ public class LivePerformanceService {
         result.put("markPrice",mark);result.put("markCandleAt",markAt);
         result.put("markedPositionValue",complete&&priceAvailable?position.multiply(position.signum()==0?BigDecimal.ZERO:mark):null);
         result.put("netContribution",complete&&priceAvailable?netCash.add(position.multiply(position.signum()==0?BigDecimal.ZERO:mark)):null);
+        String settlementState=!complete?"INCOMPLETE_EVIDENCE":open>0?"ACTIVE_ORDERS":fills==0?"NO_FILLS":position.signum()!=0?"OPEN_POSITION":"CLOSED_POSITION";
+        result.put("settlementState",settlementState);
+        result.put("closedPositionNetPnl","CLOSED_POSITION".equals(settlementState)?netCash:null);
         result.put("valuationComplete",complete&&priceAvailable);result.put("warnings",new ArrayList<>(warnings));result.put("orders",details);
         return result;
     }

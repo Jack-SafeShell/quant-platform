@@ -13,11 +13,13 @@ class LivePerformanceTest {
         var rows=List.of(order("BUY","1","100","-0.01","BTC","0",""),order("SELL","0.99","120","-1","USDT","0.2","USDT"));
         var r=LivePerformanceService.calculate(rows,null,null);
         amount("0",r.get("netPositionBtc"));amount("18",r.get("netContribution"));amount("-1.8",r.get("knownSignedCostsUsdt"));assertEquals(true,r.get("valuationComplete"));
+        assertEquals("CLOSED_POSITION",r.get("settlementState"));amount("18",r.get("closedPositionNetPnl"));
     }
     @Test void partialCanceledFillAndOpenInventoryUseClosedCandleMark(){
         var row=order("BUY","0.5","100","-0.05","USDT","0","BTC");row.put("status","CANCELED");
         var r=LivePerformanceService.calculate(List.of(row),new BigDecimal("110"),123L);
         amount("4.95",r.get("netContribution"));amount("55",r.get("markedPositionValue"));assertEquals(1,r.get("filledOrderCount"));
+        assertEquals("OPEN_POSITION",r.get("settlementState"));assertNull(r.get("closedPositionNetPnl"));
         assertNull(LivePerformanceService.calculate(List.of(row),null,null).get("netContribution"));
     }
     @Test void missingAndUnsupportedCostsCannotBecomeZeroFeeProfit(){
@@ -29,5 +31,17 @@ class LivePerformanceTest {
         amount("0",LivePerformanceService.calculate(List.of(empty),null,null).get("netContribution"));
         var r=LivePerformanceService.calculate(List.of(order("SELL","1","120","0","USDT","0","")),new BigDecimal("100"),123L);
         assertNull(r.get("netContribution"));assertEquals(false,r.get("valuationComplete"));
+    }
+    @Test void noFillsMissingCostsAndPendingOrdersCannotClaimClosedProfit(){
+        var empty=LivePerformanceService.calculate(List.of(),null,null);
+        assertEquals("NO_FILLS",empty.get("settlementState"));assertNull(empty.get("closedPositionNetPnl"));
+        var missing=order("BUY","1","100",null,"",null,"");
+        var incomplete=LivePerformanceService.calculate(List.of(missing),new BigDecimal("110"),123L);
+        assertEquals("INCOMPLETE_EVIDENCE",incomplete.get("settlementState"));assertNull(incomplete.get("closedPositionNetPnl"));
+        var details=(List<?>)incomplete.get("orders");assertEquals(false,((Map<?,?>)details.getFirst()).get("costEvidenceComplete"));
+        var buy=order("BUY","1","100","0","USDT","0","");
+        var sell=order("SELL","1","110","0","USDT","0","");sell.put("status","PARTIALLY_FILLED");
+        var pending=LivePerformanceService.calculate(List.of(buy,sell),null,null);
+        assertEquals("ACTIVE_ORDERS",pending.get("settlementState"));assertNull(pending.get("closedPositionNetPnl"));
     }
 }
