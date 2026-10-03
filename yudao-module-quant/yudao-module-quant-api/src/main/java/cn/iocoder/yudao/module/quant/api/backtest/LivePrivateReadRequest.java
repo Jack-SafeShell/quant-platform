@@ -5,5 +5,5 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record LivePrivateReadRequest(
-        @NotBlank @Pattern(regexp = "CONFIRM_OKX_PRIVATE_READ") String confirmation,
+        @NotBlank @Pattern(regexp = "CONFIRM_(OKX|BINANCE)_PRIVATE_READ") String confirmation,
         @NotBlank @Size(max = 500) String comment) {}

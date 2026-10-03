@@ -13,6 +13,11 @@ public class LiveAdmissionRepository {
     public LiveAdmissionRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
+    public String paperExchange(long tenant,long owner,String execution){
+        var row=one("SELECT r.manifest_json AS manifestJson,r.manifest_hash AS manifestHash FROM quant_paper_execution e JOIN quant_paper_readiness_snapshot r ON r.id=e.readiness_snapshot_id WHERE e.id=? AND e.tenant_id=? AND e.owner_id=? AND e.readiness_hash=r.manifest_hash",execution,tenant,owner);
+        if(row==null)return "";String json=String.valueOf(row.get("manifestJson"));if(!cn.iocoder.yudao.module.quant.engine.DatasetRegistry.hash(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(row.get("manifestHash")))return "";
+        return cn.iocoder.yudao.framework.common.util.json.JsonUtils.getObjectMapper().readTree(json).path("config").path("exchange").asText();
+    }
 
     public Map<String, Object> latestSuccessfulBacktest(long tenant, long owner) {
         return one("SELECT t.id,t.exchange_name AS exchangeName,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.status='SUCCEEDED' ORDER BY t.finished_at DESC LIMIT 1", tenant, owner);

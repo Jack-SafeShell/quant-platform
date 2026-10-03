@@ -8,6 +8,7 @@ import java.util.*;
 
 @Service public class PaperSessionService {
  private final PaperSessionRepository repo; private final OptimizationService optimizations;
+ public String exchange(long tenant,long owner,String session){get(tenant,owner,session);return repo.exchange(tenant,owner,session);}
  public PaperSessionService(PaperSessionRepository repo,OptimizationService optimizations){this.repo=repo;this.optimizations=optimizations;}
  public String create(long tenant,long owner,PaperSessionRequest request){var batch=optimizations.get(tenant,owner,request.batchId());var admission=(Map<?,?>)batch.get("paperAdmission");requireReady(admission);boolean parameter=((List<Map<String,Object>>)batch.get("ranking")).stream().anyMatch(x->request.parameterSetId().equals(x.get("parameterSetId"))&&x.containsKey("validationReturn"));if(!parameter)throw new IllegalArgumentException("参数集不属于该批次的有效验证结果");String evidence=(String)admission.get("evidenceSha256");var existing=repo.existing(tenant,owner,request.batchId(),request.parameterSetId(),evidence);if(existing!=null)return (String)existing.get("id");String id=UUID.randomUUID().toString();repo.create(id,tenant,owner,request.batchId(),(String)batch.get("strategy_version_id"),request.parameterSetId(),evidence);return id;}
  public List<Map<String,Object>> list(long tenant,long owner){var rows=repo.list(tenant,owner);rows.forEach(PaperSessionService::decorate);return rows;}

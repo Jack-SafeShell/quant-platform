@@ -41,6 +41,7 @@ public class QuantProperties {
     private String liveCredentialFile = "";
     @NotBlank private String liveCredentialReaderScript = "D:/0000/quant-platform/script/quant/read_live_credential.ps1";
     @Pattern(regexp = "https://(openapi|www|us|eea)\\.okx\\.com") private String liveOkxBaseUrl = "https://openapi.okx.com";
+    @Pattern(regexp = "https://api\\.binance\\.com") private String liveBinanceBaseUrl = "https://api.binance.com";
     @NotBlank private String workspace = ".runtime/quant";
     @NotBlank private String dockerExecutable = "docker";
     @Pattern(regexp = "freqtradeorg/freqtrade@sha256:[0-9a-f]{64}")

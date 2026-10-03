@@ -80,9 +80,9 @@ public class LivePortfolioService {
         controls.requireAccount(tenant,owner,policy);controls.strategy(tenant,owner,policy);orders.reconcilePolicy(tenant,owner,policy);
         var prepared=transactions.execute(status->{repository.lock();var current=sessions.get(tenant,owner,sessionId);
             if(current==null||"RUNNING".equals(current.get("status"))||!repository.active().isEmpty()||orders.accountOpenCount()>0)throw new IllegalArgumentException("Stop sessions/portfolio and resolve orders before exit");
-            BigDecimal price=LiveAutomationService.executionPrice(client.marketTicker(),"SELL"),position=orders.availablePosition(tenant,owner,policy,sessionId);
+            BigDecimal price=client.limitPrice("SELL",LiveAutomationService.executionPrice(client.marketTicker(),"SELL")),position=orders.availablePosition(tenant,owner,policy,sessionId);
             var policyRow=controls.get(tenant,owner,policy);BigDecimal cap=((BigDecimal)policyRow.get("maxOrderNotional")).min(properties.getLiveMaxOrderNotional());
-            BigDecimal amount=LiveAutomationService.sellAmount(position,availableBtc(),cap,price);if(amount.signum()==0)throw new IllegalArgumentException("Owned inventory below order precision or unavailable");
+            BigDecimal amount=client.limitAmount(LiveAutomationService.sellAmount(position,availableBtc(),cap,price));if(amount.signum()==0)throw new IllegalArgumentException("Owned inventory below order precision or unavailable");
             String clientId="qx"+DatasetRegistry.hash((tenant+"/"+owner+"/"+sessionId+"/"+request.requestId()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).substring(0,26);
             repository.exit(clientId,tenant,owner,policy,sessionId,request.requestId(),price,amount);return Map.<String,Object>of("clientOrderId",clientId,"price",price,"amount",amount,"exposure",position.multiply(price));});
         String clientId=String.valueOf(prepared.get("clientOrderId"));var decision=controls.check(tenant,owner,policy,new LiveOrderCheckRequest(clientId,"SELL","LIMIT",(BigDecimal)prepared.get("price"),(BigDecimal)prepared.get("amount"),(BigDecimal)prepared.get("exposure"),orders.dailyNotional(policy,LiveOrderService.dayStart()),orders.accountOpenCount()));

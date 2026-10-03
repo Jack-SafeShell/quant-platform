@@ -42,10 +42,11 @@ class ExchangeAccountIsolationTest {
         assertThrows(IllegalArgumentException.class,()->service.requireAccount(1,1,"old"));props.setLiveAccountId("okx-primary");assertDoesNotThrow(()->service.requireAccount(1,1,"old"));
     }
     @Test void cannotUseBinanceBacktestEvidenceToEnableAnOkxPolicy(){
-        var repo=new LiveAdmissionRepository(null){public java.util.Map<String,Object> successfulBacktest(long t,long o,String id){return java.util.Map.of("exchangeName","binance");}};
+        var repo=new LiveAdmissionRepository(null){public java.util.Map<String,Object> successfulBacktest(long t,long o,String id){return java.util.Map.of("exchangeName","binance");}public String paperExchange(long t,long o,String id){return "binance-paper".equals(id)?"binance":"";}};
         var service=new cn.iocoder.yudao.module.quant.service.LiveAdmissionService(repo);
         var report=java.util.Map.<String,Object>of("reportJson","{\"evidence\":{\"backtest\":{\"id\":\"task\"}}}");
-        assertThrows(IllegalArgumentException.class,()->service.requireExchange(1,1,report,"okx"));assertDoesNotThrow(()->service.requireExchange(1,1,report,"binance"));
+        assertThrows(IllegalArgumentException.class,()->service.requireExchange(1,1,report,"okx"));assertThrows(IllegalArgumentException.class,()->service.requireExchange(1,1,report,"binance"));
+        var complete=java.util.Map.<String,Object>of("reportJson","{\"evidence\":{\"backtest\":{\"id\":\"task\"}},\"candidatePaper\":{\"executionId\":\"binance-paper\"}}");assertDoesNotThrow(()->service.requireExchange(1,1,complete,"binance"));
     }
 
 }

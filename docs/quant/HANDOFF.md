@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**Binance 私有账户适配与小额交易验收。** 本轮公开行情、历史下载/回测与固定账户隔离已完成；下一项接入独立加密凭据、签名及权限核对、交易规则、余额、订单与成交费用，并沿既有风险链路进行小额验收。保持 OKX 历史账户归属，不复用其凭据或转移旧仓；一次选择一个私有账户。旧 OKX 候选复核仍待人工完成，不追加 24 小时等待，A 股暂缓。
+**Binance 真实账户接通与一轮小额交易闭环验收。** 私有适配、风险链路和模拟交易所绑定代码已完成；当前缺 Binance 独立凭据、同版本 Binance 候选模拟技术证据及新准入确认。用户先按 EXCHANGES.md 的隐藏输入命令保存 binance-live.dpapi，随后合并完成只读账户/权限核对、候选模拟补证、准入复核和小额买入/撤单或成交/卖出对账。保持 OKX 历史归属，不复用其凭据或转移旧仓；一次选择一个私有账户，不追加 24 小时等待，A 股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -282,3 +282,13 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 78 项 Java 回归/隔离测试、4 项 Python 下载测试、单体聚合 install、前端 ts:check/build:local 及 git diff --check 通过。覆盖账户身份/额度隔离、私有客户端拒绝 Binance、事务回滚后身份绑定、不同交易所回测不能启用 OKX 门禁、下载请求交易所幂等及公开数据边界。构建前停止默认 JVM，完成后恢复；Windows PowerShell 对 Maven 的 JDK 警告处理已调整，首次未实际构建的尝试未算成功。
 - 最终默认根 PID 34916、健康 UP、三个执行开关 false、无运行会话/活动订单，原门禁 HALTED。身份核对临时服务退出，默认无凭据配置；本轮没有真实订单或新增浏览器交互证据。非秘密记录 exchange-market-review、exchange-account-private-review、binance-backtest-review、exchange-stage-final-20261003.json 保留在 .runtime/quant，不提交。
 - 限制：仍为单体单实例、一次选择一个私有账户；Binance 余额、签名、订单和费用适配尚未实现，不可用其密钥替换 OKX 凭据。旧固定组合仍 READY、候选未运行；突破仍待人工接受研究及同版本模拟补证。接入说明见 docs/quant/EXCHANGES.md，A 股继续暂缓。
+
+## Binance 私有适配开发（2026-10-04）
+
+- 新增固定交易所客户端路由与 Binance HMAC 现货适配：UID 身份核对、BTC/USDT 可用/锁定余额及暴露、挂单、限价下单/查询/撤单、成交实际均价/费用归一化；单体接入限定官方私有域名。DPAPI 保存脚本增加 -Exchange binance，仅隐藏输入 Key/Secret，旧无标签文件只兼容 OKX；没有输出或读取现有秘密。
+- 复用原账户互斥、归属库存、单笔/日额/仓位/挂单风险、门禁和一次性令牌。执行前核对交易规则、最小金额和权限，拒绝额外权限及 BNB 费用折扣；自动数量向下按交易所步长、买价向下/卖价向上按刻度调整，金额再进入原决策。查询有限重试，下单/撤单不重发；超时/未知错误保留不确定状态及预约。
+- 成交按订单 ID 核对方向、归属、成交 ID、累计数量/报价，再累计覆盖费用；缺失、重复、混合币种或达到 1000 笔不宣称成本完整。BNB 等第三币种保留原实际费用但不伪造估值。权益口径限定 BTC/USDT。上述限制与操作详见 EXCHANGES.md。
+- 修正模拟就绪/预览固定 OKX 的配置，交易所来自所属研究批次成功任务，混合来源拒绝。Binance 准入还要求候选模拟绑定清单来自 Binance 且摘要有效，旧 OKX 同版本模拟不能替代。全平台长期模拟/风险机制证据仍可复用；未代替人工接受研究或准入报告。
+- 实际通过平台公开接口查询 Binance BTCUSDT：TRADING、现货允许、价格刻度 0.01、数量步长 0.00001 BTC、最低金额 5 USDT。首查因把容器私有代理用于主机公开请求而超时，已分离公开/私有 HTTP 客户端后复查通过。平台登记 binance-primary / binance-live.dpapi，身份待绑定，未创建密钥或切换当前账户；数据库无新增表或结构迁移，现 42 张 quant 表。
+- 最终 92 项 Java 回归通过（新增 12 项 Binance 和 2 项模拟交易所绑定；包含原令牌因规则拒绝保持 ISSUED、UID 回滚重绑/错账号拒绝、签名官方向量、写请求不重发、费用缺失不补零），单体聚合 install、前端 ts:check/build:local、git diff --check 通过。新增交易所模拟约束后，旧测试桩缺数据库/候选证据导致一次失败，已补完整测试证据并复测通过；失败不计入通过。
+- 最终默认根 PID 41780、健康 UP，当前 okx-primary 身份已核对，三个执行开关 false，原门禁 HALTED，运行会话/活动订单均 0。非秘密规则和最终状态保存在 .runtime/quant/binance-rules-review-20261003.json、binance-private-stage-final-20261004.json；构建日志 binance-private-build.log。没有 Binance 密钥、实际私有连接、真实订单或新增浏览器交互验收证据，不能称 Binance 实盘已验收。

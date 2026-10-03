@@ -248,9 +248,9 @@ public class BacktestController {
     public CommonResult<String> stopLiveControl(@RequestParam String id,@Valid @RequestBody LiveControlStopRequest request){return success(liveOrders.emergencyStop(tenant(),owner(),id,request));}
     @PostMapping("/live-control/order-check") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<Map<String,Object>> checkLiveOrder(@RequestParam String id,@Valid @RequestBody LiveOrderCheckRequest request){return success(liveControls.check(tenant(),owner(),id,request));}
-    @GetMapping("/live-control/okx-readiness") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    @GetMapping({"/live-control/okx-readiness","/live-control/private-readiness"}) @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<Map<String,Object>> okxReadiness(@RequestParam String id){return success(okxPrivateRead.readiness(tenant(),owner(),id));}
-    @PostMapping("/live-control/okx-private-read") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    @PostMapping({"/live-control/okx-private-read","/live-control/private-read"}) @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<Map<String,Object>> verifyOkxPrivateRead(@RequestParam String id,@Valid @RequestBody LivePrivateReadRequest request){return success(okxPrivateRead.verify(tenant(),owner(),id,request));}
     @PostMapping("/live-control/order-token/issue") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<Map<String,Object>> issueLiveOrderToken(@RequestParam String id,@Valid @RequestBody LiveOrderTokenRequest request){return success(liveOrders.issue(tenant(),owner(),id,request));}

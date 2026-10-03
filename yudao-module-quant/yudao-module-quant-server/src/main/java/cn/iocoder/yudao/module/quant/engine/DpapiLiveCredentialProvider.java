@@ -20,10 +20,15 @@ public class DpapiLiveCredentialProvider implements LiveCredentialProvider {
             if(!process.waitFor(15,TimeUnit.SECONDS)){process.destroyForcibly();throw new IllegalStateException("读取加密凭据超时");}
             byte[] output=process.getInputStream().readNBytes(8192);
             if(process.exitValue()!=0)throw new IllegalStateException("无法读取加密凭据");
-            var node=JsonUtils.getObjectMapper().readTree(new String(output,StandardCharsets.UTF_8));
-            String apiKey=node.path("apiKey").asText(),secretKey=node.path("secretKey").asText(),passphrase=node.path("passphrase").asText();
-            if(apiKey.isBlank()||secretKey.isBlank()||passphrase.isBlank())throw new IllegalStateException("加密凭据字段不完整");
-            return Optional.of(new OkxCredential(apiKey,secretKey,passphrase));
+            return Optional.of(decode(new String(output,StandardCharsets.UTF_8),properties.getLiveExchange()));
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("读取加密凭据被中断");}catch(Exception e){if(e instanceof IllegalStateException state)throw state;throw new IllegalStateException("无法读取加密凭据");}
+    }
+    static OkxCredential decode(String json,String selectedExchange){
+            var node=JsonUtils.getObjectMapper().readTree(json);
+            String apiKey=node.path("apiKey").asText(),secretKey=node.path("secretKey").asText(),passphrase=node.path("passphrase").asText();
+            String exchange=node.path("exchange").asText("okx"); // Existing untagged files belong to OKX only.
+            if(!exchange.equals(selectedExchange)||!java.util.Set.of("okx","binance").contains(exchange))throw new IllegalStateException("加密凭据交易所不匹配");
+            if(apiKey.isBlank()||secretKey.isBlank()||("okx".equals(exchange)&&passphrase.isBlank()))throw new IllegalStateException("加密凭据字段不完整");
+            return new OkxCredential(apiKey,secretKey,passphrase);
     }
 }

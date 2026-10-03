@@ -29,6 +29,7 @@ public class LiveAdmissionService {
         if(backtestId!=null&&backtest==null)throw new IllegalArgumentException("Successful owned backtest not found");
         var strategy=backtest==null?Map.<String,Object>of():strategyBinding(tenant,owner,String.valueOf(backtest.get("strategyVersionId")));
         var candidate=backtest==null?null:repository.candidatePaper(tenant,owner,String.valueOf(backtest.get("strategyVersionId")),String.valueOf(backtest.get("parameterSetId")));
+        if(backtest!=null&&"binance".equals(backtest.get("exchangeName"))&&candidate!=null&&!"binance".equals(repository.paperExchange(tenant,owner,String.valueOf(candidate.get("executionId")))))candidate=null;
         var soak = repository.qualifyingSoak(tenant, owner);
         var orders = repository.qualifyingOrderRehearsal(tenant, owner);
         var riskStop = repository.latestRiskStop(tenant, owner);
@@ -106,6 +107,7 @@ public class LiveAdmissionService {
         var manifest=JsonUtils.getObjectMapper().readTree(String.valueOf(report.get("reportJson")));
         var task=repository.successfulBacktest(tenant,owner,manifest.path("evidence").path("backtest").path("id").asText());
         if(task==null||!exchange.equals(task.get("exchangeName")))throw new IllegalArgumentException("Admission backtest belongs to a different exchange");
+        if("binance".equals(exchange)&&!exchange.equals(repository.paperExchange(tenant,owner,manifest.path("candidatePaper").path("executionId").asText())))throw new IllegalArgumentException("Binance admission requires same-exchange candidate paper evidence");
     }
     public void requireFixedLiveStrategy(long tenant,long owner,Map<String,Object> report){liveStrategy(tenant,owner,report);}
     private Map<String,Object> strategyBinding(long tenant,long owner,String version){

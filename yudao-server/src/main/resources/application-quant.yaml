@@ -36,6 +36,7 @@ yudao:
     live-credential-file: ${QUANT_LIVE_CREDENTIAL_FILE:}
     live-credential-reader-script: ${QUANT_LIVE_CREDENTIAL_READER_SCRIPT:D:/0000/quant-platform/script/quant/read_live_credential.ps1}
     live-okx-base-url: ${QUANT_LIVE_OKX_BASE_URL:https://openapi.okx.com}
+    live-binance-base-url: ${QUANT_LIVE_BINANCE_BASE_URL:https://api.binance.com}
     workspace: ${QUANT_WORKSPACE:D:/0000/quant-platform/.runtime/quant}
     docker-executable: ${QUANT_DOCKER_EXECUTABLE:docker}
     image: ${QUANT_FREQTRADE_IMAGE:freqtradeorg/freqtrade@sha256:7031bca43ed7668ebf421725dd5016acade6ef88b0771db3e08c96e6d19a42db}

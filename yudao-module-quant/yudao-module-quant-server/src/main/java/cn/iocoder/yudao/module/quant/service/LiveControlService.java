@@ -68,7 +68,7 @@ public class LiveControlService {
         checks.add(Map.of("id","DOUBLE_CONFIRMED","passed","DOUBLE_CONFIRMED".equals(report.get("confirmationState")),"evidence",report.get("confirmationState")));
         checks.add(Map.of("id","GATE_ARMED","passed",policy!=null&&"ARMED_OFFLINE".equals(policy.get("status")),"evidence",policy==null?"尚未创建门禁":policy.get("status")));
         checks.add(Map.of("id","LIVE_EXECUTION_ENABLED","passed",properties.isLiveExecutionEnabled(),"evidence","真实执行开关"));
-        checks.add(Map.of("id","PRIVATE_EXCHANGE_SUPPORTED","passed","okx".equals(properties.getLiveExchange()),"evidence","当前仅 OKX 私有执行已接入"));
+        checks.add(Map.of("id","PRIVATE_EXCHANGE_SUPPORTED","passed",Set.of("okx","binance").contains(properties.getLiveExchange()),"evidence","OKX / Binance 现货私有适配已接入"));
         checks.add(Map.of("id","EXCHANGE_ACCOUNT_MATCH","passed",policy==null||properties.getLiveAccountId().equals(policy.get("accountId")),"evidence","策略固定账户归属"));
         checks.add(Map.of("id","LIVE_AUTOMATION_ENABLED","passed",properties.isLiveAutomationEnabled(),"evidence","自动执行开关"));
         checks.add(Map.of("id","CREDENTIAL_CONFIGURED","passed",credentials.configured(),"evidence","仅检查配置存在；不读取密钥或请求交易所"));
@@ -131,6 +131,6 @@ public class LiveControlService {
         return repository.decision(tenant,owner,request.clientOrderId());
     }
 
-    private void decorate(long tenant,long owner,Map<String,Object> policy){boolean selected=properties.getLiveAccountId().equals(policy.get("accountId"))&&properties.getLiveExchange().equals(policy.get("exchangeName"));policy.put("selectedAccount",selected);policy.put("strategy",strategy(tenant,owner,String.valueOf(policy.get("id"))));policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",selected&&"okx".equals(properties.getLiveExchange())&&properties.isLiveExecutionEnabled()&&credentials.configured());policy.put("activationAllowed",selected&&"okx".equals(properties.getLiveExchange())&&properties.isLiveExecutionEnabled()&&credentials.configured()&&"ARMED_OFFLINE".equals(policy.get("status")));}
+    private void decorate(long tenant,long owner,Map<String,Object> policy){boolean selected=properties.getLiveAccountId().equals(policy.get("accountId"))&&properties.getLiveExchange().equals(policy.get("exchangeName"));policy.put("selectedAccount",selected);policy.put("strategy",strategy(tenant,owner,String.valueOf(policy.get("id"))));policy.put("liveExecutionEnabled",properties.isLiveExecutionEnabled());policy.put("credentialProvider",credentials.configured()?"WINDOWS_DPAPI_FILE":"UNCONFIGURED");policy.put("privateApiConnected",false);policy.put("realOrderEndpointAvailable",selected&&Set.of("okx","binance").contains(properties.getLiveExchange())&&properties.isLiveExecutionEnabled()&&credentials.configured());policy.put("activationAllowed",selected&&Set.of("okx","binance").contains(properties.getLiveExchange())&&properties.isLiveExecutionEnabled()&&credentials.configured()&&"ARMED_OFFLINE".equals(policy.get("status")));}
     private static BigDecimal decimal(Map<String,Object> map,String key){return new BigDecimal(String.valueOf(map.get(key)));}
 }

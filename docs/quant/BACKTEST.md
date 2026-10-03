@@ -392,3 +392,15 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 - 78 项 Java 回归/隔离测试、4 项 Python 下载测试、单体聚合 install、前端 ts:check/build:local 及 git diff --check 通过。覆盖账户身份/额度隔离、私有客户端拒绝 Binance、事务回滚后身份绑定、不同交易所回测不能启用 OKX 门禁、下载请求交易所幂等及公开数据边界。构建前停止默认 JVM，完成后恢复；Windows PowerShell 对 Maven 的 JDK 警告处理已调整，首次未实际构建的尝试未算成功。
 - 最终默认根 PID 34916、健康 UP、三个执行开关 false、无运行会话/活动订单，原门禁 HALTED。身份核对临时服务退出，默认无凭据配置；本轮没有真实订单或新增浏览器交互证据。非秘密记录 exchange-market-review、exchange-account-private-review、binance-backtest-review、exchange-stage-final-20261003.json 保留在 .runtime/quant，不提交。
 - 限制：仍为单体单实例、一次选择一个私有账户；Binance 余额、签名、订单和费用适配尚未实现，不可用其密钥替换 OKX 凭据。旧固定组合仍 READY、候选未运行；突破仍待人工接受研究及同版本模拟补证。接入说明见 docs/quant/EXCHANGES.md，A 股继续暂缓。
+
+## Binance 私有适配验证（2026-10-04）
+
+私有适配及固定账户路由已实现，包含独立 DPAPI、HMAC 签名/UID 核对、余额/暴露、限价规则、下单/撤单/查询和实际费用。规则在令牌消费/预约前检查，自动数量按交易所步长向下取整；写请求不重发，超时保留不确定预约。模拟配置改为研究批次所属交易所；Binance 门禁拒绝复用 OKX 候选模拟清单。准入确认没有被自动补造。
+
+最终 92 项 Java 测试、单体聚合 install、前端 ts:check/build:local 及 git diff --check 通过。覆盖签名官方向量、错凭据/错账号、事务回滚重绑、权限/BNB 折扣/精度/最低金额、GET 重试与写单次发送、费用归属和缺失不补零、规则拒绝不消费令牌，以及模拟清单交易所/摘要绑定。旧测试桩在新增候选模拟约束后曾失败，修正后最终通过；初次公开规则请求因代理范围错误超时，公开/私有代理分离后实际通过。
+
+实际规则为 BTCUSDT/TRADING、现货允许，tickSize=0.01、stepSize=0.00001 BTC、minNotional=5 USDT。已登记 binance-primary、独立文件名 binance-live.dpapi，无结构迁移。最终健康 UP、默认根 PID 41780，仍选 okx-primary，三个执行开关关闭、原门禁 HALTED、无运行会话或活动订单；未发送真实订单。规则与状态摘要在 .runtime/quant，未提交。没有 Binance 凭据，私有余额/权限/订单尚未实际验收；前端只验证类型及构建。
+
+费用仅在订单累计数量与报价、成交身份/方向等证据一致时覆盖入账；缺失/重复/混合币种或达到 1000 笔保持不完整。第三币种费用保留实际币种和金额，不伪造换算，权益仅 BTC/USDT。数量向下后 5 USDT 预算可能不足交易所最低金额，不能擅自上调；独立账户的受控小额预算需在既有上限内明确选择。凭据输入及完整限制见 EXCHANGES.md。
+
+唯一推荐下一项：保存 Binance 独立加密凭据后，合并完成真实账户只读接通、同版本 Binance 候选模拟补证/准入复核及一轮小额买入—撤单或成交—卖出对账验收。保持旧 OKX 归属，不新增 24 小时等待，A 股继续暂缓。
