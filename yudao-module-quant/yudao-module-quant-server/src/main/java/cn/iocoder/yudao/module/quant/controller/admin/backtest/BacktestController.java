@@ -257,6 +257,8 @@ public class BacktestController {
     public CommonResult<Map<String,Object>> executeLiveOrder(@RequestParam String id,@Valid @RequestBody LiveOrderExecuteRequest request){return success(liveOrders.execute(tenant(),owner(),id,request));}
     @GetMapping("/live-control/order/list") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
     public CommonResult<List<Map<String,Object>>> listLiveOrders(@RequestParam String id){return success(liveOrders.list(tenant(),owner(),id));}
+    @GetMapping("/live-control/inventory") @PreAuthorize("@ss.hasPermission('quant:backtest:query')")
+    public CommonResult<Map<String,Object>> liveInventory(@RequestParam String id,@RequestParam(required=false) String sessionId){return success(liveOrders.inventory(tenant(),owner(),id,sessionId));}
     @PostMapping("/live-control/order/refresh") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<Map<String,Object>> refreshLiveOrder(@RequestParam String orderId){return success(liveOrders.refresh(tenant(),owner(),orderId));}
     @PostMapping("/live-control/order/cancel") @PreAuthorize("@ss.hasPermission('quant:backtest:create')")

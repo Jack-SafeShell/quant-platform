@@ -144,7 +144,7 @@
         <el-tab-pane label="策略收益与成本" name="performance">
           <el-alert v-if="performanceError" :title="performanceError" type="warning" :closable="false" />
           <template v-if="performance">
-            <p class="evidence-note">仅归属本会话的全部 BTC/USDT 订单，不包含账户原有资产及入金。收益贡献 = 卖出收入 − 买入支出 + USDT 费用/返佣 + 扣除 BTC 费用后的持仓估值。当前订单累计成交记录不提供逐笔已实现收益拆分。</p>
+            <p class="evidence-note">持仓仅归属本会话，不继承旧会话或其他策略的资产。可预约卖出数量扣除 BTC 费用及活动卖单；费用缺失时为零，实际下单仍需核对交易所可用余额。收益贡献 = 卖出收入 − 买入支出 + USDT 费用/返佣 + 扣除 BTC 费用后的持仓估值。当前订单累计成交记录不提供逐笔已实现收益拆分。</p>
             <el-descriptions :column="3" border>
               <el-descriptions-item label="净收益贡献">{{ performanceMoney(performance.netContribution) }} USDT</el-descriptions-item>
               <el-descriptions-item label="退出与结算状态">{{ settlementLabel(performance.settlementState) }}</el-descriptions-item>
@@ -152,6 +152,7 @@
               <el-descriptions-item label="净交易现金流">{{ performanceMoney(performance.netCashFlow) }} USDT</el-descriptions-item>
               <el-descriptions-item label="剩余持仓估值">{{ performanceMoney(performance.markedPositionValue) }} USDT</el-descriptions-item>
               <el-descriptions-item label="会话净持仓 BTC">{{ performance.netPositionBtc ?? '数据不完整' }}</el-descriptions-item>
+              <el-descriptions-item label="可预约卖出 BTC">{{ performance.sellableBtc ?? '-' }}</el-descriptions-item>
               <el-descriptions-item label="买入 / 卖出成交额">{{ money(performance.buyTurnover) }} / {{ money(performance.sellTurnover) }} USDT</el-descriptions-item>
               <el-descriptions-item label="已知费用与返佣折算">{{ performanceMoney(performance.knownSignedCostsUsdt) }} USDT（扣费负，返佣正）</el-descriptions-item>
               <el-descriptions-item label="估值价格">{{ performance.markPrice ?? '-' }} USDT</el-descriptions-item>

@@ -7,7 +7,7 @@ export interface LivePerformance {
  strategy?:LiveStrategyBinding; legacyStrategyVersionId?:string; admissionReportId?:string;admissionReportHash?:string;executionTrace:ExecutionTrace[];traceLimit:number;signalCount:number;generatedAt:number;
  sessionId: string; orderCount: number; filledOrderCount: number; activeOrderCount: number; missingCostOrderCount: number;
  buyTurnover: number; sellTurnover: number; grossCashFlow: number; grossPositionBtc: number; knownSignedCostsUsdt: number;
- netPositionBtc?: number; netCashFlow?: number; markPrice?: number; markCandleAt?: number; markedPositionValue?: number; netContribution?: number;
+ sellableBtc?:number;inventoryOwner?:string; netPositionBtc?: number; netCashFlow?: number; markPrice?: number; markCandleAt?: number; markedPositionValue?: number; netContribution?: number;
  accountEquityChange: number; valuationComplete: boolean; costsComplete: boolean; warnings: string[]; orders: PerformanceOrder[];
 }
 export const getLivePerformance = (sessionId: string): Promise<LivePerformance> => request.get({ url: '/quant/backtest/live-automation/performance', params: { sessionId } })
