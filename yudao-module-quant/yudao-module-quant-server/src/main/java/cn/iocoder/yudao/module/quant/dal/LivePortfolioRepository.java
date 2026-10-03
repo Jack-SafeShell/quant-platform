@@ -1,0 +1,30 @@
+package cn.iocoder.yudao.module.quant.dal;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+import java.math.BigDecimal;
+import java.util.*;
+@Repository
+public class LivePortfolioRepository {
+    private final JdbcTemplate jdbc;
+    public LivePortfolioRepository(JdbcTemplate jdbc){this.jdbc=jdbc;}
+    public void lock(){jdbc.queryForObject("SELECT id FROM quant_live_account_guard WHERE id=1 FOR UPDATE",Integer.class);}
+    public String create(long tenant,long owner,String json,String hash,BigDecimal capital,BigDecimal loss){String id=UUID.randomUUID().toString();jdbc.update("INSERT INTO quant_live_portfolio(id,tenant_id,owner_id,configuration_json,evidence_hash,total_capital,loss_budget,status,created_at) VALUES(?,?,?,?,?,?,?,'READY',?)",id,tenant,owner,json,hash,capital,loss,System.currentTimeMillis());return id;}
+    public void member(String portfolio,String report,String policy,String hash,BigDecimal capital,BigDecimal daily){jdbc.update("INSERT INTO quant_live_portfolio_member(portfolio_id,report_id,policy_id,report_hash,capital,daily_notional) VALUES(?,?,?,?,?,?)",portfolio,report,policy,hash,capital,daily);}
+    public Map<String,Object> get(long tenant,long owner,String id){return one("SELECT id,tenant_id AS tenantId,owner_id AS ownerId,configuration_json AS configurationJson,evidence_hash AS evidenceHash,total_capital AS totalCapital,loss_budget AS lossBudget,status,stop_reason AS stopReason,created_at AS createdAt,started_at AS startedAt,stopped_at AS stoppedAt FROM quant_live_portfolio WHERE tenant_id=? AND owner_id=? AND id=?",tenant,owner,id);}
+    public List<Map<String,Object>> list(long tenant,long owner){return jdbc.queryForList("SELECT id,evidence_hash AS evidenceHash,total_capital AS totalCapital,loss_budget AS lossBudget,status,stop_reason AS stopReason,created_at AS createdAt FROM quant_live_portfolio WHERE tenant_id=? AND owner_id=? ORDER BY created_at DESC LIMIT 50",tenant,owner);}
+    public List<Map<String,Object>> members(String id){return jdbc.queryForList("SELECT report_id AS reportId,policy_id AS policyId,session_id AS sessionId,report_hash AS reportHash,capital,daily_notional AS dailyNotional FROM quant_live_portfolio_member WHERE portfolio_id=? ORDER BY report_id",id);}
+    public List<Map<String,Object>> active(){return jdbc.queryForList("SELECT id,tenant_id AS tenantId,owner_id AS ownerId,status FROM quant_live_portfolio WHERE status IN ('RUNNING','STOPPING')");}
+    public void bind(String id,String report,String policy,String session){if(jdbc.update("UPDATE quant_live_portfolio_member SET policy_id=?,session_id=? WHERE portfolio_id=? AND report_id=? AND session_id IS NULL",policy,session,id,report)!=1)throw new IllegalArgumentException("Portfolio member already bound");}
+    public void running(String id){if(jdbc.update("UPDATE quant_live_portfolio SET status='RUNNING',started_at=? WHERE id=? AND status='READY'",System.currentTimeMillis(),id)!=1)throw new IllegalArgumentException("Portfolio cannot restart; save a new configuration");}
+    public void stopping(String id,String reason){jdbc.update("UPDATE quant_live_portfolio SET status='STOPPING',stop_reason=? WHERE id=? AND status IN ('RUNNING','STOPPING')",reason,id);}
+    public void stopped(String id,String state){jdbc.update("UPDATE quant_live_portfolio SET status=?,stopped_at=? WHERE id=? AND status='STOPPING'",state,System.currentTimeMillis(),id);}
+    public void interrupted(){jdbc.update("UPDATE quant_live_portfolio SET status='FAILED',stop_reason='应用重启后不自动恢复',stopped_at=? WHERE status IN ('RUNNING','STOPPING')",System.currentTimeMillis());}
+    public Map<String,Object> membership(String session){return one("SELECT p.id,p.status,p.tenant_id AS tenantId,p.owner_id AS ownerId,p.loss_budget AS lossBudget,m.policy_id AS policyId,m.capital,m.daily_notional AS dailyNotional FROM quant_live_portfolio p JOIN quant_live_portfolio_member m ON m.portfolio_id=p.id WHERE m.session_id=?",session);}
+    public void policy(String portfolio,String report,String policy){jdbc.update("UPDATE quant_live_portfolio_member SET policy_id=? WHERE portfolio_id=? AND report_id=? AND session_id IS NULL",policy,portfolio,report);}
+    public boolean otherPolicySessions(String policy){return jdbc.queryForObject("SELECT COUNT(*) FROM quant_live_automation_session WHERE status='RUNNING' AND policy_id<>?",Integer.class,policy)>0;}
+    public boolean otherSessions(){return jdbc.queryForObject("SELECT COUNT(*) FROM quant_live_automation_session WHERE status='RUNNING'",Integer.class)>0;}
+    public BigDecimal daily(long tenant,long owner,String policy,String session,long since){return jdbc.queryForObject("SELECT COALESCE(SUM(o.notional),0) FROM quant_live_exchange_order o WHERE o.tenant_id=? AND o.owner_id=? AND o.policy_id=? AND o.status<>'FAILED' AND COALESCE(o.reserved_at,o.submitted_at,o.updated_at)>=? AND EXISTS(SELECT 1 FROM quant_live_strategy_signal s WHERE s.session_id=? AND s.tenant_id=o.tenant_id AND s.owner_id=o.owner_id AND s.policy_id=o.policy_id AND (s.exchange_order_id=o.id OR s.client_order_id=o.client_order_id))",BigDecimal.class,tenant,owner,policy,since,session);}
+    public Map<String,Object> exit(long tenant,long owner,String session,String request){return one("SELECT client_order_id AS clientOrderId,price,amount FROM quant_live_session_exit WHERE tenant_id=? AND owner_id=? AND session_id=? AND request_id=?",tenant,owner,session,request);}
+    public void exit(String client,long tenant,long owner,String policy,String session,String request,BigDecimal price,BigDecimal amount){jdbc.update("INSERT INTO quant_live_session_exit(client_order_id,tenant_id,owner_id,policy_id,session_id,request_id,price,amount,created_at) VALUES(?,?,?,?,?,?,?,?,?)",client,tenant,owner,policy,session,request,price,amount,System.currentTimeMillis());}
+    private Map<String,Object> one(String sql,Object...args){var rows=jdbc.queryForList(sql,args);return rows.isEmpty()?null:rows.getFirst();}
+}

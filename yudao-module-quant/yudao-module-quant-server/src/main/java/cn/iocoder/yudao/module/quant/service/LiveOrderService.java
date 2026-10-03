@@ -21,17 +21,18 @@ public class LiveOrderService {
 
     @Transactional public Map<String,Object> issue(long tenant,long owner,String policyId,LiveOrderTokenRequest request){
         if(!"CONFIRM_LIVE_ORDER".equals(request.confirmation()))throw new IllegalArgumentException("真实订单确认语不匹配");
-        requireLiveReady(tenant,owner,policyId);var decision=controls.decision(tenant,owner,request.clientOrderId());
+        var decision=controls.decision(tenant,owner,request.clientOrderId());
+        requireOrderReady(tenant,owner,policyId,decision);
         if(decision==null||!policyId.equals(decision.get("policyId"))||!"ALLOWED_OFFLINE".equals(decision.get("decision"))||Boolean.TRUE.equals(decision.get("executed")))throw new IllegalArgumentException("订单决策不存在、未通过或已执行");
         if(orders.byClient(tenant,owner,request.clientOrderId())!=null)throw new IllegalArgumentException("订单已创建");
         orders.revokeTokens(policyId);byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);String raw=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);String hash=DatasetRegistry.hash(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));String id=UUID.randomUUID().toString();long expires=System.currentTimeMillis()+properties.getLiveOrderTokenTtlSeconds()*1000L;
-        orders.issueToken(id,policyId,String.valueOf(decision.get("id")),tenant,owner,hash,expires);controls.audit(policyId,tenant,owner,owner,"LIVE_ORDER_TOKEN_ISSUED","ARMED_OFFLINE","ARMED_OFFLINE",request.clientOrderId()+" / "+request.comment().trim());return Map.of("token",raw,"expiresAt",expires,"clientOrderId",request.clientOrderId());
+        orders.issueToken(id,policyId,String.valueOf(decision.get("id")),tenant,owner,hash,expires);controls.audit(policyId,tenant,owner,owner,"LIVE_ORDER_TOKEN_ISSUED",String.valueOf(controls.get(tenant,owner,policyId).get("status")),String.valueOf(controls.get(tenant,owner,policyId).get("status")),request.clientOrderId()+" / "+request.comment().trim());return Map.of("token",raw,"expiresAt",expires,"clientOrderId",request.clientOrderId());
     }
 
     public Map<String,Object> execute(long tenant,long owner,String policyId,LiveOrderExecuteRequest request){
-        requireLiveReady(tenant,owner,policyId);String hash=DatasetRegistry.hash(request.token().getBytes(java.nio.charset.StandardCharsets.UTF_8));var tokenView=orders.token(tenant,owner,policyId,hash);if(tokenView==null)throw new IllegalArgumentException("真实订单令牌无效、过期或已使用");var decisionView=decisionById(tenant,owner,String.valueOf(tokenView.get("decisionId")));Reservation reservation=transactions.execute(status->{orders.lockAccount();requireLiveReady(tenant,owner,policyId);validateExchangeRisk(tenant,owner,policyId,decisionView);var token=orders.token(tenant,owner,policyId,hash);long now=System.currentTimeMillis();if(token==null||!orders.consume(String.valueOf(token.get("id")),now))throw new IllegalArgumentException("真实订单令牌无效、过期或已使用");var decision=decisionById(tenant,owner,String.valueOf(token.get("decisionId")));String clientId=String.valueOf(decision.get("clientOrderId"));var existing=orders.byClient(tenant,owner,clientId);if(existing!=null)return new Reservation(existing,null,null,null,null,null);BigDecimal price=decimal(decision,"price"),amount=decimal(decision,"amount"),notional=decimal(decision,"notional");String id=UUID.randomUUID().toString();orders.createSubmitting(id,policyId,String.valueOf(decision.get("id")),tenant,owner,clientId,properties.getLivePair().replace('/','-'),String.valueOf(decision.get("side")),String.valueOf(decision.get("orderType")),price,amount,notional,now+properties.getLiveOrderCancelTimeoutSeconds()*1000L);return new Reservation(null,id,clientId,String.valueOf(decision.get("side")),price,amount);});
+        String hash=DatasetRegistry.hash(request.token().getBytes(java.nio.charset.StandardCharsets.UTF_8));var tokenView=orders.token(tenant,owner,policyId,hash);if(tokenView==null)throw new IllegalArgumentException("真实订单令牌无效、过期或已使用");var decisionView=decisionById(tenant,owner,String.valueOf(tokenView.get("decisionId")));requireOrderReady(tenant,owner,policyId,decisionView);Reservation reservation=transactions.execute(status->{orders.lockAccount();requireOrderReady(tenant,owner,policyId,decisionView);validatePortfolioOrder(tenant,owner,policyId,decisionView);validateExchangeRisk(tenant,owner,policyId,decisionView);var token=orders.token(tenant,owner,policyId,hash);long now=System.currentTimeMillis();if(token==null||!orders.consume(String.valueOf(token.get("id")),now))throw new IllegalArgumentException("真实订单令牌无效、过期或已使用");var decision=decisionById(tenant,owner,String.valueOf(token.get("decisionId")));String clientId=String.valueOf(decision.get("clientOrderId"));var existing=orders.byClient(tenant,owner,clientId);if(existing!=null)return new Reservation(existing,null,null,null,null,null);BigDecimal price=decimal(decision,"price"),amount=decimal(decision,"amount"),notional=decimal(decision,"notional");String id=UUID.randomUUID().toString();orders.createSubmitting(id,policyId,String.valueOf(decision.get("id")),tenant,owner,clientId,properties.getLivePair().replace('/','-'),String.valueOf(decision.get("side")),String.valueOf(decision.get("orderType")),price,amount,notional,now+properties.getLiveOrderCancelTimeoutSeconds()*1000L);return new Reservation(null,id,clientId,String.valueOf(decision.get("side")),price,amount);});
         if(reservation.existing()!=null)return reservation.existing();String id=reservation.id(),clientId=reservation.clientId();BigDecimal price=reservation.price(),amount=reservation.amount();
-        try{var response=parse(client.placeSpotLimitOrder(clientId,reservation.side(),plain(price),plain(amount)));var item=first(response);String code=text(response,"code"),sCode=text(item,"sCode");if(!"0".equals(code)||!"0".equals(sCode)){String message=text(item,"sMsg");orders.failed(id,sCode,message);throw new IllegalStateException("OKX 下单拒绝: "+sCode+" "+message);}orders.accepted(id,text(item,"ordId"),sCode,text(item,"sMsg"));controls.audit(policyId,tenant,owner,owner,"LIVE_ORDER_SUBMITTED","ARMED_OFFLINE","ARMED_OFFLINE",clientId+" / "+text(item,"ordId"));return orders.get(tenant,owner,id);}catch(RuntimeException e){var current=orders.get(tenant,owner,id);if(current!=null&&"SUBMITTING".equals(current.get("status")))orders.uncertain(id,safe(e.getMessage()));throw e;}
+        try{var response=parse(client.placeSpotLimitOrder(clientId,reservation.side(),plain(price),plain(amount)));var item=first(response);String code=text(response,"code"),sCode=text(item,"sCode");if(!"0".equals(code)||!"0".equals(sCode)){String message=text(item,"sMsg");orders.failed(id,sCode,message);throw new IllegalStateException("OKX 下单拒绝: "+sCode+" "+message);}orders.accepted(id,text(item,"ordId"),sCode,text(item,"sMsg"));controls.audit(policyId,tenant,owner,owner,"LIVE_ORDER_SUBMITTED",String.valueOf(controls.get(tenant,owner,policyId).get("status")),String.valueOf(controls.get(tenant,owner,policyId).get("status")),clientId+" / "+text(item,"ordId"));return orders.get(tenant,owner,id);}catch(RuntimeException e){var current=orders.get(tenant,owner,id);if(current!=null&&"SUBMITTING".equals(current.get("status")))orders.uncertain(id,safe(e.getMessage()));throw e;}
     }
 
     public Map<String,Object> refresh(long tenant,long owner,String orderId){var order=owned(tenant,owner,orderId);return refreshOrder(tenant,owner,order);}
@@ -53,6 +54,44 @@ public class LiveOrderService {
 
     @Scheduled(fixedDelay=10000) public void cancelExpired(){if(!properties.isLiveExecutionEnabled()||!client.configured())return;for(var row:orders.expired(System.currentTimeMillis()))try{cancelOrder(((Number)row.get("tenantId")).longValue(),((Number)row.get("ownerId")).longValue(),row,"AUTO_TIMEOUT");}catch(RuntimeException ignored){}}
 
+    private void requireOrderReady(long tenant,long owner,String policy,Map<String,Object> decision){
+        if(decision==null||!policy.equals(decision.get("policyId")))throw new IllegalArgumentException("Order decision not found");
+        boolean exit=orders.ownedExit(tenant,owner,policy,String.valueOf(decision.get("clientOrderId")));
+        if(exit&&!"SELL".equals(decision.get("side")))throw new IllegalArgumentException("Exit orders can only sell");
+        if(exit){
+            controlService.strategy(tenant,owner,policy);var row=controls.get(tenant,owner,policy);
+            if(row==null||!Set.of("HALTED","ARMED_OFFLINE").contains(String.valueOf(row.get("status")))||!properties.isLiveExecutionEnabled()||!client.configured())throw new IllegalArgumentException("Exit execution disabled");
+        }else requireLiveReady(tenant,owner,policy);
+    }
+    public void checkSessionStart(long tenant,long owner,String policy,String portfolio){
+        orders.lockAccount();var repo=orders.portfolios();var active=repo.active();
+        if(portfolio==null){if(!active.isEmpty()||repo.otherPolicySessions(policy))throw new IllegalArgumentException("Use a controlled portfolio for multiple strategies");}
+        else {var row=repo.get(tenant,owner,portfolio);if(row==null||!"RUNNING".equals(row.get("status"))||repo.members(portfolio).stream().noneMatch(m->policy.equals(m.get("policyId"))))throw new IllegalArgumentException("Portfolio membership not valid");}
+    }
+    public BigDecimal sessionLoss(long tenant,long owner,String policy,String session,BigDecimal mark,BigDecimal fallback){
+        if(orders.portfolios().membership(session)==null)return fallback;
+        var result=LivePerformanceService.calculate(orders.inventoryRows(tenant,owner,policy,session),mark,null);
+        if(!Boolean.TRUE.equals(result.get("valuationComplete")))throw new IllegalArgumentException("Portfolio costs incomplete");
+        return ((BigDecimal)result.get("netContribution")).negate().max(BigDecimal.ZERO);
+    }
+    private void validatePortfolioOrder(long tenant,long owner,String policy,Map<String,Object> decision){
+        var repo=orders.portfolios();String session=orders.sessionForClient(tenant,owner,policy,String.valueOf(decision.get("clientOrderId")));
+        var member=session==null?null:repo.membership(session);var active=repo.active();
+        boolean exit="SELL".equals(decision.get("side"))&&orders.ownedExit(tenant,owner,policy,String.valueOf(decision.get("clientOrderId")));
+        if(exit){if(!active.isEmpty())throw new IllegalArgumentException("Stop portfolio before exiting old inventory");return;}
+        if(!active.isEmpty()&&(member==null||!"RUNNING".equals(member.get("status"))))throw new IllegalArgumentException("Order outside running portfolio");
+        if(member==null)return;
+        if(!"RUNNING".equals(member.get("status")))throw new IllegalArgumentException("Portfolio is stopping or stopped");
+        var rows=orders.inventoryRows(tenant,owner,policy,session);BigDecimal price=decimal(decision,"price");
+        LivePortfolioBudget.requireOrder(rows,price,decimal(decision,"notional"),String.valueOf(decision.get("side")),decimal(member,"capital"),decimal(member,"dailyNotional"),repo.daily(tenant,owner,policy,session,dayStart()));
+        var valuations=new ArrayList<Map<String,Object>>();
+        for(var allocation:repo.members(String.valueOf(member.get("id")))){
+            if(allocation.get("sessionId")==null)throw new IllegalArgumentException("Portfolio session missing");
+            valuations.add(LivePerformanceService.calculate(orders.inventoryRows(tenant,owner,String.valueOf(allocation.get("policyId")),String.valueOf(allocation.get("sessionId"))),price,null));
+        }
+        LivePortfolioBudget.requireLoss(valuations,decimal(member,"lossBudget"));
+    }
+    public static long dayStart(){return java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();}
     private void requireLiveReady(long tenant,long owner,String policyId){controlService.strategy(tenant,owner,policyId);var policy=controls.get(tenant,owner,policyId);if(policy==null)throw new IllegalArgumentException("实盘安全策略不存在");if(!"ARMED_OFFLINE".equals(policy.get("status")))throw new IllegalArgumentException("实盘策略未启用");if(!properties.isLiveExecutionEnabled())throw new IllegalArgumentException("真实执行总开关关闭");if(!client.configured())throw new IllegalArgumentException("OKX 凭据未配置");}
     private void validateExchangeRisk(long tenant,long owner,String policyId,Map<String,Object> decision){BigDecimal notional=decimal(decision,"notional"),amount=decimal(decision,"amount");var pending=parse(client.pendingOrders());if(!"0".equals(text(pending,"code")))throw new IllegalArgumentException("无法核对交易所挂单");Object pendingData=pending.get("data");int open=pendingData instanceof List<?> list?list.size():Integer.MAX_VALUE;var active=orders.accountActive();
         if(!(pendingData instanceof List<?> pendingRows))throw new IllegalArgumentException("交易所挂单响应不完整");

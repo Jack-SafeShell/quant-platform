@@ -55,6 +55,8 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/021_live_automation.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/023_strategy_experiment.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/025_live_order_costs.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/026_live_account_reservation.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/027_live_portfolio.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);

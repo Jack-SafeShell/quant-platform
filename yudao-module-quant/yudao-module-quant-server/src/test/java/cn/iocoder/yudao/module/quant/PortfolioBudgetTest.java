@@ -41,8 +41,8 @@ class PortfolioBudgetTest {
     @Test void individuallyReadyPlansNeverStartOrReservePortfolioFunds(){
         var result=service().portfolioBudget(1,10,request("20",row("ema","10","5","2","10"),row("breakout","10","5","2","10")));
         assertEquals(true,result.get("budgetValid"));assertEquals(true,result.get("sharedInstrument"));
-        assertEquals(false,result.get("readyForPortfolioStart"));assertEquals(false,result.get("fundsReserved"));
-        assertEquals(false,result.get("multiStrategyExecutionSupported"));assertEquals(64,String.valueOf(result.get("evidenceHash")).length());
+        assertEquals(true,result.get("readyForPortfolioStart"));assertEquals(false,result.get("fundsReserved"));
+        assertEquals(true,result.get("multiStrategyExecutionSupported"));assertEquals(64,String.valueOf(result.get("evidenceHash")).length());
     }
     @Test void versionsBoundPolicyLimitsAndReportOwnershipRemainEnforced(){
         var service=service();var duplicate=request("20",row("same1","10","5","2","10"),row("same2","10","5","2","10"));

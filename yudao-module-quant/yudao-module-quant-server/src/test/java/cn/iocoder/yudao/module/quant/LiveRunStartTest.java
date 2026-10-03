@@ -41,7 +41,8 @@ class LiveRunStartTest {
         }
         var repo=new Sessions();var policy=new Policies();var client=new Client();
         var controls=new LiveControlService(null,null,p,null){public Map<String,Object> strategy(long t,long o,String id){return Map.of();}};
-        var service=new LiveAutomationService(repo,policy,controls,null,client,p);
+        var orderService=new LiveOrderService(policy,null,client,p,controls,new org.springframework.jdbc.datasource.DataSourceTransactionManager()){public void checkSessionStart(long t,long o,String policyId,String portfolio){}};
+        var service=new LiveAutomationService(repo,policy,controls,orderService,client,p);
         var request=new LiveAutomationStartRequest("CONFIRM_AUTO_LIVE_START","test",new BigDecimal("3"),new BigDecimal("2"),17,8);
         assertEquals("session",service.start(1,10,"policy",request));
         assertEquals(new BigDecimal("3"),repo.active.get("orderNotional"));assertEquals(new BigDecimal("2"),repo.active.get("maxSessionLoss"));

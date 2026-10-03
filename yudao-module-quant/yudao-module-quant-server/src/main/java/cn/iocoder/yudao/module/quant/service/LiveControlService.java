@@ -45,11 +45,11 @@ public class LiveControlService {
         var result=new TreeMap<String,Object>();result.put("totals",totals);result.put("allocations",plans);
         result.put("exchange",properties.getLiveExchange());result.put("pair",properties.getLivePair());
         result.put("budgetValid",true);result.put("readOnly",true);result.put("fundsReserved",false);
-        result.put("multiStrategyExecutionSupported",false);result.put("readyForPortfolioStart",false);
+        result.put("multiStrategyExecutionSupported",true);result.put("readyForPortfolioStart",plans.stream().allMatch(a->Boolean.TRUE.equals(((Map<?,?>)a.get("runPlan")).get("readyForStartRequest"))));
         result.put("sharedInstrument",plans.size()>1);
         result.put("limitations",List.of("Allocation is a planning snapshot, not an account balance or a fund reservation",
-                "Same-account strategies require shared order reservations and inventory ownership before simultaneous execution",
-                "Individual readiness does not authorize a portfolio start; no strategy is started by this request"));
+                "Save an immutable portfolio configuration; each start rechecks admission, balances and existing sessions",
+                "Readiness does not reserve funds; no strategy is started by this planning request"));
         result.put("evidenceHash",DatasetRegistry.hash(JsonUtils.toJsonString(result).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         return result;
     }
@@ -112,7 +112,8 @@ public class LiveControlService {
         String hash=DatasetRegistry.hash(JsonUtils.toJsonByte(canonical));var previous=repository.decision(tenant,owner,request.clientOrderId());
         if(previous!=null){if(!Objects.equals(previous.get("requestHash"),hash))throw new IllegalArgumentException("客户端订单号已用于不同请求");return previous;}
         BigDecimal notional=request.price().multiply(request.amount());String decision="ALLOWED_OFFLINE",reason="PASSED",message="通过全部离线门禁；未发送真实订单";
-        if(!"ARMED_OFFLINE".equals(policy.get("status"))){decision="REJECTED";reason="GATE_HALTED";message="全局停机开关已生效";}
+        if(repository.ownedExit(tenant,owner,id,request.clientOrderId())&&!"SELL".equals(request.side())){decision="REJECTED";reason="EXIT_SELL_ONLY";message="原会话退出仅允许卖出";}
+        else if(!"ARMED_OFFLINE".equals(policy.get("status"))&&!("HALTED".equals(policy.get("status"))&&"SELL".equals(request.side())&&repository.ownedExit(tenant,owner,id,request.clientOrderId()))){decision="REJECTED";reason="GATE_HALTED";message="全局停机开关已生效";}
         else if(notional.compareTo(decimal(policy,"maxOrderNotional"))>0){decision="REJECTED";reason="MAX_ORDER_NOTIONAL";message="超过单笔金额上限";}
         else if(request.dailyExecutedNotional().add(notional).compareTo(decimal(policy,"maxDailyNotional"))>0){decision="REJECTED";reason="MAX_DAILY_NOTIONAL";message="超过单日累计金额上限";}
         else if("BUY".equals(request.side())&&request.currentExposure().add(notional).compareTo(decimal(policy,"maxTotalExposure"))>0){decision="REJECTED";reason="MAX_TOTAL_EXPOSURE";message="超过总仓位上限";}

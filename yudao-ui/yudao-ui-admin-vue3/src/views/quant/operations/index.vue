@@ -162,6 +162,8 @@
             <p class="evidence-note">估值使用该会话最近已收盘 K 线价格，停止后的历史会话不刷新实时价格。费用按成交均价折算，估值未计入未来平仓费用；活动订单后续成交会改变结果。缺少实际费用的 {{ performance.missingCostOrderCount }} 个成交订单不会按零费用计算。</p>
             <el-alert v-if="!performance.valuationComplete" title="数据不完整，净收益暂不可计算；请核对成交、手续费及估值证据。" type="warning" :closable="false" />
             <p class="evidence-note">全部退出后净收益仅在有成交、实际费用完整、无活动订单且会话净持仓为零时计算，不包含未退出持仓估值。费用补查仅查询交易所并更新该订单账本；不会下单、撤单或启动策略。当前凭据未配置时不可补查。</p>
+            <el-button v-hasPermi="['quant:backtest:create']" type="warning" :disabled="loading || !!repairingOrderId || !!refreshError || !!performanceError || activeSession?.status === 'RUNNING' || !capabilities?.liveExecutionEnabled || !performance.costsComplete || !(Number(performance.sellableBtc)>0)" @click="exitCurrentInventory">退出此会话持仓</el-button>
+            <p class="evidence-note">退出使用原会话净库存及实时买价限价，保留原账本归属；可能部分成交或留下精度尾差。提交成功不代表已清仓，需刷新核对成交和费用。</p>
             <el-table :data="performance.orders" max-height="420" row-key="id">
               <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" />
               <el-table-column prop="side" label="方向" width="80" />
@@ -279,6 +281,7 @@
 </template>
 
 <script setup lang="ts">
+import { exitOwnedSession } from '@/api/quant/portfolio'
 import { strategyConfigurationLabel } from '@/api/quant/backtest'
 import { getLivePerformance, refreshPerformanceOrder, type LivePerformance, type PerformanceOrder } from '@/api/quant/performance'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -403,6 +406,12 @@ function settlementLabel(state?: string) {
 function needsCostRepair(order: PerformanceOrder) {
   return ['FILLED','CANCELED'].includes(order.status) && Number(order.filledAmount) > 0 &&
     (order.costEvidenceComplete === false || order.feeAmount == null || order.rebateAmount == null)
+}
+const exitRequests=new Map<string,string>()
+async function exitCurrentInventory(){const sessionId=performance.value?.sessionId;if(!sessionId||loading.value||repairingOrderId.value)return;
+  try{await ElMessageBox.confirm('将以真实卖单退出此会话可用持仓，并保留原归属。提交后请核对成交状态及尾差。','退出原会话持仓',{type:'warning'})}catch{return}
+  const requestId=exitRequests.get(sessionId)||crypto.randomUUID();exitRequests.set(sessionId,requestId);repairingOrderId.value='exit';
+  try{const order=await exitOwnedSession(sessionId,requestId);ElMessage.success(`退出订单状态：${order.status}，请核对成交与费用`);if(['FILLED','CANCELED','FAILED'].includes(order.status))exitRequests.delete(sessionId)}catch{ElMessage.error('退出未确认，请核对挂单和账本；本次请求编号已保留，重试不会重复发单')}finally{repairingOrderId.value='';await refresh()}
 }
 async function repairOrderCosts(order: PerformanceOrder) {
   if (!needsCostRepair(order) || !costRepairAvailable.value || loading.value || repairingOrderId.value || refreshError.value || performanceError.value) return
