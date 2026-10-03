@@ -23,3 +23,5 @@ RDS 仅允许本项目 `quant-platform`：连接测试、SELECT 1、必要建表
 Docker 只管理 `quant-platform` 专属资源：容器 `quant-platform-redis`、网络 `quant-platform-local`、卷 `quant-platform-redis-data`。Redis 仅绑定 127.0.0.1，开启 AOF 和健康检查。端口冲突先查归属，改专属备用端口，不停未知服务。不执行 `--remove-orphans`，不停止/删除/重建其他项目容器，不随意删除持久卷。
 
 `D:\quant-poc` 只读参考；不启动、停止、重建其服务，不复制数据库、日志、运行数据或敏感配置。当前运行状态不能用旧交接中的 PID 或健康结论替代。
+
+2026-10-03：私有只读订单费用查询不要求启用真实执行。受控补查可短时配置已有 DPAPI 文件及代理，同时保持模拟、真实执行和自动策略开关全 false；查询前核对门禁 HALTED、无运行会话/活动订单，结束恢复无凭据默认服务。前端费用补查依据凭据配置存在提供入口，不能以此启用真实订单；下单和撤单仍在后端要求 live-execution-enabled=true。不得输出解密结果或签名头，不按研究费率补造缺失实际费用。

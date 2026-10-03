@@ -360,7 +360,7 @@ const equityOptions = computed<EChartsOption>(() => {
 })
 
 const activePolicy = computed(() => policies.value.find((item) => item.id === activeSession.value?.policyId) || policies.value[0])
-const costRepairAvailable = computed(() => !!capabilities.value?.liveExecutionEnabled && !!activePolicy.value?.credentialProvider && activePolicy.value.credentialProvider !== 'UNCONFIGURED')
+const costRepairAvailable = computed(() => !!activePolicy.value?.credentialProvider && activePolicy.value.credentialProvider !== 'UNCONFIGURED')
 const latestReconciliation = computed(() => activeSession.value?.reconciliations?.[0])
 const latestSignal = computed(() => activeSession.value?.signals?.[0])
 const openAlerts = computed(() => activeSession.value?.alerts?.filter((item) => item.status === 'OPEN').length || 0)

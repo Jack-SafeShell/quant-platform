@@ -343,3 +343,13 @@ POST /quant/backtest/live-control/portfolio-budget 使用请求体承载规划�
 budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategyExecutionSupported、fundsReserved 始终 false。即使独立方案准备齐备，组合也不能启动；当前同账户/同交易对需先实现共享订单额度预约及持仓归属控制，不能通过多个原独立会话来替代组合执行。研究成本假设不作为实际手续费。
 
 16 项相关后端测试、单体聚合 install（含 package）、前端 ts:check/build:local、git diff --check 通过。覆盖合计限额不能由拆分方案绕过、精度、资金不足、重复报告/版本、所属报告委托、绑定门禁限额、准备齐备仍不启动或预留。无数据库迁移或新单体配置。默认服务重启仍受此前自动审批阻断，本轮未重试，新接口尚未获部署后实际 API/浏览器验收；没有加载凭据、私有查询或真实订单，首阶段历史费用补查与真实退出闭环仍未完成。
+
+## 部署接口与历史实际费用验收（2026-10-03）
+
+用户切换到请求批准后，默认重启与只读补查经工具批准执行，此前执行阻断已解除。旧 JVM 的 live-control/list 500 日志指向 StrategyTemplates 类加载失败；默认重启后恢复。实际验证组合规划 20 USDT、两方案分配 8/10、单笔 5/5、亏损 2/2、单日 10/10：返回分配 18、剩余 2、合计亏损 4、单日 20，budgetValid=true、readyForPortfolioStart=false、fundsReserved=false；21 USDT 总资金返回 code=400。
+
+采用不启用执行的私有只读配置补查旧成交：QUANT_LIVE_CREDENTIAL_FILE 指向已有 DPAPI 文件、查询代理沿用本机私有 API 代理，QUANT_LIVE_EXECUTION_ENABLED=false、QUANT_LIVE_AUTOMATION_ENABLED=false，模拟开关也关闭。确认所有门禁 HALTED、会话不运行且平台无活动订单。仅通过原 order/refresh 查询一笔终态订单，未下单、撤单或创建令牌；临时进程退出后恢复原无凭据默认服务。面板可用条件改为凭据已配置，不要求开启真实执行；下单与撤单的后端开关保护保持有效。
+
+会话 c70673c5-c58a-4dc2-8646-1d3a5fc36683 的 BUY 累计成交 0.00005931 BTC、均价 84296.9，实际费用 -0.00000005931 BTC、返佣 0 USDT，按成交均价折算费用 -0.004999649139 USDT。缺费用订单由 1 降为 0、costsComplete=true；净持仓 0.00005925069 BTC、settlementState=OPEN_POSITION，closedPositionNetPnl=null。会话最后闭盘价格 84877.4 的估值净贡献为 0.029395376406 USDT，是历史持仓估值贡献，不是退出收益或当前实时收益；没有证明持仓已卖出。
+
+最终实际核对默认服务健康 UP、全部执行开关 false、凭据 UNCONFIGURED、门禁 HALTED，根 PID 34644。非秘密摘要保留 .runtime/quant/deployed-review-20261003.json、historical-cost-review-20261003.json、default-final-review-20261003.json，不提交。前端 ts:check/build:local、git diff --check 通过，无后端源码或数据库/单体配置变更，未重复覆盖已通过的后端构建测试。本轮补齐实际 API 验收与手续费证据，尚无新候选会话、真实退出或新增浏览器交互证据。
