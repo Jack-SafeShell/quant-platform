@@ -12,9 +12,10 @@ public class DatasetDownloadRepository {
     public Map<String,Object> get(long tenant,long owner,String id) { return one("SELECT * FROM quant_dataset_download_task WHERE tenant_id=? AND owner_id=? AND id=?",tenant,owner,id); }
     public List<Map<String,Object>> list(long tenant,long owner) { return jdbc.queryForList("SELECT * FROM quant_dataset_download_task WHERE tenant_id=? AND owner_id=? ORDER BY created_at DESC LIMIT 100",tenant,owner); }
     public List<Map<String,Object>> audits(long tenant,long owner,String id) { return jdbc.queryForList("SELECT a.event_type AS eventType,a.detail,a.created_at AS createdAt FROM quant_dataset_download_audit a JOIN quant_dataset_download_task t ON t.id=a.task_id WHERE t.tenant_id=? AND t.owner_id=? AND t.id=? ORDER BY a.created_at",tenant,owner,id); }
-    public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end) {
+    public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end) {insert(id,tenant,owner,key,hash,dataset,start,end,"okx");}
+    public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end,String exchange) {
         long now=System.currentTimeMillis();
-        jdbc.update("INSERT INTO quant_dataset_download_task(id,tenant_id,owner_id,request_key,request_hash,dataset_id,start_date,end_date,exchange_name,pair_name,timeframe,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",id,tenant,owner,key,hash,dataset,start,end,"okx","BTC/USDT","1h","QUEUED",now);
+        jdbc.update("INSERT INTO quant_dataset_download_task(id,tenant_id,owner_id,request_key,request_hash,dataset_id,start_date,end_date,exchange_name,pair_name,timeframe,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",id,tenant,owner,key,hash,dataset,start,end,exchange,"BTC/USDT","1h","QUEUED",now);
         audit(id,"SUBMITTED","已提交公开历史行情下载",now);
     }
     public Map<String,Object> next(){ return one("SELECT * FROM quant_dataset_download_task WHERE status='QUEUED' ORDER BY created_at LIMIT 1"); }

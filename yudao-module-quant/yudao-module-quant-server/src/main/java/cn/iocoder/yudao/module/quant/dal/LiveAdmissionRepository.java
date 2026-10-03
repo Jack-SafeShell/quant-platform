@@ -15,11 +15,11 @@ public class LiveAdmissionRepository {
     }
 
     public Map<String, Object> latestSuccessfulBacktest(long tenant, long owner) {
-        return one("SELECT t.id,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.status='SUCCEEDED' ORDER BY t.finished_at DESC LIMIT 1", tenant, owner);
+        return one("SELECT t.id,t.exchange_name AS exchangeName,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.status='SUCCEEDED' ORDER BY t.finished_at DESC LIMIT 1", tenant, owner);
     }
 
     public Map<String,Object> successfulBacktest(long tenant,long owner,String id){
-        return one("SELECT t.id,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.id=? AND t.status='SUCCEEDED'",tenant,owner,id);
+        return one("SELECT t.id,t.exchange_name AS exchangeName,t.strategy_version_id AS strategyVersionId,t.parameter_set_id AS parameterSetId,t.dataset_hash AS datasetHash,t.engine_image AS engineImage,r.engine_version AS engineVersion,r.artifact_hash AS artifactHash,t.finished_at AS finishedAt FROM quant_backtest_task t JOIN quant_backtest_result r ON r.task_id=t.id WHERE t.tenant_id=? AND t.owner_id=? AND t.id=? AND t.status='SUCCEEDED'",tenant,owner,id);
     }
     public Map<String,Object> strategySnapshot(long tenant,long owner,String version){
         return one("SELECT v.id,v.source_hash AS sourceHash,v.source_code AS sourceCode FROM quant_strategy_version v JOIN quant_strategy s ON s.id=v.strategy_id WHERE s.tenant_id=? AND s.owner_id=? AND v.id=?",tenant,owner,version);

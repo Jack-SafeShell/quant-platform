@@ -3,6 +3,7 @@
     <el-alert title="EMA 交叉 / 通道突破 · BTC/USDT 现货 · 1 小时 · 可配置版本" type="info" :closable="false" />
     <p class="text-gray-500">配置保存为不可变策略版本，回测和模拟盘使用所选版本；包含 240 根预热，日期按 UTC，结束日不包含。</p>
     <el-alert v-if="!enabled" title="回测尚未启用。请先完成数据准备，并在 yudao-server 中启用量化回测配置。" type="warning" :closable="false" />
+    <ExchangeMarketPanel />
     <StrategyConfigEditor :versions="strategyVersions" :selected-version-id="form.strategyVersionId" @created="selectCreatedStrategy" />
     <el-form :model="form" label-width="110px" class="mt-4" @submit.prevent="submit">
       <el-form-item label="策略版本"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="请选择不可变策略版本"><el-option v-for="item in strategyVersions" :key="item.id" :label="`${strategyLabel(item.configuration)} · ${item.sourceHash.slice(0, 12)}`" :value="item.id" /></el-select></el-form-item>
@@ -17,9 +18,9 @@
     </el-form>
   </ContentWrap>
   <ContentWrap title="受控历史行情下载">
-    <el-alert title="仅下载 OKX 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
-    <el-form :inline="true" class="mt-4"><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
-    <el-table :data="downloadTasks"><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
+    <el-alert title="仅下载所选 OKX / Binance 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
+    <el-form :inline="true" class="mt-4"><el-form-item label="交易所"><el-select v-model="downloadForm.exchange"><el-option label="OKX" value="okx" /><el-option label="Binance" value="binance" /></el-select></el-form-item><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
+    <el-table :data="downloadTasks"><el-table-column prop="exchange_name" label="交易所" /><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
   </ContentWrap>
   <ContentWrap title="行情数据集与质量报告">
     <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
@@ -173,6 +174,7 @@
 </template>
 
 <script setup lang="ts">
+import ExchangeMarketPanel from './ExchangeMarketPanel.vue'
 import LiveRunPlanEditor from './LiveRunPlanEditor.vue'
 import PortfolioBudgetEditor from './PortfolioBudgetEditor.vue'
 import type { LiveRunBudget } from '@/api/quant/backtest'
@@ -200,7 +202,7 @@ const comparisons = ref<BacktestComparison[]>([])
 const compareVisible = ref(false)
 const datasets = ref<DatasetQuality[]>([])
 const downloadTasks = ref<DatasetDownloadTask[]>([])
-const downloadForm = reactive({ datasetId: '' })
+const downloadForm = reactive({ datasetId: '', exchange: 'okx' as 'okx' | 'binance' })
 const downloadDates = ref<string[]>([])
 const downloadSubmitting = ref(false)
 const optimization=reactive({parameterSetIds: [] as string[]})
@@ -341,7 +343,7 @@ async function downloadResearch(){if(!optimizationResult.value)return;const blob
 async function submitDownload() {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(downloadForm.datasetId) || downloadDates.value.length !== 2) { ElMessage.warning('请填写有效的数据集编号和日期区间'); return }
   downloadSubmitting.value = true
-  try { await createDatasetDownload({ requestKey: crypto.randomUUID(), datasetId: downloadForm.datasetId, startDate: downloadDates.value[0], endDate: downloadDates.value[1] }); ElMessage.success('下载任务已提交'); await refresh() }
+  try { await createDatasetDownload({ requestKey: crypto.randomUUID(), datasetId: downloadForm.datasetId, exchange: downloadForm.exchange, startDate: downloadDates.value[0], endDate: downloadDates.value[1] }); ElMessage.success('下载任务已提交'); await refresh() }
   finally { downloadSubmitting.value = false }
 }
 async function showDetail(id: string) { selected.value = await getBacktest(id); detailVisible.value = true }

@@ -110,11 +110,12 @@ export const createParameterSet = (data: Pick<BacktestRequest, 'startingBalance'
 export const compareBacktests = (data: string[]): Promise<BacktestComparison[]> => request.post({ url: '/quant/backtest/compare', data })
 export const listDatasets = (): Promise<DatasetQuality[]> => request.get({ url: '/quant/backtest/datasets' })
 export interface DatasetDownloadTask {
+  exchange_name: 'okx' | 'binance'
   id: string; dataset_id: string; start_date: string; end_date: string
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'; candles?: number
   dataset_hash?: string; error_message?: string; created_at: number
 }
-export const createDatasetDownload = (data: { requestKey: string; datasetId: string; startDate: string; endDate: string }): Promise<string> => request.post({ url: '/quant/backtest/dataset-download/create', data })
+export const createDatasetDownload = (data: { requestKey: string; datasetId: string; startDate: string; endDate: string; exchange?: 'okx' | 'binance' }): Promise<string> => request.post({ url: '/quant/backtest/dataset-download/create', data })
 export const listDatasetDownloads = (): Promise<DatasetDownloadTask[]> => request.get({ url: '/quant/backtest/dataset-download/list' })
 export interface OptimizationBatch { id: string; dataset_id: string; train_start: string; split_date: string; validation_end: string; created_at: number }
 export const createOptimization = (data: object): Promise<string> => request.post({ url: '/quant/backtest/optimization/create', data })
@@ -164,7 +165,7 @@ export const getLiveAdmission=(id:string):Promise<LiveAdmissionReport>=>request.
 export const confirmLiveAdmission=(id:string,data:{confirmationType:'EVIDENCE_REVIEW'|'KEY_BOUNDARY_REVIEW';confirmationPhrase:string;comment:string;reportHash:string}):Promise<string>=>request.post({url:'/quant/backtest/live-admission/confirm',params:{id},data})
 export const exportLiveAdmission=(id:string):Promise<Blob>=>request.download({url:'/quant/backtest/live-admission/export',params:{id}})
 export interface LiveStrategyBinding { strategyVersionId:string;sourceHash:string;configuration:StrategyConfiguration }
-export interface LiveControlPolicy { strategy?:LiveStrategyBinding; id:string;admissionReportId:string;admissionReportHash:string;policyVersion:string;exchangeName:string;pairSymbol:string;tradingMode:'spot';maxOrderNotional:number;maxDailyNotional:number;maxTotalExposure:number;maxOpenOrders:number;status:'HALTED'|'ARMED_OFFLINE';createdAt:number;updatedAt:number;liveExecutionEnabled:boolean;credentialProvider:'UNCONFIGURED'|'WINDOWS_DPAPI_FILE';privateApiConnected:boolean;realOrderEndpointAvailable:boolean;activationAllowed:boolean;decisions?:LiveOrderDecision[];audits?:Array<{id:string;actorId:number;eventType:string;fromStatus?:string;toStatus?:string;message:string;createdAt:number}> }
+export interface LiveControlPolicy { strategy?:LiveStrategyBinding; id:string;accountId:string;selectedAccount:boolean;admissionReportId:string;admissionReportHash:string;policyVersion:string;exchangeName:string;pairSymbol:string;tradingMode:'spot';maxOrderNotional:number;maxDailyNotional:number;maxTotalExposure:number;maxOpenOrders:number;status:'HALTED'|'ARMED_OFFLINE';createdAt:number;updatedAt:number;liveExecutionEnabled:boolean;credentialProvider:'UNCONFIGURED'|'WINDOWS_DPAPI_FILE';privateApiConnected:boolean;realOrderEndpointAvailable:boolean;activationAllowed:boolean;decisions?:LiveOrderDecision[];audits?:Array<{id:string;actorId:number;eventType:string;fromStatus?:string;toStatus?:string;message:string;createdAt:number}> }
 export interface LiveOrderDecision { id:string;clientOrderId:string;requestHash:string;side:'BUY'|'SELL';orderType:'LIMIT';price:number;amount:number;notional:number;currentExposure:number;dailyExecutedNotional:number;openOrders:number;decision:'ALLOWED_OFFLINE'|'REJECTED';reasonCode:string;reasonMessage:string;executed:false;createdAt:number }
 export const createLiveControl=(reportId:string):Promise<string>=>request.post({url:'/quant/backtest/live-control/create',params:{reportId}})
 export const listLiveControls=():Promise<LiveControlPolicy[]>=>request.get({url:'/quant/backtest/live-control/list'})

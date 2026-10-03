@@ -28,7 +28,7 @@ class LiveOrderCostRepairTest {
         public String placeSpotLimitOrder(String c,String s,String p,String a){throw new AssertionError("Must never place an order");}
         public String cancelOrder(String id){throw new AssertionError("Must never cancel an order");}
     }
-    static LiveOrderService service(Ledger ledger,Client client){return new LiveOrderService(null,ledger,client,new QuantProperties(),null,new DataSourceTransactionManager());}
+    static LiveOrderService service(Ledger ledger,Client client){return new LiveOrderService(null,ledger,client,new QuantProperties(),new cn.iocoder.yudao.module.quant.service.LiveControlService(null,null,new QuantProperties(),null){public void requireAccount(long t,long o,String id){}},new DataSourceTransactionManager());}
     @Test void filledAndPartiallyFilledCanceledOrdersCanRepairActualCosts(){
         for(String state:List.of("FILLED","CANCELED")){
             var ledger=new Ledger();ledger.row.put("status",state);var client=new Client();

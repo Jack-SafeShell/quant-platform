@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**候选研究复核、模拟补证与组合小额验收。** 旧会话可交易数量已真实退出并核对费用，保留微量精度尾差；工具执行审批阻断已解除。先人工复核 docs/quant/CANDIDATE-REVIEW.md 所列突破研究，接受后沿原流程完成同版本短时模拟技术验证，再创建新准入报告及固定组合，完成候选人工准入并受控运行。现有组合仍 READY、候选未运行；不转移旧库存、不增资、不新增 24 小时等待，A 股暂缓。
+**Binance 私有账户适配与小额交易验收。** 本轮公开行情、历史下载/回测与固定账户隔离已完成；下一项接入独立加密凭据、签名及权限核对、交易规则、余额、订单与成交费用，并沿既有风险链路进行小额验收。保持 OKX 历史账户归属，不复用其凭据或转移旧仓；一次选择一个私有账户。旧 OKX 候选复核仍待人工完成，不追加 24 小时等待，A 股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -272,3 +272,13 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 临时服务仅打开手动真实执行，自动及模拟执行保持 false，门禁 HALTED；退出后终止临时进程并恢复原默认服务，根 PID 41304。最终健康 UP、三个执行开关 false、平台活动订单 0，没有启动新候选会话。凭据仅由原 DPAPI 服务读取，没有输出密钥或临时令牌文件。非秘密证据 .runtime/quant/owned-exit-review-20261003.json 保留且不提交。
 - 实际复查发现突破候选还缺同版本模拟技术证据，并且突破研究批次 bce40025-96e9-4c39-bbad-fd4a1c75a24b 尚无人接受，模拟准入 eligible=false。不能用执行审批代替研究/准入人工确认，也不能将两候选均描述为只缺双确认。具体数据与预算已整理到 docs/quant/CANDIDATE-REVIEW.md；报告与固定组合不可改写，补证后需新报告和组合配置。
 - 本轮无业务源码、数据库或前端改动。实际 API/交易所成交、费用归属及请求幂等验证通过；沿用上阶段 63 项测试、单体与前端构建证据，不重复构建覆盖正在运行的模块 JAR。git diff --check 通过。未新增组合真实运行或盈利有效性证据。
+
+## 多交易所账户隔离与 Binance 公开行情（2026-10-03）
+
+- 单体新增 live-account-id / live-exchange 环境配置，默认仍 okx-primary / okx；028 增量新增 quant_exchange_account，现 42 张 quant 表。原门禁、订单和固定组合绑定原账户，库存/会话仍沿原归属，不迁移或重写历史收益。账户互斥、活动/日预约和超时订单按账户隔离，原跨租户/用户的同账户共享限额保持。
+- 私有操作核对当前账户、交易所、登记的独立 DPAPI 文件引用，以及由 OKX account/config 返回的当前 UID；仅保存身份摘要。同 UID 可轮换 Key，不同 UID 不能复用账本，同 UID 不能换名重置预算。缓存身份若随上层事务回滚，后续请求仍重新持久化核对。原 okx-primary 通过关闭执行的实际只读查询完成绑定，未输出凭据或明文 UID。
+- 新公开行情接口支持 OKX/Binance BTC/USDT 买卖报价与已收盘 1h K 线，检查时间、价格、缺口及重复。历史下载增加交易所选择，旧请求仍默认 OKX、幂等摘要兼容，改变交易所不能复用请求标识。页面新增行情与当前账户展示；行情选择不切换私有账户。Binance 使用官方仅公开行情域名，不读取密钥。
+- 实际 Binance/OKX 各读取 199 根闭盘 K 线。Binance 下载 2d8029be-2c17-464c-ae4a-7b1a5297434c 成功，数据集 binance-btc-20260929-20261001-v1 共 288 根（含 240 根预热）、0 缺口、VALID；SHA256 d187c965b9025452bb95815047ad5f52b005414c19777a48686035dba01807b1。EMA30/90 回测 e8d8e0e0-2806-45dc-a751-59b4a31f394b 为 SUCCEEDED，exchangeName=binance，证实进入既有 Freqtrade 链路，不作为两天盈利验证。
+- 78 项 Java 回归/隔离测试、4 项 Python 下载测试、单体聚合 install、前端 ts:check/build:local 及 git diff --check 通过。覆盖账户身份/额度隔离、私有客户端拒绝 Binance、事务回滚后身份绑定、不同交易所回测不能启用 OKX 门禁、下载请求交易所幂等及公开数据边界。构建前停止默认 JVM，完成后恢复；Windows PowerShell 对 Maven 的 JDK 警告处理已调整，首次未实际构建的尝试未算成功。
+- 最终默认根 PID 34916、健康 UP、三个执行开关 false、无运行会话/活动订单，原门禁 HALTED。身份核对临时服务退出，默认无凭据配置；本轮没有真实订单或新增浏览器交互证据。非秘密记录 exchange-market-review、exchange-account-private-review、binance-backtest-review、exchange-stage-final-20261003.json 保留在 .runtime/quant，不提交。
+- 限制：仍为单体单实例、一次选择一个私有账户；Binance 余额、签名、订单和费用适配尚未实现，不可用其密钥替换 OKX 凭据。旧固定组合仍 READY、候选未运行；突破仍待人工接受研究及同版本模拟补证。接入说明见 docs/quant/EXCHANGES.md，A 股继续暂缓。

@@ -45,6 +45,24 @@ class OkxPrivateApiClientTest {
         assertEquals(1, http.calls);
     }
 
+    @Test void bindsExchangeUidAgainAfterCallerTransactionRollsBack() {
+        var jdbc=new org.springframework.jdbc.core.JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource("jdbc:h2:mem:"+java.util.UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1","sa",""));
+        jdbc.execute("CREATE TABLE quant_exchange_account(id VARCHAR PRIMARY KEY,exchange_name VARCHAR,credential_file_name VARCHAR,identity_hash VARCHAR UNIQUE)");jdbc.update("INSERT INTO quant_exchange_account VALUES('okx-primary','okx','okx-live.dpapi',NULL)");
+        var props=properties();props.setWorkspace("D:/0000/quant-platform/.runtime/quant");props.setLiveCredentialFile("D:/0000/quant-platform/.runtime/quant/credentials/okx-live.dpapi");
+        var repo=new cn.iocoder.yudao.module.quant.dal.ExchangeAccountRepository(jdbc,props);
+        var http=new QueueHttpClient(response("{\"code\":\"0\",\"data\":[{\"uid\":\"original-uid\"}]}"),okResponse(),okResponse());
+        var client=new OkxPrivateApiClient(props,credentials(),http,repo);
+        var tx=new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getDataSource()));
+        assertThrows(IllegalStateException.class,()->tx.executeWithoutResult(status->{client.accountBalance();throw new IllegalStateException("rollback");}));
+        assertNull(repo.current().get("identityHash"));client.accountBalance();assertNotNull(repo.current().get("identityHash"));assertEquals(3,http.calls);
+        var switched=new OkxPrivateApiClient(props,credentials(),new QueueHttpClient(response("{\"code\":\"0\",\"data\":[{\"uid\":\"wrong-uid\"}]}")),repo);
+        assertThrows(IllegalArgumentException.class,switched::accountBalance);
+    }
+    @Test void refusesBinanceBeforeLoadingOkxCredentials() {
+        var props=properties();props.setLiveExchange("binance");var provider=new LiveCredentialProvider(){public boolean configured(){return true;}public Optional<OkxCredential> load(){throw new AssertionError("Credentials must not load");}};
+        var http=new QueueHttpClient();var client=new OkxPrivateApiClient(props,provider,http);assertFalse(client.configured());assertThrows(IllegalStateException.class,client::accountBalance);assertEquals(0,http.calls);
+    }
+
     private static QuantProperties properties() {
         QuantProperties properties = new QuantProperties();
         properties.setLivePrivateReadMaxAttempts(3);properties.setLivePrivateReadRetryDelayMillis(1);
@@ -56,13 +74,14 @@ class OkxPrivateApiClientTest {
             public boolean configured() { return true; }
         };
     }
-    private static HttpResponse<String> okResponse() {
+    private static HttpResponse<String> okResponse() {return response("{\"code\":\"0\",\"data\":[]}");}
+    private static HttpResponse<String> response(String body) {
         return new HttpResponse<>() {
             public int statusCode() { return 200; }
             public HttpRequest request() { return null; }
             public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
             public HttpHeaders headers() { return HttpHeaders.of(java.util.Map.of(), (a, b) -> true); }
-            public String body() { return "{\"code\":\"0\",\"data\":[]}"; }
+            public String body() { return body; }
             public Optional<javax.net.ssl.SSLSession> sslSession() { return Optional.empty(); }
             public URI uri() { return URI.create("https://openapi.okx.com"); }
             public HttpClient.Version version() { return HttpClient.Version.HTTP_2; }

@@ -57,6 +57,7 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/025_live_order_costs.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/026_live_account_reservation.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/027_live_portfolio.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/028_exchange_accounts.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -396,6 +397,8 @@ class QuantBacktestTest {
         String id = downloads.create(1, 10, request);
         assertEquals(id, downloads.create(1, 10, request));
         assertEquals("okx", downloads.get(1, 10, id).get("exchange_name"));
+        assertThrows(IllegalArgumentException.class,()->downloads.create(1,10,new DatasetDownloadRequest("download-key","okx-btc-test","2025-01-01","2025-01-03","binance")));
+        String binance=downloads.create(1,10,new DatasetDownloadRequest("binance-key","binance-btc-test","2025-01-01","2025-01-03","binance"));assertEquals("binance",downloads.get(1,10,binance).get("exchange_name"));
         assertEquals(1, ((List<?>) downloads.get(1, 10, id).get("audits")).size());
         assertThrows(IllegalArgumentException.class, () -> downloads.get(1, 11, id));
         assertThrows(IllegalArgumentException.class, () -> downloads.create(1, 10, new DatasetDownloadRequest("download-key", "changed", "2025-01-01", "2025-01-03")));
@@ -496,7 +499,7 @@ class QuantBacktestTest {
 
     @Test void okxPrivateAdapterSignsRequestsAndRemainsDisabledWithoutCredentials(){
         assertEquals("pJzwUbSE3haU1Oef34IJ1gGR9JEqf2pPTJhcq/byw5E=",OkxPrivateApiClient.sign("2026-09-29T00:00:00.000Z","GET","/api/v5/account/balance?ccy=BTC,USDT","","test-secret"));
-        var provider=new DpapiLiveCredentialProvider(properties);var client=new OkxPrivateApiClient(properties,provider);assertFalse(client.configured());assertThrows(IllegalStateException.class,client::accountBalance);assertThrows(IllegalStateException.class,()->client.placeSpotLimitOrder("offline-order","buy","100","0.01"));
+        var provider=new DpapiLiveCredentialProvider(properties);var client=new OkxPrivateApiClient(properties,provider,new cn.iocoder.yudao.module.quant.dal.ExchangeAccountRepository(jdbc,properties));assertFalse(client.configured());assertThrows(IllegalStateException.class,client::accountBalance);assertThrows(IllegalStateException.class,()->client.placeSpotLimitOrder("offline-order","buy","100","0.01"));
     }
 
     @Test void fixedLiveStrategyUsesOnlyClosedCandlesAndProducesStableSignal(){

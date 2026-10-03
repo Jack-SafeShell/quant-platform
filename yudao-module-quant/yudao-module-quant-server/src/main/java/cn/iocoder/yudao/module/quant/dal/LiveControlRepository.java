@@ -9,17 +9,20 @@ import java.util.*;
 @Repository
 public class LiveControlRepository {
     private final JdbcTemplate jdbc;
-    public LiveControlRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private final cn.iocoder.yudao.module.quant.framework.QuantProperties properties;
+    public LiveControlRepository(JdbcTemplate jdbc){this(jdbc,new cn.iocoder.yudao.module.quant.framework.QuantProperties());}
+    @org.springframework.beans.factory.annotation.Autowired
+    public LiveControlRepository(JdbcTemplate jdbc,cn.iocoder.yudao.module.quant.framework.QuantProperties properties){this.jdbc=jdbc;this.properties=properties;}
 
     public String createOrGet(long tenant, long owner, String reportId, String reportHash, String version,
                               String exchange, String pair, BigDecimal maxOrder, BigDecimal maxDaily,
                               BigDecimal maxExposure, int maxOpenOrders) {
         var existing = byReport(tenant, owner, reportId);
-        if (existing != null) return (String) existing.get("id");
+        if (existing != null) {if(!properties.getLiveAccountId().equals(existing.get("accountId")))throw new IllegalArgumentException("Report is bound to a different account; use a new report");return (String) existing.get("id");}
         String id = UUID.randomUUID().toString(); long now = System.currentTimeMillis();
         try {
-            jdbc.update("INSERT INTO quant_live_control_policy(id,tenant_id,owner_id,admission_report_id,admission_report_hash,policy_version,exchange_name,pair_symbol,trading_mode,max_order_notional,max_daily_notional,max_total_exposure,max_open_orders,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    id, tenant, owner, reportId, reportHash, version, exchange, pair, "spot", maxOrder, maxDaily, maxExposure, maxOpenOrders, "HALTED", now, now);
+            jdbc.update("INSERT INTO quant_live_control_policy(id,account_id,tenant_id,owner_id,admission_report_id,admission_report_hash,policy_version,exchange_name,pair_symbol,trading_mode,max_order_notional,max_daily_notional,max_total_exposure,max_open_orders,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    id, properties.getLiveAccountId(), tenant, owner, reportId, reportHash, version, exchange, pair, "spot", maxOrder, maxDaily, maxExposure, maxOpenOrders, "HALTED", now, now);
             audit(id, tenant, owner, owner, "POLICY_CREATED", null, "HALTED", "离线安全策略已创建；真实执行保持关闭");
             return id;
         } catch (DuplicateKeyException ignored) {
@@ -27,10 +30,10 @@ public class LiveControlRepository {
         }
     }
 
-    public Map<String,Object> get(long tenant,long owner,String id) { return one("SELECT id,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND id=?",tenant,owner,id); }
-    public Map<String,Object> getForUpdate(long tenant,long owner,String id) { return one("SELECT id,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND id=? FOR UPDATE",tenant,owner,id); }
-    public Map<String,Object> byReport(long tenant,long owner,String reportId) { return one("SELECT id FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND admission_report_id=?",tenant,owner,reportId); }
-    public List<Map<String,Object>> list(long tenant,long owner) { return jdbc.queryForList("SELECT id,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? ORDER BY created_at DESC",tenant,owner); }
+    public Map<String,Object> get(long tenant,long owner,String id) { return one("SELECT id,account_id AS accountId,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND id=?",tenant,owner,id); }
+    public Map<String,Object> getForUpdate(long tenant,long owner,String id) { return one("SELECT id,account_id AS accountId,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND id=? FOR UPDATE",tenant,owner,id); }
+    public Map<String,Object> byReport(long tenant,long owner,String reportId) { return one("SELECT id,account_id AS accountId FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? AND admission_report_id=?",tenant,owner,reportId); }
+    public List<Map<String,Object>> list(long tenant,long owner) { return jdbc.queryForList("SELECT id,account_id AS accountId,admission_report_id AS admissionReportId,admission_report_hash AS admissionReportHash,policy_version AS policyVersion,exchange_name AS exchangeName,pair_symbol AS pairSymbol,trading_mode AS tradingMode,max_order_notional AS maxOrderNotional,max_daily_notional AS maxDailyNotional,max_total_exposure AS maxTotalExposure,max_open_orders AS maxOpenOrders,status,created_at AS createdAt,updated_at AS updatedAt FROM quant_live_control_policy WHERE tenant_id=? AND owner_id=? ORDER BY created_at DESC",tenant,owner); }
     public boolean arm(String id) { return jdbc.update("UPDATE quant_live_control_policy SET status='ARMED_OFFLINE',updated_at=? WHERE id=? AND status='HALTED'",System.currentTimeMillis(),id)==1; }
     public boolean halt(String id) { return jdbc.update("UPDATE quant_live_control_policy SET status='HALTED',updated_at=? WHERE id=? AND status<>'HALTED'",System.currentTimeMillis(),id)==1; }
     public List<Map<String,Object>> armed(){return jdbc.queryForList("SELECT id FROM quant_live_control_policy WHERE status='ARMED_OFFLINE'");}

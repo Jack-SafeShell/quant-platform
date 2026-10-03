@@ -102,6 +102,11 @@ public class LiveAdmissionService {
         }
         return current;
     }
+    public void requireExchange(long tenant,long owner,Map<String,Object> report,String exchange){
+        var manifest=JsonUtils.getObjectMapper().readTree(String.valueOf(report.get("reportJson")));
+        var task=repository.successfulBacktest(tenant,owner,manifest.path("evidence").path("backtest").path("id").asText());
+        if(task==null||!exchange.equals(task.get("exchangeName")))throw new IllegalArgumentException("Admission backtest belongs to a different exchange");
+    }
     public void requireFixedLiveStrategy(long tenant,long owner,Map<String,Object> report){liveStrategy(tenant,owner,report);}
     private Map<String,Object> strategyBinding(long tenant,long owner,String version){
         var snapshot=repository.strategySnapshot(tenant,owner,version);

@@ -15,7 +15,8 @@ yudao:
     # The environment switch is required in addition to the database gate and one-time token.
     live-execution-enabled: ${QUANT_LIVE_EXECUTION_ENABLED:false}
     live-risk-policy-version: live-risk-v1
-    live-exchange: okx
+    live-exchange: ${QUANT_LIVE_EXCHANGE:okx}
+    live-account-id: ${QUANT_LIVE_ACCOUNT_ID:okx-primary}
     live-pair: BTC/USDT
     live-max-order-notional: 10
     live-max-daily-notional: 20

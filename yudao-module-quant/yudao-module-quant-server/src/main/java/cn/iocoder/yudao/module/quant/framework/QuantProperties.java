@@ -23,7 +23,8 @@ public class QuantProperties {
     @DecimalMin("0.0001") @DecimalMax("1.0") private BigDecimal paperMaxDrawdownRatio = new BigDecimal("0.05");
     private boolean liveExecutionEnabled = false;
     @NotBlank private String liveRiskPolicyVersion = "live-risk-v1";
-    @NotBlank private String liveExchange = "okx";
+    @Pattern(regexp = "okx|binance") private String liveExchange = "okx";
+    @Pattern(regexp = "[A-Za-z0-9_-]{1,64}") private String liveAccountId = "okx-primary";
     @NotBlank private String livePair = "BTC/USDT";
     @DecimalMin("0.01") private BigDecimal liveMaxOrderNotional = new BigDecimal("10");
     @DecimalMin("0.01") private BigDecimal liveMaxDailyNotional = new BigDecimal("20");

@@ -19,11 +19,13 @@ import java.util.*;
 @Component
 public class OkxPrivateApiClient implements LiveTradingClient {
     private static final DateTimeFormatter OKX_TIMESTAMP=DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
-    private final QuantProperties properties;private final LiveCredentialProvider credentials;private final HttpClient http;
+    private final QuantProperties properties;private final LiveCredentialProvider credentials;private final HttpClient http;private final cn.iocoder.yudao.module.quant.dal.ExchangeAccountRepository accounts;private volatile VerifiedAccount verifiedAccount;
+    private record VerifiedAccount(String keyHash,String uid) {}
     @org.springframework.beans.factory.annotation.Autowired
-    public OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials){this(properties,credentials,buildHttpClient(properties));}
-    OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,HttpClient http){this.properties=properties;this.credentials=credentials;this.http=http;}
-    public boolean configured(){return credentials.configured();}
+    public OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,cn.iocoder.yudao.module.quant.dal.ExchangeAccountRepository accounts){this(properties,credentials,buildHttpClient(properties),accounts);}
+    OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,HttpClient http){this(properties,credentials,http,null);}
+    OkxPrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,HttpClient http,cn.iocoder.yudao.module.quant.dal.ExchangeAccountRepository accounts){this.properties=properties;this.credentials=credentials;this.http=http;this.accounts=accounts;}
+    public boolean configured(){return "okx".equals(properties.getLiveExchange())&&credentials.configured();}
     public String accountBalance() { return privateRead("/api/v5/account/balance?ccy=BTC,USDT"); }
     public String pendingOrders(){return privateRead("/api/v5/trade/orders-pending?instType=SPOT&instId="+instrument());}
     public String marketCandles(){return publicRequest("/api/v5/market/candles?instId="+instrument()+"&bar=1H&limit=300");}
@@ -53,7 +55,28 @@ public class OkxPrivateApiClient implements LiveTradingClient {
         catch(IOException e){throw transportFailure(e,1);}
     }
     private String sendPrivate(String method,String path,String body) throws IOException,InterruptedException {
-        var value=credentials.load().orElseThrow(()->new IllegalStateException("OKX 加密凭据未配置"));String timestamp=OKX_TIMESTAMP.format(Instant.now());
+        if(!"okx".equals(properties.getLiveExchange()))throw new IllegalStateException("OKX client cannot access another exchange account");
+        if(!credentials.configured())throw new IllegalStateException("Encrypted credential is not configured");
+        if(accounts!=null)accounts.requireCredentialReference();
+        var value=credentials.load().orElseThrow(()->new IllegalStateException("OKX 加密凭据未配置"));String keyHash=DatasetRegistry.hash(value.apiKey().getBytes(StandardCharsets.UTF_8));
+        if(accounts!=null){
+            var verified=verifiedAccount;
+            if(verified==null||!keyHash.equals(verified.keyHash()))synchronized(this){
+                verified=verifiedAccount;
+                if(verified==null||!keyHash.equals(verified.keyHash())){
+                    var identity=JsonUtils.getObjectMapper().readTree(sendSigned("GET","/api/v5/account/config","",value));
+                    if(!"0".equals(identity.path("code").asText())||identity.path("data").isEmpty())throw new IllegalStateException("Exchange identity verification failed");
+                    String uid=identity.path("data").get(0).path("uid").asText();
+                    if(!uid.matches("[A-Za-z0-9_-]{1,128}"))throw new IllegalStateException("Exchange account identity missing");
+                    verified=new VerifiedAccount(keyHash,uid);verifiedAccount=verified;
+                }
+            }
+            accounts.bindIdentity(verified.uid());
+        }
+        return sendSigned(method,path,body,value);
+    }
+    private String sendSigned(String method,String path,String body,LiveCredentialProvider.OkxCredential value) throws IOException,InterruptedException {
+        String timestamp=OKX_TIMESTAMP.format(Instant.now());
         var builder=HttpRequest.newBuilder(URI.create(properties.getLiveOkxBaseUrl()+path)).timeout(java.time.Duration.ofSeconds(15)).header("Accept","application/json").header("Content-Type","application/json").header("User-Agent","quant-platform/1.0").header("OK-ACCESS-KEY",value.apiKey()).header("OK-ACCESS-SIGN",sign(timestamp,method,path,body,value.secretKey())).header("OK-ACCESS-TIMESTAMP",timestamp).header("OK-ACCESS-PASSPHRASE",value.passphrase());
         HttpRequest request="GET".equals(method)?builder.GET().build():builder.POST(HttpRequest.BodyPublishers.ofString(body)).build();HttpResponse<String> response=http.send(request,HttpResponse.BodyHandlers.ofString());
         if(response.statusCode()/100!=2)throw new IllegalStateException("OKX 私有接口 HTTP "+response.statusCode());return response.body();

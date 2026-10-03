@@ -35,7 +35,7 @@ public class LivePortfolioService {
     }
     @Transactional public String start(long tenant,long owner,String id,LivePortfolioActionRequest request){
         if(!"CONFIRM_PORTFOLIO_LIVE_START".equals(request.confirmation()))throw new IllegalArgumentException("Portfolio start confirmation mismatch");
-        repository.lock();var row=owned(tenant,owner,id);
+        repository.lock();var row=owned(tenant,owner,id);requireAccount(row);
         if("RUNNING".equals(row.get("status"))){for(var member:repository.members(id))if(member.get("sessionId")==null||!"RUNNING".equals(sessions.get(tenant,owner,String.valueOf(member.get("sessionId"))).get("status")))throw new IllegalArgumentException("Portfolio session interrupted");return id;}
         if(!"READY".equals(row.get("status"))||!repository.active().isEmpty()||repository.otherSessions()||orders.accountOpenCount()>0)throw new IllegalArgumentException("Stop existing sessions and resolve orders before starting a portfolio");
         var config=JsonUtils.parseObject(String.valueOf(row.get("configurationJson")),PortfolioBudgetRequest.class);controls.portfolioBudget(tenant,owner,config);
@@ -54,7 +54,7 @@ public class LivePortfolioService {
         }
         return id;
     }
-    public String stop(long tenant,long owner,String id,String reason){
+    public String stop(long tenant,long owner,String id,String reason){requireAccount(owned(tenant,owner,id));
         var row=transactions.execute(status->{repository.lock();var value=owned(tenant,owner,id);if("RUNNING".equals(value.get("status")))repository.stopping(id,reason);return owned(tenant,owner,id);});
         if(!"STOPPING".equals(row.get("status")))return String.valueOf(row.get("status"));
         boolean settled=true;
@@ -77,7 +77,7 @@ public class LivePortfolioService {
         var session=sessions.get(tenant,owner,sessionId);if(session==null)throw new IllegalArgumentException("Session not found");String policy=String.valueOf(session.get("policyId"));
         var previous=repository.exit(tenant,owner,sessionId,request.requestId());if(previous!=null){var existing=ledger.byClient(tenant,owner,String.valueOf(previous.get("clientOrderId")));if(existing!=null)return existing;throw new IllegalArgumentException("Previous exit prepared but not submitted; review it before using a new request ID");}
         if(!properties.isLiveExecutionEnabled()||!client.configured())throw new IllegalArgumentException("Exit execution disabled");
-        controls.strategy(tenant,owner,policy);orders.reconcilePolicy(tenant,owner,policy);
+        controls.requireAccount(tenant,owner,policy);controls.strategy(tenant,owner,policy);orders.reconcilePolicy(tenant,owner,policy);
         var prepared=transactions.execute(status->{repository.lock();var current=sessions.get(tenant,owner,sessionId);
             if(current==null||"RUNNING".equals(current.get("status"))||!repository.active().isEmpty()||orders.accountOpenCount()>0)throw new IllegalArgumentException("Stop sessions/portfolio and resolve orders before exit");
             BigDecimal price=LiveAutomationService.executionPrice(client.marketTicker(),"SELL"),position=orders.availablePosition(tenant,owner,policy,sessionId);
@@ -93,6 +93,7 @@ public class LivePortfolioService {
     private BigDecimal availableQuote(){return availableCurrency("USDT");}
     private BigDecimal availableBtc(){return availableCurrency("BTC");}
     private BigDecimal availableCurrency(String currency){var response=JsonUtils.getObjectMapper().readTree(client.accountBalance());if(!"0".equals(response.path("code").asText())||!response.path("data").isArray()||response.path("data").isEmpty())throw new IllegalArgumentException("Account balance unavailable");for(var detail:response.path("data").get(0).path("details"))if(currency.equals(detail.path("ccy").asText()))return new BigDecimal(detail.path("availBal").asText("0"));return BigDecimal.ZERO;}
+    private void requireAccount(Map<String,Object> row){if(!properties.getLiveAccountId().equals(row.get("accountId")))throw new IllegalArgumentException("Portfolio belongs to a different exchange account");}
     private Map<String,Object> owned(long tenant,long owner,String id){var row=repository.get(tenant,owner,id);if(row==null)throw new IllegalArgumentException("Portfolio not found");return row;}
     private static String safe(String reason){return reason==null?"unknown":reason.substring(0,Math.min(400,reason.length()));}
 }

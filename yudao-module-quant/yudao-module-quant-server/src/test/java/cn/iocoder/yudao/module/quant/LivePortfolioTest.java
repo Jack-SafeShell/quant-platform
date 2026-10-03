@@ -21,14 +21,15 @@ class LivePortfolioTest {
         QuantProperties props=new QuantProperties();DataSourceTransactionManager manager=new DataSourceTransactionManager(jdbc.getDataSource());TransactionTemplate tx=new TransactionTemplate(manager);
         boolean ready=true,failSecond=false;int starts,places;
         Fixture() throws Exception {
-            jdbc.execute("CREATE TABLE quant_live_control_policy(id VARCHAR(36) PRIMARY KEY)");
+            jdbc.execute("CREATE TABLE quant_live_control_policy(id VARCHAR(36) PRIMARY KEY,account_id VARCHAR DEFAULT 'okx-primary')");
             String schema=Files.readString(Path.of("../../sql/quant/021_live_automation.sql")).split("CREATE TABLE IF NOT EXISTS quant_live_strategy_signal")[0];jdbc.execute(schema);
             jdbc.execute("DROP TABLE quant_live_session_exit");
             for(String statement:Files.readString(Path.of("../../sql/quant/027_live_portfolio.sql")).split(";"))if(!statement.isBlank())jdbc.execute(statement);
-            jdbc.update("INSERT INTO quant_live_control_policy VALUES('p1'),('p2')");props.setLiveExecutionEnabled(true);props.setLiveAutomationEnabled(true);
+            jdbc.update("INSERT INTO quant_live_control_policy(id) VALUES('p1'),('p2')");jdbc.execute("ALTER TABLE quant_live_portfolio ADD COLUMN account_id VARCHAR DEFAULT 'okx-primary'");props.setLiveExecutionEnabled(true);props.setLiveAutomationEnabled(true);
         }
         LiveTradingClient client=new LiveTradingClient(){public boolean configured(){return true;}public String accountBalance(){return "{\"code\":\"0\",\"data\":[{\"details\":[{\"ccy\":\"USDT\",\"availBal\":\"20\"}]}]}";}public String pendingOrders(){throw new AssertionError();}public String getOrder(String id){throw new AssertionError();}public String cancelOrder(String id){throw new AssertionError();}public String placeSpotLimitOrder(String c,String s,String p,String a){places++;throw new AssertionError();}};
         LiveControlService controls=new LiveControlService(null,null,props,null){
+            public void requireAccount(long t,long o,String id){}
             public Map<String,Object> strategy(long t,long o,String id){return Map.of();}
             public Map<String,Object> portfolioBudget(long t,long o,PortfolioBudgetRequest r){var rows=new ArrayList<Map<String,Object>>();for(var a:r.allocations())rows.add(Map.of("runPlan",runPlan(t,o,a.reportId(),a.orderNotional(),a.maxSessionLoss(),r.feeBps(),r.slippageBps())));return Map.of("totals",PortfolioBudgetPlan.calculate(props,r),"allocations",rows,"evidenceHash","h".repeat(64));}
             public Map<String,Object> runPlan(long t,long o,String report,BigDecimal order,BigDecimal loss,Integer fee,Integer slip){return Map.of("policyId",report.equals("r1")?"p1":"p2","reportHash",report+"h","readyForStartRequest",ready);}
