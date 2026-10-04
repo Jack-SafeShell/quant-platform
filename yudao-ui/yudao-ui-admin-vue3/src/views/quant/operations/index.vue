@@ -21,7 +21,12 @@
         show-icon
       />
       <el-alert v-if="refreshError" class="mt-3" :title="refreshError" type="error" :closable="false" show-icon />
+      <p class="evidence-note">当前执行账户：{{ tradingAccount?.exchange || '-' }} · {{ tradingAccount?.id || '-' }}。下方账户选择仅筛选历史证据，不切换密钥或执行账户。</p>
       <div class="session-picker mt-3">
+        <span>查看账户</span>
+        <el-select v-model="viewAccountId" :disabled="loading || !!repairingOrderId" @change="changeAccount">
+          <el-option v-for="account in accountOptions" :key="account.id" :value="account.id" :label="`${account.exchange} · ${account.id}`" />
+        </el-select>
         <span>查看会话</span>
         <el-select v-model="selectedSessionId" :disabled="loading || !!repairingOrderId" placeholder="暂无实盘会话" @change="refresh">
           <el-option v-for="session in sessions" :key="session.id" :value="session.id"
@@ -50,6 +55,9 @@
           <template v-else>
             <el-descriptions :column="3" border>
               <el-descriptions-item label="会话 ID" :span="3">{{ activeSession.id }}</el-descriptions-item>
+              <el-descriptions-item label="账户">{{ activeSession.accountId }}</el-descriptions-item>
+              <el-descriptions-item label="交易所">{{ activeSession.exchangeName }}</el-descriptions-item>
+              <el-descriptions-item label="当前可操作">{{ activeSession.selectedAccount ? '当前执行账户' : '历史账户，仅查看' }}</el-descriptions-item>
               <el-descriptions-item label="策略">{{ activeSession.strategyName }}</el-descriptions-item>
               <el-descriptions-item label="周期">{{ activeSession.timeframe }}</el-descriptions-item>
               <el-descriptions-item label="开始时间">{{ formatTime(activeSession.startedAt) }}</el-descriptions-item>
@@ -69,6 +77,7 @@
                 v-if="activeSession.status === 'RUNNING'"
                 v-hasPermi="['quant:backtest:create']"
                 type="danger"
+                :disabled="!activeSession.selectedAccount || loading || !!refreshError"
                 plain
                 @click="stopCurrentSession"
               >停止当前会话</el-button>
@@ -85,6 +94,7 @@
               <span>{{ activePolicy.exchangeName }} · {{ activePolicy.pairSymbol }} · {{ activePolicy.tradingMode }}</span>
             </div>
             <el-descriptions :column="1" border class="mt-3">
+              <el-descriptions-item label="固定账户">{{ activePolicy.accountId }}</el-descriptions-item>
               <el-descriptions-item label="单笔上限">{{ money(activePolicy.maxOrderNotional) }} USDT</el-descriptions-item>
               <el-descriptions-item label="单日上限">{{ money(activePolicy.maxDailyNotional) }} USDT</el-descriptions-item>
               <el-descriptions-item label="总敞口上限">{{ money(activePolicy.maxTotalExposure) }} USDT</el-descriptions-item>
@@ -162,7 +172,7 @@
             <p class="evidence-note">估值使用该会话最近已收盘 K 线价格，停止后的历史会话不刷新实时价格。费用按成交均价折算，估值未计入未来平仓费用；活动订单后续成交会改变结果。缺少实际费用的 {{ performance.missingCostOrderCount }} 个成交订单不会按零费用计算。</p>
             <el-alert v-if="!performance.valuationComplete" title="数据不完整，净收益暂不可计算；请核对成交、手续费及估值证据。" type="warning" :closable="false" />
             <p class="evidence-note">全部退出后净收益仅在有成交、实际费用完整、无活动订单且会话净持仓为零时计算，不包含未退出持仓估值。费用补查仅查询交易所并更新该订单账本；不会下单、撤单或启动策略。当前凭据未配置时不可补查。</p>
-            <el-button v-hasPermi="['quant:backtest:create']" type="warning" :disabled="loading || !!repairingOrderId || !!refreshError || !!performanceError || activeSession?.status === 'RUNNING' || !capabilities?.liveExecutionEnabled || !performance.costsComplete || !(Number(performance.sellableBtc)>0)" @click="exitCurrentInventory">退出此会话持仓</el-button>
+            <el-button v-hasPermi="['quant:backtest:create']" type="warning" :disabled="loading || !!repairingOrderId || !!refreshError || !!performanceError || activeSession?.status === 'RUNNING' || !activePolicy?.selectedAccount || !capabilities?.liveExecutionEnabled || !performance.costsComplete || !(Number(performance.sellableBtc)>0)" @click="exitCurrentInventory">退出此会话持仓</el-button>
             <p class="evidence-note">退出使用原会话净库存及实时买价限价，保留原账本归属；可能部分成交或留下精度尾差。提交成功不代表已清仓，需刷新核对成交和费用。</p>
             <el-table :data="performance.orders" max-height="420" row-key="id">
               <el-table-column prop="clientOrderId" label="客户端订单 ID" min-width="230" />
@@ -282,6 +292,7 @@
 
 <script setup lang="ts">
 import { exitOwnedSession } from '@/api/quant/portfolio'
+import { getTradingAccount, type TradingAccountSummary } from '@/api/quant/exchanges'
 import { strategyConfigurationLabel } from '@/api/quant/backtest'
 import { getLivePerformance, refreshPerformanceOrder, type LivePerformance, type PerformanceOrder } from '@/api/quant/performance'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -317,6 +328,12 @@ const loading = ref(false)
 const autoRefresh = ref(true)
 const lastUpdated = ref<number>()
 const capabilities = ref<Capabilities>()
+const tradingAccount = ref<TradingAccountSummary>()
+const viewAccountId = ref<string>()
+const accountOptions = computed(() => [...new Map<string, { id: string; exchange: string }>([
+  ...(tradingAccount.value ? [[tradingAccount.value.id, tradingAccount.value] as const] : []),
+  ...policies.value.map(p => [p.accountId, { id: p.accountId, exchange: p.exchangeName }] as const)
+]).values()])
 const strategyVersions = ref<StrategyVersion[]>([])
 const parameterSets = ref<ParameterSet[]>([])
 const backtests = ref<BacktestTask[]>([])
@@ -363,8 +380,8 @@ const equityOptions = computed<EChartsOption>(() => {
   }
 })
 
-const activePolicy = computed(() => policies.value.find((item) => item.id === activeSession.value?.policyId) || policies.value[0])
-const costRepairAvailable = computed(() => !!activePolicy.value?.credentialProvider && activePolicy.value.credentialProvider !== 'UNCONFIGURED')
+const activePolicy = computed(() => policies.value.find((item) => item.id === activeSession.value?.policyId) || policies.value.find(item => item.accountId === viewAccountId.value))
+const costRepairAvailable = computed(() => !!activePolicy.value?.selectedAccount && !!activePolicy.value.credentialProvider && activePolicy.value.credentialProvider !== 'UNCONFIGURED')
 const latestReconciliation = computed(() => activeSession.value?.reconciliations?.[0])
 const latestSignal = computed(() => activeSession.value?.signals?.[0])
 const openAlerts = computed(() => activeSession.value?.alerts?.filter((item) => item.status === 'OPEN').length || 0)
@@ -408,7 +425,7 @@ function needsCostRepair(order: PerformanceOrder) {
     (order.costEvidenceComplete === false || order.feeAmount == null || order.rebateAmount == null)
 }
 const exitRequests=new Map<string,string>()
-async function exitCurrentInventory(){const sessionId=performance.value?.sessionId;if(!sessionId||loading.value||repairingOrderId.value)return;
+async function exitCurrentInventory(){const sessionId=performance.value?.sessionId;if(!sessionId||!activePolicy.value?.selectedAccount||loading.value||repairingOrderId.value)return;
   try{await ElMessageBox.confirm('将以真实卖单退出此会话可用持仓，并保留原归属。提交后请核对成交状态及尾差。','退出原会话持仓',{type:'warning'})}catch{return}
   const requestId=exitRequests.get(sessionId)||crypto.randomUUID();exitRequests.set(sessionId,requestId);repairingOrderId.value='exit';
   try{const order=await exitOwnedSession(sessionId,requestId);ElMessage.success(`退出订单状态：${order.status}，请核对成交与费用`);if(['FILLED','CANCELED','FAILED'].includes(order.status))exitRequests.delete(sessionId)}catch{ElMessage.error('退出未确认，请核对挂单和账本；本次请求编号已保留，重试不会重复发单')}finally{repairingOrderId.value='';await refresh()}
@@ -434,11 +451,12 @@ async function refresh() {
   if (loading.value || repairingOrderId.value) return
   loading.value = true
   try {
-    const [caps, versions, params, tasks, paper, controls] = await Promise.all([
-      getCapabilities(), listStrategyVersions(), listParameterSets(), listBacktests(), listPaperExecutions(), listLiveControls()
+    const [caps, versions, params, tasks, paper, controls, account] = await Promise.all([
+      getCapabilities(), listStrategyVersions(), listParameterSets(), listBacktests(), listPaperExecutions(), listLiveControls(), getTradingAccount()
     ])
     const groups = await Promise.all(controls.map((policy) => listLiveAutomations(policy.id)))
-    const availableSessions = groups.flat().sort((a, b) => b.startedAt - a.startedAt)
+    const accountId = viewAccountId.value || account.id
+    const availableSessions = groups.flat().filter(session => session.accountId === accountId).sort((a, b) => b.startedAt - a.startedAt)
     const selected = availableSessions.find((item) => item.id === selectedSessionId.value)
       || availableSessions.find((item) => item.status === 'RUNNING') || availableSessions[0]
     const detail = selected ? await getLiveAutomation(selected.id) : undefined
@@ -448,10 +466,11 @@ async function refresh() {
       try { attribution = await getLivePerformance(selected.id) }
       catch { attributionError = '收益数据读取失败；请确认新增接口已部署，其他运行证据仍可查看。' }
     }
-    const policyId = detail?.policyId || controls[0]?.id
+    const policyId = detail?.policyId || controls.find(policy => policy.accountId === accountId)?.id
     const orders = policyId ? await listLiveOrders(policyId) : []
     if (disposed) return
     capabilities.value = caps; strategyVersions.value = versions; parameterSets.value = params
+    tradingAccount.value = account; viewAccountId.value = accountId
     backtests.value = tasks; paperExecutions.value = paper; policies.value = controls
     sessions.value = availableSessions
     selectedSessionId.value = selected?.id
@@ -468,9 +487,11 @@ async function refresh() {
   } finally { loading.value = false }
 }
 
+function changeAccount() { selectedSessionId.value = undefined; refresh() }
+
 async function stopCurrentSession() {
   const session = activeSession.value
-  if (!session || session.status !== 'RUNNING') return
+  if (!session || !session.selectedAccount || session.status !== 'RUNNING') return
   try {
     const { value } = await ElMessageBox.prompt(`会话 ${session.id}：请输入停止原因`, '停止自动实盘会话', {
       confirmButtonText: '确认停止', cancelButtonText: '取消', type: 'warning', inputPattern: /\S+/, inputErrorMessage: '停止原因不能为空'

@@ -466,3 +466,15 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 本轮归属库存 0.00000991 BTC，小于 stepSize=0.00001 且不足 minNotional=5 USDT，不能单独清仓；不为清尾仓新增买入。平台净现金流 -0.85616496 USDT，settlementState=OPEN_POSITION、closedPositionNetPnl=null，未给尾仓伪造闭盘估值或宣称已结收益。独立只读交易所复查 BTC 可用 0.00000997、锁定 0，与本轮尾仓及原账户 0.00000006 BTC 一致；USDT 可用 9.14383504、锁定 0，BTCUSDT 挂单 0。期间用户补资不混入策略收益。
 
 门禁 HALTED，临时根 PID 35772 及子进程退出；隐藏恢复原默认单体，根 PID 34828、健康 UP、okx-primary、三个执行开关 false，无凭据配置或临时令牌文件。非秘密成交、库存、交易所余额和最终摘要保留在 .runtime/quant/binance-*-20261005.json，不提交秘密或运行数据。实际接口/交易所对账和服务恢复验证通过；本轮仅运行验收和文档，沿用上阶段 94 项回归及单体构建，不重复 Java/前端构建，git diff --check 通过。完成手动交易技术链路，尚无 Binance 自动信号实盘证据或策略盈利结论；下一项为自动策略与运行面板接入验收，不再追加固定 24 小时等待。
+
+## Binance 自动会话、历史账户与启动资金检查（2026-10-05）
+
+沿已双确认的同版 EMA30/90 报告及原 Binance 门禁，受控打开单体手动/自动执行，模拟关闭；运行预算 8.5 USDT、会话最大亏损 5 USDT、成本假设 10/5 bps，原每单/日额/暴露 10/20/20 USDT 不变。启动配置审计记录 accountId=binance-primary、exchangeName=binance，行情/私有客户端沿固定部署路由，不将页面账户筛选作为密钥切换。
+
+会话 bf96bb11-584a-490c-916f-127acccfe1bf 实际运行 00:52:07.521—00:52:56.971（Asia/Shanghai），49.45 秒。取得 3 条 PASSED 对账，平台/交易所挂单 0、会话亏损 0、无 OPEN 告警，心跳更新；读取 2026-10-04 23:00 开盘且已收盘的 1h K 线，重复处理仅持久化一个 NONE/NO_ACTION 信号。未生成 BUY/SELL 订单，会话库存 0、收益结算 NO_FILLS，不继承历史手动成交尾仓。本次只覆盖同根 K 线幂等和短时运行，不覆盖跨小时信号更新、自动实际成交、长期稳定或策略盈利。
+
+本轮账户实际现货 BTC/USDT 的 free/locked 均为 0，启动及所有快照权益亦为 0；与上一轮手动成交后余额不同，原因尚未确认，未进行任何资金划转。历史手动账本及尾仓保留，不能把零挂单 PASSED 宣称为历史资产完全一致。旧实现允许空钱包启动，被本轮运行发现；修复为新会话在写会话/审计前检查 USDT availBal 至少覆盖所选 orderNotional，缺失、重复、负值/无效余额和只存在 cashBal 的情况按既有检查拒绝，不放宽交易所下单前的实际订单余额验证。已有同配置会话幂等返回不重新要求尚未被订单占用的初始现金。
+
+修复后再次实际发起 8.5 USDT 启动请求，被当前零可用资金拒绝；会话数量 1→1、订单数量 3→3、运行会话 0，无新订单或令牌。95 项 Java 回归及单体聚合 install 通过；启动快照测试覆盖 Binance 绑定、部署切回 OKX 后历史仍为 Binance、错账户 tick/stop 无私有调用/状态写入、现金总额 100 但可用 0 时不创建会话。前端 ts:check/build:local 通过；面板已展示执行账户与历史账户筛选，错账户停止/退出/费用补查禁用。无数据库结构变化，未新增浏览器交互验收。
+
+停止与余额拒绝验证后均停用门禁并退出临时双开关进程；最终默认根 PID 35700、健康 UP、okx-primary、三个执行开关 false、无凭据配置。重新读取历史会话仍为 binance-primary/binance、STOPPED、selectedAccount=false，运行面板读取链路不会用当前账户改写历史。非秘密证据 binance-automation-running/stopped/performance/final/start-cash/default-final-20261005.json 保留在 .runtime/quant；令牌只在内存使用，无临时令牌文件。git diff --check 通过。下一项统一多交易所候选方案、运行预算与实际资金/规则检查；有资金且出现自然信号时再补自动实际成交证据，不强造信号或再设固定 24 小时等待。
