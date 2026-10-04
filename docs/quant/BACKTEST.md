@@ -431,3 +431,13 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 最终报告 0a9b0b9b-d998-4216-8a65-45f93e106ccf，摘要 9a8005bc446082a0739c1ff8890dc949be2d14d682dd3a81423c314207d0190b，六项技术检查全通过、PENDING_CONFIRMATION。研究接受与报告双确认不同，未代填新报告确认；既有订单授权不撤销、不要求逐单授权。无 Binance 真实订单；白名单、其它额外权限、BNB 折扣、可用余额仍待下单前核对。
 
 默认根 PID 17832、健康 UP、okx-primary、无凭据配置、三个执行开关 false；默认 IP 边界仍 true。非秘密证据 binance-paper-acceptance-20261004.json、新报告原始 JSON 及可读 Markdown 均保留在 .runtime/quant。报告导出接口输出 JSON，Markdown 是根据不可变 JSON 生成的阅读摘要，不误称原接口为 Markdown。下一项为所有者完成这份具体新报告的证据/密钥边界双确认后，推进原授权范围内的小额交易闭环，不重复 24 小时模拟。
+
+## Binance 小额订单预检：BNB 费用阻断（2026-10-04）
+
+用户明确回复已复核本次报告并接受无 IP 密钥边界，平台追加报告 0a9b0b9b-d998-4216-8a65-45f93e106ccf 的两项绑定摘要确认，状态 DOUBLE_CONFIRMED。临时启用 Binance 手工执行，模拟与自动执行保持 false，沿原每单/每日/总暴露 10/20/20 USDT 限额。创建 binance-primary 门禁 7fa8c68c-1c3a-45b6-aadc-7b96af5e8189，实际私有账户查询成功并启用离线门禁。
+
+准备最高 8.5 USDT 买入，按实际报价、数量步长和限价刻度生成通过的 ALLOWED_OFFLINE 决策，令牌只在内存签发。执行接口的真实下单前检查发现 BTC/USDT 的账户和交易对 BNB 费用折扣均启用，按现有第三币种费用估值限制拒绝。权限/规则检查先于此费用检查通过；费用检查先于一次性令牌消费、订单预约和交易所写请求，因此没有创建任何真实订单记录，没有向 Binance 发送买入。未自动重试，也未更改账户手续费设置。不能称真实交易闭环完成。
+
+已确认此门禁平台订单列表为空，通过平台停机为 HALTED，精确终止临时后台进程树；默认根 PID 33396、健康 UP、okx-primary、无凭据配置、三个执行开关 false。未产生真实买卖、费用或残余持仓；本轮仅接口执行与记录，无代码或结构改动，不重复构建。非秘密阻断/恢复摘要在 .runtime/quant/binance-small-test-blocker.json、binance-small-test-final-20261004.json，不含令牌或凭据。
+
+下一步用户关闭当前 Binance 账户的现货 BNB 手续费抵扣后复查，继续已授权的小额买卖与实际费用对账。关闭会失去对应手续费折扣；未来若实现可靠第三币种费用估值，可另行支持保留 BNB 抵扣。本次报告双确认和资金授权仍有效，无需重新输入密钥或重复报告确认。操作依据 Binance 官方 BNB 手续费说明：https://www.binance.com/en/support/faq/detail/115000583311。
