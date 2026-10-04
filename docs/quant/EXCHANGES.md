@@ -70,3 +70,5 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\script\quant\save_live_credentia
 - 通过平台 binance-verify 接口使用独立 DPAPI 文件完成真实 HMAC 请求和 UID 摘要绑定，connected=true、ordersSent=0；没有输出 Key、Secret 或 UID。非秘密摘要保存在 .runtime/quant/binance-account-readonly-20261004.json。
 - 实际返回 canTrade=true、enableReading=true，但 enableSpotAndMarginTrading=false；账户允许交易不等于此 API Key 被授予现货交易权限。enableWithdrawals、enableMargin、enableFutures 均 false，ipRestrict=false。其它额外权限及 BNB 折扣尚未完成实际下单前核对，不视为实盘准入已通过。
 - 临时服务始终关闭模拟执行、实盘执行和自动执行；结束后恢复默认无凭据 OKX 服务、健康 UP、三个开关 false。用户已开启该 Key 的现货交易权限且复核通过，下一步补齐同版本模拟及准入证据；不需重新输入未变化的密钥。
+
+2026-10-04 更新：Binance 同版本短时模拟完成（3 条快照、2 次成功对账，无错误告警，已停止）。准入报告可通过单体 QUANT_LIVE_IP_WHITELIST_REQUIRED 配置如实记录边界，默认 true。用户明确选择不绑定 IP 时，本次临时只读部署设 false，报告明确密钥可从任意出口使用；该配置仅改变新报告证据，不开启交易、不修改旧报告、旧双确认不能转移。新报告 0a9b0b9b-d998-4216-8a65-45f93e106ccf 技术检查全通过，仍需报告双确认；下单前实际核对其它权限、币对白名单、BNB 折扣和余额。

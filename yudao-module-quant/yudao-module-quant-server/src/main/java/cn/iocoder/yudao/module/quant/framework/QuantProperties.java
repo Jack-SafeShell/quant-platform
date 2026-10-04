@@ -39,6 +39,7 @@ public class QuantProperties {
     @Min(1) @Max(5) private int livePrivateReadMaxAttempts = 3;
     @Min(50) @Max(5000) private int livePrivateReadRetryDelayMillis = 500;
     private String liveCredentialFile = "";
+    private boolean liveIpWhitelistRequired = true;
     @NotBlank private String liveCredentialReaderScript = "D:/0000/quant-platform/script/quant/read_live_credential.ps1";
     @Pattern(regexp = "https://(openapi|www|us|eea)\\.okx\\.com") private String liveOkxBaseUrl = "https://openapi.okx.com";
     @Pattern(regexp = "https://api\\.binance\\.com") private String liveBinanceBaseUrl = "https://api.binance.com";

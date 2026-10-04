@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.quant.api.backtest.LiveAdmissionConfirmationRequest;
 import cn.iocoder.yudao.module.quant.dal.LiveAdmissionRepository;
 import cn.iocoder.yudao.module.quant.engine.DatasetRegistry;
+import cn.iocoder.yudao.module.quant.framework.QuantProperties;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -16,9 +17,16 @@ public class LiveAdmissionService {
             "EVIDENCE_REVIEW", "CONFIRM_EVIDENCE_REVIEWED",
             "KEY_BOUNDARY_REVIEW", "CONFIRM_KEY_BOUNDARY_ACCEPTED");
     private final LiveAdmissionRepository repository;
+    private final QuantProperties properties;
 
     public LiveAdmissionService(LiveAdmissionRepository repository) {
+        this(repository, new QuantProperties());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LiveAdmissionService(LiveAdmissionRepository repository, QuantProperties properties) {
         this.repository = repository;
+        this.properties = properties;
     }
 
     public String create(long tenant, long owner) {
@@ -47,11 +55,13 @@ public class LiveAdmissionService {
         keyBoundary.put("configured", false);
         keyBoundary.put("permissions", List.of("READ", "TRADE"));
         keyBoundary.put("withdrawalAllowed", false);
-        keyBoundary.put("ipWhitelistRequired", true);
+        keyBoundary.put("ipWhitelistRequired", properties.isLiveIpWhitelistRequired());
         keyBoundary.put("storage", "专用加密密钥托管；不得进入数据库、源码、日志、聊天或命令行参数");
         keyBoundary.put("rotationDays", 90);
         keyBoundary.put("emergencyRotation", "疑似泄露、人员或主机变更时立即吊销并轮换");
-        keyBoundary.put("environmentIsolation", "模拟盘与实盘使用不同密钥；实盘密钥只允许绑定受控出口 IP");
+        keyBoundary.put("environmentIsolation", properties.isLiveIpWhitelistRequired()
+                ? "模拟盘与实盘使用不同密钥；实盘密钥只允许绑定受控出口 IP"
+                : "模拟盘不加载实盘密钥；当前部署选择不绑定 IP，密钥可从任意出口使用，需所有者明确接受该边界");
 
         Map<String, Object> manifest = new TreeMap<>();
         manifest.put("schema", "quant-live-admission/v2");
