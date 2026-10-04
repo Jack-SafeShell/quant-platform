@@ -292,3 +292,8 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 实际通过平台公开接口查询 Binance BTCUSDT：TRADING、现货允许、价格刻度 0.01、数量步长 0.00001 BTC、最低金额 5 USDT。首查因把容器私有代理用于主机公开请求而超时，已分离公开/私有 HTTP 客户端后复查通过。平台登记 binance-primary / binance-live.dpapi，身份待绑定，未创建密钥或切换当前账户；数据库无新增表或结构迁移，现 42 张 quant 表。
 - 最终 92 项 Java 回归通过（新增 12 项 Binance 和 2 项模拟交易所绑定；包含原令牌因规则拒绝保持 ISSUED、UID 回滚重绑/错账号拒绝、签名官方向量、写请求不重发、费用缺失不补零），单体聚合 install、前端 ts:check/build:local、git diff --check 通过。新增交易所模拟约束后，旧测试桩缺数据库/候选证据导致一次失败，已补完整测试证据并复测通过；失败不计入通过。
 - 最终默认根 PID 41780、健康 UP，当前 okx-primary 身份已核对，三个执行开关 false，原门禁 HALTED，运行会话/活动订单均 0。非秘密规则和最终状态保存在 .runtime/quant/binance-rules-review-20261003.json、binance-private-stage-final-20261004.json；构建日志 binance-private-build.log。没有 Binance 密钥、实际私有连接、真实订单或新增浏览器交互验收证据，不能称 Binance 实盘已验收。
+
+## 凭据终端粘贴修复（2026-10-04）
+
+- 用户输入窗口保存后只显示单个星号，实际在本机内存检查时 Key/Secret 均只有 1 个控制字符，不能视为密钥配置成功。旧 ConsoleHost 的 Ctrl+V 被安全输入记录为粘贴控制字符。脚本增加明确 Ctrl+V 的本机剪贴板读取、无效输入重试和字符数量反馈，不输出内容；控制字符比较使用 Ordinal，避免 PowerShell 文化比较把其它控制字符也当作粘贴。
+- 以虚构值验证 Ctrl+V、普通输入、其它控制字符重试和只有明确粘贴才读剪贴板；完整 DPAPI 保存/解密往返通过，临时测试文件已删除。只有脚本和说明改动，无 Java/前端/数据库改动，不重复构建。重新打开 PowerShell 7 窗口，等待用户重新输入真实凭据及后续只读账户验证；未执行真实请求或订单。

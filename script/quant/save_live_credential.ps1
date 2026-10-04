@@ -3,10 +3,29 @@ $ErrorActionPreference='Stop'
 $target=[System.IO.Path]::GetFullPath($CredentialPath)
 $parent=[System.IO.Path]::GetDirectoryName($target)
 [System.IO.Directory]::CreateDirectory($parent) | Out-Null
-$apiKey=Read-Host "$Exchange API Key" -AsSecureString
-$secretKey=Read-Host "$Exchange Secret Key (HMAC)" -AsSecureString
-$passphrase=if($Exchange -eq 'okx'){Read-Host 'OKX Passphrase' -AsSecureString}else{$null}
 function Reveal([Security.SecureString]$value){$ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($value);try{[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}}
+function Read-Secret([string]$prompt){
+    while($true){
+        $inputValue=Read-Host $prompt -AsSecureString
+        $plain=Reveal $inputValue
+        # Legacy ConsoleHost passes Ctrl+V as U+0016 to secure input instead of pasting.
+        # Read the clipboard only after that explicit paste gesture; never print its contents.
+        if([string]::Equals($plain,[string][char]0x16,[StringComparison]::Ordinal)){$plain=[string](Get-Clipboard -Raw)}
+        $plain=$plain.Trim()
+        if($plain.Length -lt 2 -or $plain -match '[\x00-\x1F\x7F]'){
+            Write-Host 'Input was empty/incomplete or contained control characters. Please paste again.'
+            $plain=$null
+            continue
+        }
+        $result=ConvertTo-SecureString $plain -AsPlainText -Force
+        Write-Host "$prompt accepted ($($plain.Length) characters)."
+        $plain=$null
+        return $result
+    }
+}
+$apiKey=Read-Secret "$Exchange API Key"
+$secretKey=Read-Secret "$Exchange Secret Key (HMAC)"
+$passphrase=if($Exchange -eq 'okx'){Read-Secret 'OKX Passphrase'}else{$null}
 $fields=@{exchange=$Exchange;apiKey=(Reveal $apiKey);secretKey=(Reveal $secretKey)}
 if($passphrase){$fields.passphrase=Reveal $passphrase}
 $json=$fields|ConvertTo-Json -Compress

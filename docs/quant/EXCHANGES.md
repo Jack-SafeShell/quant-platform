@@ -48,10 +48,12 @@ Binance/OKX 公共行情各实际读取 199 根闭盘 K 线。下载任务 2d802
 在项目目录的 PowerShell 隐藏输入 Binance HMAC API Key 与 Secret（无需 Passphrase）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\script\quant\save_live_credential.ps1 -Exchange binance -CredentialPath .\.runtime\quant\credentials\binance-live.dpapi
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\script\quant\save_live_credential.ps1 -Exchange binance -CredentialPath .\.runtime\quant\credentials\binance-live.dpapi
 ```
 
 文件只由当前 Windows 用户解密，不进入 Git、数据库、命令行参数或聊天。账户选择参数为 QUANT_LIVE_EXCHANGE=binance、QUANT_LIVE_ACCOUNT_ID=binance-primary、QUANT_LIVE_CREDENTIAL_FILE 指向上述文件。私有基础域名限定 https://api.binance.com；公开数据使用独立主机代理 QUANT_DATASET_HTTP_PROXY，私有使用 QUANT_EXCHANGE_PROXY。没有凭据不切换默认服务。
+
+使用 PowerShell 7。旧 ConsoleHost 的安全输入可能把 Ctrl+V 记录为 U+0016，而非粘贴内容；单个星号及保存成功提示不能证明输入有效。脚本现仅在明确收到 Ctrl+V 粘贴字符时读取本机剪贴板，不打印内容；空、单字符和控制字符输入会重试，成功接收后显示实际字符数量。先复制当前字段的完整值，再粘贴、回车，两项需分别复制。若机器没有 pwsh 命令，可让助手打开已有的 PowerShell 7 运行时窗口。保存成功仍需实际只读账户验证。
 
 签名与字段依据 [签名及时间窗口](https://developers.binance.com/en/docs/products/spot/rest-api)、[账户/订单/成交接口](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account)、[限价下单/撤单](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/trade)、[API 权限](https://developers.binance.com/en/docs/catalog/core-trading-wallet/api/rest-api/account) 与 [过滤器](https://developers.binance.com/en/docs/products/spot/filters)。每次私有操作核对 UID 和账户摘要，不能跨账号复用账本；仅 GET 传输错误有限重试，下单/撤单最多发送一次。超时、5xx 或未知错误保持提交不确定及原预约，按原 clientOrderId 对账，不自动重下。诊断不含签名 URL、密钥、原始响应或异常原因链。
 
