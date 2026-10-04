@@ -2,7 +2,7 @@
 
 ## 已接入范围（2026-10-03）
 
-OKX 保留既有现货私有交易链路。Binance 已接入公开行情、历史下载/回测，以及独立 DPAPI 凭据、HMAC 签名、账户余额、交易规则、限价下单/查询/撤单和成交费用适配。私有链路通过替身接口测试，2026-10-04 已通过实际只读连接和账户身份核对；密钥尚未开启现货交易权限，无 Binance 真实订单验收证据。两交易所不得互换凭据。
+OKX 保留既有现货私有交易链路。Binance 已接入公开行情、历史下载/回测，以及独立 DPAPI 凭据、HMAC 签名、账户余额、交易规则、限价下单/查询/撤单和成交费用适配。私有链路通过替身接口测试，2026-10-04 已通过实际只读连接和账户身份核对；密钥现货交易权限已通过实际复核，无 Binance 真实订单验收证据。两交易所不得互换凭据。
 
 历史回测页面新增公开行情面板和下载交易所选择。选择 Binance 行情不改变当前交易账户、策略门禁、组合或执行开关。公开请求使用独立的主机代理 `QUANT_DATASET_HTTP_PROXY`，不加载账户凭据。
 
@@ -69,4 +69,4 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\script\quant\save_live_credentia
 
 - 通过平台 binance-verify 接口使用独立 DPAPI 文件完成真实 HMAC 请求和 UID 摘要绑定，connected=true、ordersSent=0；没有输出 Key、Secret 或 UID。非秘密摘要保存在 .runtime/quant/binance-account-readonly-20261004.json。
 - 实际返回 canTrade=true、enableReading=true，但 enableSpotAndMarginTrading=false；账户允许交易不等于此 API Key 被授予现货交易权限。enableWithdrawals、enableMargin、enableFutures 均 false，ipRestrict=false。其它额外权限及 BNB 折扣尚未完成实际下单前核对，不视为实盘准入已通过。
-- 临时服务始终关闭模拟执行、实盘执行和自动执行；结束后恢复默认无凭据 OKX 服务、健康 UP、三个开关 false。当前下一步先由用户在 Binance API 管理开启该 Key 的现货交易权限，再复核和补齐同版本模拟及准入证据；不需重新输入未变化的密钥。
+- 临时服务始终关闭模拟执行、实盘执行和自动执行；结束后恢复默认无凭据 OKX 服务、健康 UP、三个开关 false。用户已开启该 Key 的现货交易权限且复核通过，下一步补齐同版本模拟及准入证据；不需重新输入未变化的密钥。

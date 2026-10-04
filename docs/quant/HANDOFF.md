@@ -310,3 +310,9 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - connected=true、ordersSent=0，账户 UID 摘要绑定成功。canTrade=true、enableReading=true；enableSpotAndMarginTrading=false，当前 Key 缺少现货交易权限。提现、Margin、Futures false，IP 限制 false；其它额外权限及 BNB 折扣未实际核对，不能称实盘准入完成。
 - 摘要 .runtime/quant/binance-account-readonly-20261004.json 无凭据或 UID。临时服务已退出，默认根 PID 17168、健康 UP、账户 okx-primary、无凭据配置、三个执行开关 false。接口实际连接和恢复验证通过；本轮仅说明修改，无 Java/前端/数据库结构修改，不重复构建。
 - 唯一推荐下一任务：用户开启现有 Binance API Key 的现货交易权限后，复核权限并推进同版本 Binance 模拟及小额交易准入；密钥未变化无需重新保存。未发送真实订单，不新增 24 小时等待。
+
+## Binance 权限生效复核（2026-10-04）
+
+- 用户保存权限后再次通过平台实际只读复核：connected=true、canTrade=true、enableReading=true、enableSpotAndMarginTrading=true；提现、Margin、Futures false，ipRestrict=false，ordersSent=0。同一真实账户身份核对通过，无需重新保存密钥。
+- 原账户连接段的现货权限 false 为首次查询历史证据，已不代表当前状态。更新非秘密验收摘要；临时服务退出，默认根 PID 34324、健康 UP、okx-primary、三个执行开关 false。工作区此前干净，本轮仅记录复核证据，git diff --check 通过，不重复构建。
+- 限制：只读复核未证明币对白名单和 BNB 折扣等下单条件，未完成 Binance 真实订单验收。唯一推荐下一任务：补齐同版本 Binance 模拟和准入证据，核对剩余下单条件后进行授权范围内的小额交易闭环。
