@@ -28,5 +28,16 @@ public final class LiveAccountBudget {
     public static void requireSell(List<Map<String,Object>> rows,BigDecimal amount){
         if(amount.signum()<=0||amount.compareTo(available(rows))>0)throw new IllegalArgumentException("卖出超过所属会话或手动策略的净可用持仓（含费用与挂单预约）");
     }
+    public static void requireBuyCash(List<?> currencies,BigDecimal notional){
+        BigDecimal free=null;
+        for(Object value:currencies)if(value instanceof Map<?,?> currency&&"USDT".equals(currency.get("ccy"))){
+            if(free!=null)throw new IllegalArgumentException("USDT 可用余额证据重复");
+            Object available=currency.get("availBal");
+            if(available==null)throw new IllegalArgumentException("USDT 可用余额证据缺失");
+            free=new BigDecimal(available.toString());
+        }
+        if(free==null||free.signum()<0)throw new IllegalArgumentException("USDT 可用余额证据缺失或异常");
+        if(notional.signum()<=0||free.compareTo(notional)<0)throw new IllegalArgumentException("可用 USDT 不足以买入");
+    }
     private static BigDecimal decimal(Map<String,Object> row,String key){Object value=row.get(key);return value==null?BigDecimal.ZERO:new BigDecimal(value.toString());}
 }

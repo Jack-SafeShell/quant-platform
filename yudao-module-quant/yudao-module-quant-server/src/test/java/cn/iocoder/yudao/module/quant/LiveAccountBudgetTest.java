@@ -75,4 +75,13 @@ class LiveAccountBudgetTest {
         assertThrows(IllegalArgumentException.class,()->repo.sessionForClient(1,10,"p","old-client"));
         assertThrows(IllegalArgumentException.class,()->repo.inventoryRows(1,10,"p","old-session"));
     }
+    @Test void buyCashUsesFreeQuoteBalanceAndRejectsIncompleteEvidence(){
+        var cash=Map.of("ccy","USDT","availBal","5","cashBal","100");
+        LiveAccountBudget.requireBuyCash(List.of(cash),n("5"));
+        assertThrows(IllegalArgumentException.class,()->LiveAccountBudget.requireBuyCash(List.of(cash),n("7.7")));
+        assertThrows(IllegalArgumentException.class,()->LiveAccountBudget.requireBuyCash(List.of(),n("5")));
+        assertThrows(IllegalArgumentException.class,()->LiveAccountBudget.requireBuyCash(List.of(Map.of("ccy","USDT","cashBal","100")),n("5")));
+        assertThrows(IllegalArgumentException.class,()->LiveAccountBudget.requireBuyCash(List.of(cash,cash),n("5")));
+        assertThrows(IllegalArgumentException.class,()->LiveAccountBudget.requireBuyCash(List.of(Map.of("ccy","USDT","availBal","-1")),n("5")));
+    }
 }

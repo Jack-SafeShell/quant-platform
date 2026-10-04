@@ -441,3 +441,13 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 已确认此门禁平台订单列表为空，通过平台停机为 HALTED，精确终止临时后台进程树；默认根 PID 33396、健康 UP、okx-primary、无凭据配置、三个执行开关 false。未产生真实买卖、费用或残余持仓；本轮仅接口执行与记录，无代码或结构改动，不重复构建。非秘密阻断/恢复摘要在 .runtime/quant/binance-small-test-blocker.json、binance-small-test-final-20261004.json，不含令牌或凭据。
 
 下一步用户关闭当前 Binance 账户的现货 BNB 手续费抵扣后复查，继续已授权的小额买卖与实际费用对账。关闭会失去对应手续费折扣；未来若实现可靠第三币种费用估值，可另行支持保留 BNB 抵扣。本次报告双确认和资金授权仍有效，无需重新输入密钥或重复报告确认。操作依据 Binance 官方 BNB 手续费说明：https://www.binance.com/en/support/faq/detail/115000583311。
+
+## Binance 小额买入拒单与买入余额预检修复（2026-10-05）
+
+用户关闭 BNB 抵扣后继续原授权测试，复用已双确认报告与门禁，自动执行保持关闭。下单前 BNB、现货权限及规则检查通过，以最多 8.5 USDT 预算按报价和步长准备买入，平台门禁及一次性令牌流程通过。首次真实买入被 Binance 明确拒绝 -2010，订单 cd43b41a-f6b7-471d-af6a-8ace8c4cd077、clientOrderId=bnacc-buy-513c24c3f29b 状态 FAILED、成交数量 0、无交易所订单 ID。未自动重发，不将拒单当成成交闭环通过。
+
+只读内存签名查询实际账户：现货 USDT 可用 5、锁定 0；BTC 可用 0.00000006、锁定 0。拟买金额高于可用 USDT，确认余额不足以完成该计划；BTC 最低金额和步长也使恰好 5 USDT 的可成交数量不能保证满足过滤器。只读交易所 BTCUSDT 挂单查询数量 0。查询只保存选定资产余额/挂单数量，不输出密钥、UID、签名 URL 或原始响应。
+
+修复 LiveOrderService 的买入预检：在令牌消费、订单预约与交易所写请求之前核对 USDT availBal >= 限价金额。余额字段缺失、重复、负值或无效均拒绝，不借用 cashBal 或锁定资金；不扩大单笔/日额/暴露限额，不借入资金、不自动划转。卖出仍沿归属净持仓与实际可用 BTC 检查。新增测试覆盖现货仅 5 USDT、总余额与可用不一致、足额边界及缺失/重复/负值证据，原订单集成桩补充真实需要的 USDT 可用字段。94 项相关回归、单体聚合 install、git diff --check 通过，无前端/数据库结构改动，不重复前端构建；迁移检查仍 42 张 quant 表。修复后未再次发起真实订单。
+
+通过平台停用 Binance 门禁 HALTED，精确停止临时执行进程树；最终默认根 PID 29704、健康 UP、okx-primary、无凭据配置、三个执行开关 false。非秘密余额/挂单/失败与恢复摘要在 .runtime/quant/binance-*-20261005.json，构建日志 binance-buy-balance-build.log，不含临时令牌文件。真实买卖/费用闭环仍未完成；唯一下一任务为所有者将当前账户现货可用 USDT 补到 10 后复核并继续原授权小额买卖，报告/密钥/原风控限额不变。
