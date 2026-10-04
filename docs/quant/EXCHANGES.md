@@ -2,7 +2,7 @@
 
 ## 已接入范围（2026-10-03）
 
-OKX 保留既有现货私有交易链路。Binance 已接入公开行情、历史下载/回测，以及独立 DPAPI 凭据、HMAC 签名、账户余额、交易规则、限价下单/查询/撤单和成交费用适配。私有链路通过替身接口测试；当前尚无 Binance 密钥、实际私有连接或真实订单验收证据。两交易所不得互换凭据。
+OKX 保留既有现货私有交易链路。Binance 已接入公开行情、历史下载/回测，以及独立 DPAPI 凭据、HMAC 签名、账户余额、交易规则、限价下单/查询/撤单和成交费用适配。私有链路通过替身接口测试，2026-10-04 已通过实际只读连接和账户身份核对；密钥尚未开启现货交易权限，无 Binance 真实订单验收证据。两交易所不得互换凭据。
 
 历史回测页面新增公开行情面板和下载交易所选择。选择 Binance 行情不改变当前交易账户、策略门禁、组合或执行开关。公开请求使用独立的主机代理 `QUANT_DATASET_HTTP_PROXY`，不加载账户凭据。
 
@@ -39,11 +39,11 @@ Binance/OKX 公共行情各实际读取 199 根闭盘 K 线。下载任务 2d802
 
 原 OKX 加密凭据仅在三个执行开关均关闭的临时只读服务核对，okx-primary 身份绑定已完成；结束后恢复无凭据默认服务。78 项 Java 测试、4 项 Python 测试、单体 install、前端 ts:check/build:local 通过；包含事务回滚后身份绑定、跨账户额度及跨交易所准入拒绝。本轮无真实订单或新增浏览器交互验收。
 
-下一项为 Binance 真实账户接通及一轮小额交易闭环验收，先补同版本 Binance 模拟技术证据与准入确认。当前没有 Binance 凭据，旧 OKX 候选仍待人工复核，不视为组合已运行。
+下一项为 Binance 小额交易闭环验收，先复核现货交易权限、补同版本 Binance 模拟技术证据与准入确认。Binance 加密凭据和实际只读连接已验证，旧 OKX 候选仍待人工复核，不视为组合已运行。
 
 ## Binance 私有适配与操作（2026-10-04）
 
-已登记部署账户 binance-primary，独立文件名 binance-live.dpapi，身份未绑定。默认仍为 okx-primary，三个执行开关关闭。新增 POST `/exchange-account/binance-verify` 核对 UID 与 API 权限，不发送订单、不启用门禁；GET `/market/binance-rules` 使用无凭据公开域名。原策略只读路径继续兼容，并新增 `/live-control/private-readiness`、`/live-control/private-read`；Binance 确认语为 CONFIRM_BINANCE_PRIVATE_READ。
+已登记部署账户 binance-primary，独立文件名 binance-live.dpapi，身份已绑定。默认仍为 okx-primary，三个执行开关关闭。新增 POST `/exchange-account/binance-verify` 核对 UID 与 API 权限，不发送订单、不启用门禁；GET `/market/binance-rules` 使用无凭据公开域名。原策略只读路径继续兼容，并新增 `/live-control/private-readiness`、`/live-control/private-read`；Binance 确认语为 CONFIRM_BINANCE_PRIVATE_READ。
 
 在项目目录的 PowerShell 隐藏输入 Binance HMAC API Key 与 Secret（无需 Passphrase）：
 
@@ -63,4 +63,10 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\script\quant\save_live_credentia
 
 成交按订单 ID 读取最多 1000 笔 myTrades，核对成交 ID 唯一、交易对、方向、归属、累计数量与报价总额，计算实际均价和费用。累计费用覆盖写入，不重复累加。缺失、重复、数量不齐或混合币种费用保持成本不完整；第三币种（如 BNB）保留实际金额与币种，现有估值明确不完整，不按研究费率补造或换成零费用。达到 1000 笔不宣称费用完整，需后续分页扩展。
 
-模拟盘就绪和命令预览按研究批次成功任务选择交易所，混合来源拒绝。Binance 准入另核对同版本候选模拟的绑定就绪清单交易所及摘要，旧 OKX 候选模拟不能替代。已有平台长期模拟/风险停机机制证据可复用，不要求再等待 24 小时；新报告仍需人工复核，历史报告不重写。真实 Binance 私有连接及交易仍待独立凭据与上述证据。
+模拟盘就绪和命令预览按研究批次成功任务选择交易所，混合来源拒绝。Binance 准入另核对同版本候选模拟的绑定就绪清单交易所及摘要，旧 OKX 候选模拟不能替代。已有平台长期模拟/风险停机机制证据可复用，不要求再等待 24 小时；新报告仍需人工复核，历史报告不重写。真实 Binance 私有连接已验证，交易仍待权限及上述证据。
+
+## Binance 实际只读连接（2026-10-04）
+
+- 通过平台 binance-verify 接口使用独立 DPAPI 文件完成真实 HMAC 请求和 UID 摘要绑定，connected=true、ordersSent=0；没有输出 Key、Secret 或 UID。非秘密摘要保存在 .runtime/quant/binance-account-readonly-20261004.json。
+- 实际返回 canTrade=true、enableReading=true，但 enableSpotAndMarginTrading=false；账户允许交易不等于此 API Key 被授予现货交易权限。enableWithdrawals、enableMargin、enableFutures 均 false，ipRestrict=false。其它额外权限及 BNB 折扣尚未完成实际下单前核对，不视为实盘准入已通过。
+- 临时服务始终关闭模拟执行、实盘执行和自动执行；结束后恢复默认无凭据 OKX 服务、健康 UP、三个开关 false。当前下一步先由用户在 Binance API 管理开启该 Key 的现货交易权限，再复核和补齐同版本模拟及准入证据；不需重新输入未变化的密钥。

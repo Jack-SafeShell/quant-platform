@@ -303,3 +303,10 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 用户重新输入后 Key/Secret 均正确接收为 64 字符；文件已写入，但 Get-Acl/Set-Acl 完整描述符往返触发 SeSecurityPrivilege 错误。保存脚本改为新建仅包含当前用户访问规则的 DACL，直接持久化访问权限，不读写审计 SACL，不要求该审计权限。
 - 已修复现有 Binance DPAPI 文件权限，核对禁止继承、唯一当前用户规则；仅在内存验证交易所标签、两项长度及无控制字符，未输出秘密，无需重新输入。虚构输入保存/解密及 DACL 验证通过，临时文件删除；无 Java、前端或数据库修改，不重复构建。
 - 限制：文件完整性通过不代表 Binance 已认证；未发出交易所私有请求或订单。唯一推荐下一任务：以关闭执行的 Binance 配置完成只读账户连接与权限核对。
+
+## Binance 实际账户连接（2026-10-04）
+
+- main 跟踪 origin/main，开始时无改动；只操作 origin。确认原策略均 HALTED、无运行会话或平台活动订单、三个开关关闭后，临时切换 binance-primary 和独立加密凭据，通过平台 binance-verify 真实只读核对。
+- connected=true、ordersSent=0，账户 UID 摘要绑定成功。canTrade=true、enableReading=true；enableSpotAndMarginTrading=false，当前 Key 缺少现货交易权限。提现、Margin、Futures false，IP 限制 false；其它额外权限及 BNB 折扣未实际核对，不能称实盘准入完成。
+- 摘要 .runtime/quant/binance-account-readonly-20261004.json 无凭据或 UID。临时服务已退出，默认根 PID 17168、健康 UP、账户 okx-primary、无凭据配置、三个执行开关 false。接口实际连接和恢复验证通过；本轮仅说明修改，无 Java/前端/数据库结构修改，不重复构建。
+- 唯一推荐下一任务：用户开启现有 Binance API Key 的现货交易权限后，复核权限并推进同版本 Binance 模拟及小额交易准入；密钥未变化无需重新保存。未发送真实订单，不新增 24 小时等待。
