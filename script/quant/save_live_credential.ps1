@@ -31,5 +31,11 @@ if($passphrase){$fields.passphrase=Reveal $passphrase}
 $json=$fields|ConvertTo-Json -Compress
 $encrypted=ConvertFrom-SecureString (ConvertTo-SecureString $json -AsPlainText -Force)
 [System.IO.File]::WriteAllText($target,$encrypted,[Text.UTF8Encoding]::new($false))
-$acl=Get-Acl $target;$acl.SetAccessRuleProtection($true,$false);$rule=[Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().Name,'FullControl','Allow');$acl.SetAccessRule($rule);Set-Acl $target $acl
+# Persist only the DACL: copying a complete descriptor through Set-Acl can
+# request SACL privileges that an ordinary interactive user does not possess.
+$acl=[Security.AccessControl.FileSecurity]::new()
+$acl.SetAccessRuleProtection($true,$false)
+$rule=[Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,'FullControl','Allow')
+$acl.SetAccessRule($rule)
+[System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.FileInfo]::new($target),$acl)
 Write-Output "Credential stored with Windows DPAPI at $target"
