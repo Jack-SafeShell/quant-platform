@@ -511,3 +511,17 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 隐藏独立守护 run-binance-candidate-watch.ps1（根 PID 12412）运行单体服务 run-binance-candidate-service.ps1（根 PID 33976），元数据 binance-candidate-watch.json；每 60 秒核对服务、会话账户、心跳/最新快照推进、闭盘时间、挂单一致性、亏损<5、无未解决告警及成本/订单关联。心跳或快照陈旧超过 180 秒、闭盘时间异常、重复信号等均终止；停止采用精确平台接口、撤单和 HALTED，保留归属库存，不强行变卖残仓。退出后仅终止匹配脚本身份的执行进程树，再按原 start-default-review.ps1 恢复默认无凭据 OKX 服务，实际核对三开关 false；无法确认清理或恢复时标 NEEDS_REVIEW。
 
 守护语法、健康正常态、十项故障边界与自然周期结束替身验证通过。自动化 binance ACTIVE 每小时复核/收尾，正常安静，成交、异常、完成时报告；旧 24-hour-live-automation-acceptance 保持 PAUSED。当前尚在运行，不宣称已停止或恢复默认。无业务源码/前端/数据库结构变化，沿用此前 102 项 Java 回归、单体及前端构建，不为记录阶段重复构建影响验收。非秘密 binance-candidate-preflight/running/performance-20261005.json 保留在 .runtime/quant；原始令牌仅在单体内存使用，无临时令牌文件。终态再以全会话聚合统计快照数量/跨度（详情仅最近 100 条），复核真实费用、库存和盈亏，更新交接并暂停本自动化。
+
+### Binance -1021 风险停止与终态复核（2026-10-05）
+
+目标会话 849f846f-6dae-41f4-8b8f-07f62dd88ede 于 13:47:02.721（Asia/Shanghai）因 Binance request rejected or uncertain code -1021 进入 RISK_STOPPED，实际运行 2178.044 秒（36 分 18.044 秒），未达到 6 小时运行边界。守护发现会话不再 RUNNING 后记录 SESSION_OR_ACCOUNT_CHANGED 并退出；实际账户仍归属 Binance，不能将此泛化守护原因当作账户误切换。
+
+从 quant-platform 数据库按精确会话、租户和用户只读聚合，全部 120 条 quant_live_reconciliation_snapshot 均 PASSED（详情接口仅显示最近 100 条）。首次 13:10:52.180、最后 13:46:33.962，跨度 2141.782 秒，最大连续间隔 18.613 秒；挂单不一致 0，最大记录会话亏损 0.00000662 USDT。唯一已闭盘 K 线信号 NONE/NO_ACTION，重复组 0；会话实际订单 0、成交 0、成本完整、归属库存 0、净贡献 0、NO_FILLS，无自动 BUY/SELL 成交证据。最终账户权益变化 +0.00001253 USDT 与原账户微量 BTC 估值相关，不是策略净收益或已结收益。
+
+门禁 HALTED，停止后真实 run-check 的 ACCOUNT_ORDERS_CLEAR 通过：交易所挂单 0、平台活动订单 0，可用 USDT 9.14387178、BTC 0.00000006。没有转资、额外下单或强制清仓。1 条 OPEN/HIGH AUTOMATION_FAILURE 告警仍保留（f9b54c4d-47e6-425a-a944-ae3ffa2cc1d0）；原因未修复，没有假装解决，也不宣称此次风险验收无告警通过。
+
+独立守护完成临时执行树退出并在 13:47:29 前恢复无凭据默认服务。本次心跳实际复核默认根 PID 33756 与 Java 子进程存在、健康 UP、okx-primary、模拟/实盘/自动三开关 false、目标 HALTED、活动订单 0，旧守护 12412 / 执行 33976 不存在。自动化 binance 已 PAUSED，未自动恢复候选或启用实盘；终态非秘密摘要与全量统计 binance-candidate-summary-20261005.json 保存于 .runtime/quant。
+
+据 [Binance 官方错误代码](https://developers.binance.com/en/docs/products/spot/errors)，-1021 为 INVALID_TIMESTAMP，可表示时间戳超出 recvWindow 或领先服务器时间。现有客户端安全错误只保存代码，未保留错误分支，故不能认定停电、电脑关机、主机时间偏差或纯网络故障是本次根因。代码使用 System.currentTimeMillis() 与 recvWindow=5000，signed() 一次生成 URL 后 transport() 对 GET IOException 有限重试，复用旧时间戳；应核对交易所时钟偏差与代理延迟，并增加只读请求校时和重新签名的有限恢复。写入请求不重发、原风险额度和默认关闭边界保持。
+
+本阶段无业务源码、前端或数据库结构变化，沿用已通过 102 项 Java 回归、单体及前端检查，不重复构建影响默认环境；git diff --check 通过。没有新增临时令牌文件；名称含 token 的旧 token_metadata.py 是脚本，予以保留。唯一下一任务为 Binance 签名时间窗口与只读重试修复，验证后再处置告警并推进既有授权自然信号运行。
