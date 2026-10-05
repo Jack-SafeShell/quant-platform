@@ -30,6 +30,7 @@ public class BinancePrivateApiClient implements LiveTradingClient {
     BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http){this(properties,credentials,accounts,http,http);}
     private BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http,HttpClient publicHttp){this.properties=properties;this.credentials=credentials;this.accounts=accounts;this.http=http;this.publicHttp=publicHttp;}
     public boolean configured(){return "binance".equals(properties.getLiveExchange())&&credentials.configured();}
+    public void preflightSpotLimitOrder(String side,String price,String amount){validateSpotLimitOrder(side,price,amount);}
     private void requireSelected(){if(!"binance".equals(properties.getLiveExchange())||!"BTC/USDT".equals(properties.getLivePair()))throw new IllegalStateException("Binance account/pair not selected");}
     private LiveCredentialProvider.OkxCredential credential(){requireSelected();if(!configured())throw new IllegalStateException("Binance encrypted credential not configured");if(accounts!=null)accounts.requireCredentialReference();return credentials.load().orElseThrow(()->new IllegalStateException("Binance encrypted credential not configured"));}
     // Verify the physical UID for every operation, including after a transaction rollback or key rotation.

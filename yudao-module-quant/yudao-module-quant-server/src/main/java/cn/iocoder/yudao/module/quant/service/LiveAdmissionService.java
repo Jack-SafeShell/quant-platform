@@ -113,6 +113,11 @@ public class LiveAdmissionService {
         }
         return current;
     }
+    public String reportExchange(long tenant,long owner,Map<String,Object> report){
+        var manifest=JsonUtils.getObjectMapper().readTree(String.valueOf(report.get("reportJson")));
+        var task=repository.successfulBacktest(tenant,owner,manifest.path("evidence").path("backtest").path("id").asText());
+        return task==null?"":String.valueOf(task.get("exchangeName"));
+    }
     public void requireExchange(long tenant,long owner,Map<String,Object> report,String exchange){
         var manifest=JsonUtils.getObjectMapper().readTree(String.valueOf(report.get("reportJson")));
         var task=repository.successfulBacktest(tenant,owner,manifest.path("evidence").path("backtest").path("id").asText());

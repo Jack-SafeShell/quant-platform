@@ -304,7 +304,7 @@ Java 测试覆盖模板边界、数值规范化、源码篡改、隔离、报告
 
 回测页面新增运行准备区，选择准入报告查看绑定版本、预算、研究成本假设及准备缺口；门禁管理内复用编辑器。每单金额和亏损预算可以降低或在现有系统/门禁上限内选择；原单日及总仓位限额保持有效。尚未启动的配置仅在页面和导出清单保存，不写数据库草稿。
 
-GET /quant/backtest/live-control/run-plan?reportId=... 可选 orderNotional、maxSessionLoss、feeBps、slippageBps，沿用查询权限及用户隔离。返回报告/版本、预算与上限、原证据检查、源码/报告完整性、双确认、门禁、双开关及凭据配置检查，附证据摘要。该接口不加载密钥、不请求交易所、不启停服务；readyForStartRequest 只表示可提交请求，实际启动仍实时复核。缺口展示与导出不会替代原双确认。
+GET /quant/backtest/live-control/run-plan?reportId=... 可选 orderNotional、maxSessionLoss、feeBps、slippageBps，沿用查询权限及用户隔离。返回报告/版本、预算与上限、原证据检查、源码/报告完整性、双确认、门禁、双开关及凭据配置检查，附证据摘要。该接口不加载密钥、不请求交易所、不启停服务；readyForStartRequest 为静态准备结果，页面还要求下述 run-check 实际资金检查通过才传递启动预算，实际启动仍实时复核。缺口展示与导出不会替代原双确认。
 
 原自动启动接口可选上述四字段，旧 confirmation/comment 请求继续兼容。金额默认使用单体已有配置（当前每单 5、亏损预算 5 USDT），每单不能超过当前系统及绑定门禁的较小上限，亏损预算不能超过系统上限；最多 8 位小数。研究手续费/滑点为整数 0～100 基点，默认 10/5，仅保存研究假设，不改变实时价格、真实手续费或收益归因。
 
@@ -478,3 +478,24 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 修复后再次实际发起 8.5 USDT 启动请求，被当前零可用资金拒绝；会话数量 1→1、订单数量 3→3、运行会话 0，无新订单或令牌。95 项 Java 回归及单体聚合 install 通过；启动快照测试覆盖 Binance 绑定、部署切回 OKX 后历史仍为 Binance、错账户 tick/stop 无私有调用/状态写入、现金总额 100 但可用 0 时不创建会话。前端 ts:check/build:local 通过；面板已展示执行账户与历史账户筛选，错账户停止/退出/费用补查禁用。无数据库结构变化，未新增浏览器交互验收。
 
 停止与余额拒绝验证后均停用门禁并退出临时双开关进程；最终默认根 PID 35700、健康 UP、okx-primary、三个执行开关 false、无凭据配置。重新读取历史会话仍为 binance-primary/binance、STOPPED、selectedAccount=false，运行面板读取链路不会用当前账户改写历史。非秘密证据 binance-automation-running/stopped/performance/final/start-cash/default-final-20261005.json 保留在 .runtime/quant；令牌只在内存使用，无临时令牌文件。git diff --check 通过。下一项统一多交易所候选方案、运行预算与实际资金/规则检查；有资金且出现自然信号时再补自动实际成交证据，不强造信号或再设固定 24 小时等待。
+
+### 多交易所候选运行准备与资金检查（2026-10-05）
+
+原 GET `/quant/backtest/live-control/run-plan` 追加 candidateExchange、executionAccount、preflightPerformed=false，检查原回测/候选模拟来源与当前部署一致；同报告优先选择匹配当前账户和交易所的门禁，无门禁不再视为账户匹配。它仍不读密钥、不查询交易所。
+
+新增 POST `/quant/backtest/live-control/run-check?reportId=...`，JSON 字段 orderNotional、maxSessionLoss、feeBps、slippageBps 沿原预算范围。继续要求 quant:backtest:query，绑定当前租户/用户。策略源码、双确认、交易所来源或门禁账户不匹配时，在私有查询前拒绝；凭据未配置也不查询。匹配后读取当前账户资金/挂单与现价、规则和权限，返回 checkedAt、funds、orderPreview、accountBudget、检查缺口与新 evidenceHash。
+
+首次 BUY 预估使用实时卖价、自动策略现有价格/数量取整方法，数量向下取步长、金额不超过预算；仅为假设首次买入，不生成信号或继承手动库存。核对可用 USDT 覆盖预算、BTC 暴露、两侧无活动挂单、UTC 账户共享日额及敞口上限。缺失/无效余额不补零，不使用现金总額或锁定余额。Binance 复用实际规则/权限/BNB 折扣检查；OKX 新增独立只读 SPOT 规则和 read_only,trade 权限核对，不改变原实际订单执行路径。
+
+页面分别提供“检查证据与预算”和“检查资金与交易规则”，显示候选来源、当前执行账户、实际余额、预估量/金额与额度。只有实际检查全部通过且预算未修改时才向自动启动入口传递预算；修改预算或报告使旧结果失效。资金检查可在执行关闭时完成，但关闭开关/未启用门禁使 readiness=false；它不预约资金、签发令牌、启停服务或发送订单，也不保证稍后的启动/下单通过。选择研究候选不会切换私有账户；金额与资金仍在实际请求时复核。
+
+实际通过平台以三开关 false 分别短时配置独立 Binance/OKX 凭据，8.5 USDT 预算均通过规则、权限、资金、零挂单和额度检查，门禁/开关检查 false，未启动会话、未发送订单：
+
+| 执行账户 | 可用 USDT | 可用 BTC | BUY 预估价格 | 预估 BTC | 预估金额 USDT |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| binance-primary | 9.14387178 | 0 | 85860.31 | 0.00009 | 7.7274279 |
+| okx-primary | 74.42323355990514 | 0.00000001849 | 85833.1 | 0.00009902 | 8.499193562 |
+
+两账户 UTC 日预约 0、剩余额度 20；OKX BTC 暴露 0.001586336607 USDT，Binance 0，估值仅 BTC/USDT。Binance 余额较上一阶段零余额已变化，原因未确认，不改历史成交或归属尾仓。构建后默认 OKX 配置查询 Binance 报告被正确阻止，没有 funds/orderPreview；预算 0 返回业务 code=400。
+
+102 项 Java 回归、单体聚合 install、前端 ts:check/build:local、git diff --check 通过。新增七项测试覆盖账户/来源及门禁选择、凭据无配置不读、预算取整不足、可用资金缺失/不足、共享额度和未知订单、关闭开关、OKX 权限/规则边界。实际无需新增数据库迁移，42 张 quant 表；没有新增浏览器交互验收。最终默认根 PID 3840、健康 UP、okx-primary、原命令无凭据配置、三开关 false、门禁全部 HALTED、运行会话/活动订单 0。没有临时令牌文件；非秘密 run-preflight-binance/okx/final-20261005.json 保留在 .runtime/quant。下一任务为 Binance 候选方案受控运行与收益跟踪，自然信号出现时核对自动实际成交，研究技术通过不代表盈利。

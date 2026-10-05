@@ -30,6 +30,22 @@ public class OkxPrivateApiClient implements LiveTradingClient {
     public String pendingOrders(){return privateRead("/api/v5/trade/orders-pending?instType=SPOT&instId="+instrument());}
     public String marketCandles(){return publicRequest("/api/v5/market/candles?instId="+instrument()+"&bar=1H&limit=300");}
     public String marketTicker(){return publicRequest("/api/v5/market/ticker?instId="+instrument());}
+    public void preflightSpotLimitOrder(String side,String price,String amount){
+        if(!Set.of("BUY","SELL").contains(side)||!"okx".equals(properties.getLiveExchange())||!"BTC/USDT".equals(properties.getLivePair()))throw new IllegalArgumentException("Invalid OKX spot context");
+        var instruments=JsonUtils.getObjectMapper().readTree(publicRequest("/api/v5/public/instruments?instType=SPOT&instId="+instrument()));
+        var config=JsonUtils.getObjectMapper().readTree(privateRead("/api/v5/account/config"));
+        validatePreflight(instruments,config,new java.math.BigDecimal(price),new java.math.BigDecimal(amount));
+    }
+    public static void validatePreflight(tools.jackson.databind.JsonNode instruments,tools.jackson.databind.JsonNode config,java.math.BigDecimal price,java.math.BigDecimal amount){
+        if(!"0".equals(instruments.path("code").asText())||!instruments.path("data").isArray()||instruments.path("data").size()!=1)throw new IllegalArgumentException("OKX instruments missing");
+        var row=instruments.path("data").get(0);
+        if(!"BTC-USDT".equals(row.path("instId").asText())||!"SPOT".equals(row.path("instType").asText())||!"live".equals(row.path("state").asText()))throw new IllegalArgumentException("OKX spot instrument unavailable");
+        var tick=new java.math.BigDecimal(row.path("tickSz").asText());var lot=new java.math.BigDecimal(row.path("lotSz").asText());var min=new java.math.BigDecimal(row.path("minSz").asText());
+        if(tick.signum()<=0||lot.signum()<=0||min.signum()<=0||price.signum()<=0||amount.compareTo(min)<0||price.remainder(tick).signum()!=0||amount.remainder(lot).signum()!=0)throw new IllegalArgumentException("OKX price or quantity violates instrument rules");
+        if(!"0".equals(config.path("code").asText())||!config.path("data").isArray()||config.path("data").size()!=1)throw new IllegalArgumentException("OKX permission evidence missing");
+        var permissions=new HashSet<>(Arrays.asList(config.path("data").get(0).path("perm").asText().split(",")));
+        if(!permissions.equals(Set.of("read_only","trade")))throw new IllegalArgumentException("OKX key needs read and trade without withdrawal permission");
+    }
     public String placeSpotLimitOrder(String clientOrderId,String side,String price,String amount){
         if(!properties.isLiveExecutionEnabled())throw new IllegalStateException("真实执行总开关关闭");
         Map<String,Object> body=new LinkedHashMap<>();body.put("instId",properties.getLivePair().replace('/','-'));body.put("tdMode","cash");body.put("clOrdId",clientOrderId);body.put("side",side.toLowerCase(Locale.ROOT));body.put("ordType","limit");body.put("px",price);body.put("sz",amount);

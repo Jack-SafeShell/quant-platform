@@ -58,21 +58,24 @@ public class LiveControlService {
         var report=admissions.get(tenant,owner,reportId);
         var manifest=JsonUtils.getObjectMapper().readTree((String)report.get("reportJson"));
         var policies=repository.list(tenant,owner).stream().filter(p->reportId.equals(p.get("admissionReportId"))).toList();
-        var policy=policies.isEmpty()?null:policies.getFirst();
+        var policy=policies.stream().filter(p->properties.getLiveAccountId().equals(p.get("accountId"))&&properties.getLiveExchange().equals(p.get("exchangeName"))).findFirst().orElse(policies.isEmpty()?null:policies.getFirst());
         BigDecimal orderCap=policy==null?properties.getLiveMaxOrderNotional():decimal(policy,"maxOrderNotional").min(properties.getLiveMaxOrderNotional());
         var budget=LiveRunBudget.resolve(properties,orderCap,order,loss,fee,slip);
         var checks=new ArrayList<Map<String,Object>>();
         for(var check:manifest.path("checks"))checks.add(Map.of("id",check.path("id").asText(),"passed",check.path("passed").asBoolean(),"evidence",check.path("evidence").asText()));
+        String candidateExchange=admissions.reportExchange(tenant,owner,report);boolean exchangeMatch=false;try{admissions.requireExchange(tenant,owner,report,properties.getLiveExchange());exchangeMatch=true;}catch(IllegalArgumentException ignored){}
         boolean current=false;try{admissions.liveStrategy(tenant,owner,report);current=true;}catch(IllegalArgumentException ignored){}
         checks.add(Map.of("id","STRATEGY_CURRENT","passed",current,"evidence","报告完整且绑定源码未变"));
         checks.add(Map.of("id","DOUBLE_CONFIRMED","passed","DOUBLE_CONFIRMED".equals(report.get("confirmationState")),"evidence",report.get("confirmationState")));
         checks.add(Map.of("id","GATE_ARMED","passed",policy!=null&&"ARMED_OFFLINE".equals(policy.get("status")),"evidence",policy==null?"尚未创建门禁":policy.get("status")));
         checks.add(Map.of("id","LIVE_EXECUTION_ENABLED","passed",properties.isLiveExecutionEnabled(),"evidence","真实执行开关"));
         checks.add(Map.of("id","PRIVATE_EXCHANGE_SUPPORTED","passed",Set.of("okx","binance").contains(properties.getLiveExchange()),"evidence","OKX / Binance 现货私有适配已接入"));
-        checks.add(Map.of("id","EXCHANGE_ACCOUNT_MATCH","passed",policy==null||properties.getLiveAccountId().equals(policy.get("accountId")),"evidence","策略固定账户归属"));
+        checks.add(Map.of("id","EXCHANGE_ACCOUNT_MATCH","passed",policy!=null&&properties.getLiveAccountId().equals(policy.get("accountId"))&&properties.getLiveExchange().equals(policy.get("exchangeName")),"evidence","策略固定账户归属"));
+        checks.add(Map.of("id","EXCHANGE_EVIDENCE_MATCH","passed",exchangeMatch,"evidence","候选回测/模拟来源 "+candidateExchange+"；当前部署 "+properties.getLiveExchange()));
         checks.add(Map.of("id","LIVE_AUTOMATION_ENABLED","passed",properties.isLiveAutomationEnabled(),"evidence","自动执行开关"));
         checks.add(Map.of("id","CREDENTIAL_CONFIGURED","passed",credentials.configured(),"evidence","仅检查配置存在；不读取密钥或请求交易所"));
         var plan=new TreeMap<String,Object>();plan.put("reportId",reportId);plan.put("reportHash",report.get("reportHash"));plan.put("strategy",manifest.path("strategy"));
+        plan.put("candidateExchange",candidateExchange);plan.put("executionAccount",Map.of("id",properties.getLiveAccountId(),"exchange",properties.getLiveExchange()));plan.put("preflightPerformed",false);
         plan.put("budget",budget.snapshot());plan.put("limits",Map.of("maxOrderNotional",orderCap,"maxSessionLoss",properties.getLiveMaxSessionLoss(),
                 "maxDailyNotional",policy==null?properties.getLiveMaxDailyNotional():policy.get("maxDailyNotional"),"maxTotalExposure",policy==null?properties.getLiveMaxTotalExposure():policy.get("maxTotalExposure")));
         plan.put("checks",checks);plan.put("policyId",policy==null?null:policy.get("id"));

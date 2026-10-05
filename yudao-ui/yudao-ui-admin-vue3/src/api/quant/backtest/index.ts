@@ -189,9 +189,15 @@ export const listLiveOrders=(id:string):Promise<LiveExchangeOrder[]>=>request.ge
 export interface LiveRunBudget { orderNotional:number; maxSessionLoss:number; feeBps:number; slippageBps:number }
 export interface LiveRunPlan {
   reportId:string; reportHash:string; strategy?:LiveStrategyBinding; policyId?:string;
+  candidateExchange:string;executionAccount:{id:string;exchange:string};preflightPerformed:boolean;checkedAt?:number;
+  funds?:{availableUsdt:number;availableBtc:number;btcExposureUsdt:number;valuationScope:string};
+  orderPreview?:{side:string;price:number;amount:number;notional:number;budgetRemainder:number};
+  accountBudget?:{dailyReservedNotional:number;dailyRemainingNotional:number};fundsReserved?:false;ordersSent?:0;
   budget:LiveRunBudget; limits:{maxOrderNotional:number;maxSessionLoss:number;maxDailyNotional:number;maxTotalExposure:number};
   checks:{id:string;passed:boolean;evidence:string}[]; readyForStartRequest:boolean; evidenceHash:string;
   costAssumptionsOnly:true; readOnly:true;
 }
 export const getLiveRunPlan=(reportId:string,budget?:LiveRunBudget):Promise<LiveRunPlan>=>
   request.get({url:'/quant/backtest/live-control/run-plan',params:{reportId,...budget}})
+export const checkLiveRunFunds=(reportId:string,budget:LiveRunBudget):Promise<LiveRunPlan>=>
+  request.post({url:'/quant/backtest/live-control/run-check',params:{reportId},data:budget})

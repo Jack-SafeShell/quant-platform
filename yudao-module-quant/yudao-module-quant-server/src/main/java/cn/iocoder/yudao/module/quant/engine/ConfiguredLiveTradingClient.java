@@ -18,6 +18,7 @@ public class ConfiguredLiveTradingClient implements LiveTradingClient {
     public String marketCandles(){return selected().marketCandles();}
     public String marketTicker(){return selected().marketTicker();}
     public void validateSpotLimitOrder(String side,String price,String amount){selected().validateSpotLimitOrder(side,price,amount);}
+    public void preflightSpotLimitOrder(String side,String price,String amount){selected().preflightSpotLimitOrder(side,price,amount);}
     public java.math.BigDecimal limitPrice(String side,java.math.BigDecimal price){return selected().limitPrice(side,price);}
     public java.math.BigDecimal limitAmount(java.math.BigDecimal amount){return selected().limitAmount(amount);}
     public String placeSpotLimitOrder(String id,String side,String price,String amount){return selected().placeSpotLimitOrder(id,side,price,amount);}
