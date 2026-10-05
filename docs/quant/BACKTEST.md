@@ -499,3 +499,15 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 两账户 UTC 日预约 0、剩余额度 20；OKX BTC 暴露 0.001586336607 USDT，Binance 0，估值仅 BTC/USDT。Binance 余额较上一阶段零余额已变化，原因未确认，不改历史成交或归属尾仓。构建后默认 OKX 配置查询 Binance 报告被正确阻止，没有 funds/orderPreview；预算 0 返回业务 code=400。
 
 102 项 Java 回归、单体聚合 install、前端 ts:check/build:local、git diff --check 通过。新增七项测试覆盖账户/来源及门禁选择、凭据无配置不读、预算取整不足、可用资金缺失/不足、共享额度和未知订单、关闭开关、OKX 权限/规则边界。实际无需新增数据库迁移，42 张 quant 表；没有新增浏览器交互验收。最终默认根 PID 3840、健康 UP、okx-primary、原命令无凭据配置、三开关 false、门禁全部 HALTED、运行会话/活动订单 0。没有临时令牌文件；非秘密 run-preflight-binance/okx/final-20261005.json 保留在 .runtime/quant。下一任务为 Binance 候选方案受控运行与收益跟踪，自然信号出现时核对自动实际成交，研究技术通过不代表盈利。
+
+### Binance 候选实际运行与收益跟踪启动（2026-10-05）
+
+用户继续指令及既有完整小额订单授权下，沿已接受 EMA30/90、Binance 报告双确认和无 IP 边界，在统一入口真实复核资金/规则后启动会话 849f846f-6dae-41f4-8b8f-07f62dd88ede。门禁 7fa8c68c-1c3a-45b6-aadc-7b96af5e8189、账户 binance-primary 固定。2026-10-05 13:10:44.677（Asia/Shanghai）开始，最多 6 小时至 19:10:44.677，自然买卖均成交且无活动挂单时提前结束；只观察原策略自然已闭盘 1h 信号，不追加 24 小时等待、不强造信号、不转资、不扩大交易品种/限额。
+
+启动 run-check 全部通过，单笔预算 8.5、会话亏损上限 5、手续费/滑点假设 10/5 基点；每单/日额/敞口硬限额仍 10/20/20 USDT。实盘及自动 true，模拟 false。当时现货可用 USDT 9.14387178、BTC 0.00000006、BTC 等值敞口 0.0051319338；按卖价 85532.24 预估 0.00009 BTC / 7.6979016 USDT，无挂单。原账户微量 BTC 已包含在初始权益 9.14900371，不归入本会话库存或贡献，账户估值变化与会话按真实订单现金流加归属库存估值的收益分开。
+
+启动后实际读取 9 条 PASSED 对账，最新时间持续前进；每根已闭盘 K 线唯一，已有 1 条 NONE/NO_ACTION，无未解决告警，挂单双方 0、订单/成交数 0，净贡献 0、settlementState=NO_FILLS。这是启动和早期观测，不是跨小时自动成交或收益验收完成。真实费用、信号/门禁决定/一次性令牌/交易所订单/账本关联通过现有 performance 和运行面板查询，不用研究费率补造成本。
+
+隐藏独立守护 run-binance-candidate-watch.ps1（根 PID 12412）运行单体服务 run-binance-candidate-service.ps1（根 PID 33976），元数据 binance-candidate-watch.json；每 60 秒核对服务、会话账户、心跳/最新快照推进、闭盘时间、挂单一致性、亏损<5、无未解决告警及成本/订单关联。心跳或快照陈旧超过 180 秒、闭盘时间异常、重复信号等均终止；停止采用精确平台接口、撤单和 HALTED，保留归属库存，不强行变卖残仓。退出后仅终止匹配脚本身份的执行进程树，再按原 start-default-review.ps1 恢复默认无凭据 OKX 服务，实际核对三开关 false；无法确认清理或恢复时标 NEEDS_REVIEW。
+
+守护语法、健康正常态、十项故障边界与自然周期结束替身验证通过。自动化 binance ACTIVE 每小时复核/收尾，正常安静，成交、异常、完成时报告；旧 24-hour-live-automation-acceptance 保持 PAUSED。当前尚在运行，不宣称已停止或恢复默认。无业务源码/前端/数据库结构变化，沿用此前 102 项 Java 回归、单体及前端构建，不为记录阶段重复构建影响验收。非秘密 binance-candidate-preflight/running/performance-20261005.json 保留在 .runtime/quant；原始令牌仅在单体内存使用，无临时令牌文件。终态再以全会话聚合统计快照数量/跨度（详情仅最近 100 条），复核真实费用、库存和盈亏，更新交接并暂停本自动化。
