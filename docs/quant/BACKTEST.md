@@ -575,3 +575,13 @@ Binance发送HTTP的单次耗时>=2000 ms或传输失败时输出固定operation
 118项Java回归及yudao-server聚合install/package通过；新增LiveSamplingDiagnosticsTest六项及BinanceRequestTimingTest两项，覆盖在途/失败、时钟跳变、隔离与授权、并发完成不覆盖新采样、有界缓存、日志脱敏和固定操作名。前端未改，沿用已通过ts:check/build:local；git diff --check通过。实际以三开关false完成Binance预检及两轮run-check，规则/权限、资金和零挂单通过，单轮约3.8秒，ordersSent=0、fundsReserved=false、readiness=false，门禁订单总数不变。可用USDT29.14387178、BTC0.00000012，后者变化来源未确认，本轮无交易或转资，不计入策略收益。
 
 结束恢复默认根41568、Java存在、健康UP、okx-primary、无凭据配置、三开关false、门禁HALTED、无运行会话/目标活动订单。实际旧停止会话返回samplingDiagnostics.available=false，未知会话code=400；旧-1021 OPEN告警及两项PAUSED自动化保持。未启用候选，未新增临时令牌文件。非秘密sampling-preflight-binance-20261006.json、binance-sampling-readonly-rounds/default-final-20261006.json及sampling-diagnostics-build.log留在.runtime/quant。下一任务为沿原授权带诊断复验候选，核对自然信号、真实费用、收益及采样延迟证据，不强造交易或再设固定24小时等待。
+
+### 带采样诊断的候选实盘启动（2026-10-06）
+
+新会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa沿原EMA30/90版本713d2019-7a78-4d25-ab64-31bd906d70ce、报告0a9b0b9b-d998-4216-8a65-45f93e106ccf、门禁7fa8c68c-1c3a-45b6-aadc-7b96af5e8189、binance-primary及既有完整订单/证据/无IP边界授权启动；未重复授权或更换参数。真实预检readyForStartRequest=true、ordersSent=0，USDT可用29.14387178、BTC0.00000012；原微量BTC变化来源未确认，不计入会话收益。17:08:23.686开始，最多至23:08:23.686（Asia/Shanghai），预算8.5、每单/日额/敞口10/20/20、会话亏损5 USDT。仅实盘/自动true，模拟false；自然买卖均成交且零挂单可提前结束。
+
+17:11:03.945实际启动验证：UP、RUNNING、守护及服务/Java进程身份通过；9条PASSED快照，最新年龄6822ms、ADVANCING，1条信号、订单和成交0、双方挂单0，新会话无未解决告警。归属库存/收益贡献0、NO_FILLS；账户权益变化-0.00001486 USDT为原微量资产估值变化，不能算策略已结亏损或盈利。旧849f846f-6dae-41f4-8b8f-07f62dd88ede的OPEN告警1保留，首轮51e473e4-3e3a-4a36-a357-6319ad1b1d44停止记录与证据未覆盖。
+
+守护根37296、服务根37600，身份依据.runtime/quant/binance-candidate-watch.json及路径核对；新守护run-binance-candidate-watch-20261006-diagnostics.ps1每分钟沿原180秒阈值判定有界等待，并保存当前进程采样摘要到binance-candidate-sampling-20261006-diagnostics.jsonl。实际available=true、scope=CURRENT_PROCESS、persisted=false，序列8完成3123ms、序列9在途OPEN_ORDERS可见；尚未确认历史108秒延迟来源。binance小时跟踪ACTIVE，旧24小时跟踪PAUSED；异常或截止精确停止、核对撤单、HALTED并按原命令恢复默认UP/okx-primary/三开关false。无法证明零挂单须保留限制，不自动清仓、追加买入或重启。
+
+本轮无源码、前端或数据库变更，守护语法和边界测试通过，沿用118项Java回归、单体与既有前端检查，不覆盖运行环境。启动证据preflight/running/performance/start-verified-20261006-diagnostics.json及必要日志仅保留于.runtime/quant，无新增临时令牌文件；启动不是稳定性、自然成交或盈利验收完成。下一任务为完成本会话自然信号、真实费用/归属收益及全量对账/延迟复核，再记录终态和默认恢复证据。
