@@ -539,3 +539,13 @@ GET IOException 重试每次重新生成时间戳及 HMAC；-1021 在同一 live
 同私有代理无凭据 `/api/v3/time` 三次探测 RTT 为 509/85/85 ms；低延迟样本服务器相对本机偏差区间约 +341～+427 ms。现时偏差在原窗口内，不证明历史故障由单一时钟偏差或代理延迟造成；实际六轮没有注入 -1021，有限错误恢复由替身测试覆盖。未宣称自动成交、长时稳定或盈利验证通过。
 
 临时只读进程经路径核对终止，按原命令恢复默认根 PID 34636，Java 存在、健康 UP、okx-primary、无凭据配置、模拟/实盘/自动 false；全部门禁 HALTED、运行会话与目标门禁活动订单 0。历史会话 849f846f-6dae-41f4-8b8f-07f62dd88ede 保持 RISK_STOPPED，1 条 OPEN/HIGH AUTOMATION_FAILURE 未改写。binance 与旧 24 小时跟踪均保持 PAUSED。本轮未启动新实盘，不改系统时间；下一阶段按原授权受控运行候选，核对跨小时自然信号、真实费用和会话收益，再据运行证据处置告警。非秘密 binance-clock-readonly-rounds/public-probe/final-20261006.json、clock-preflight-binance-20261006.json 保留在 .runtime/quant，未新增临时令牌文件。
+
+### 校时修复后 Binance 候选运行启动（2026-10-06）
+
+用户“下一步”及原完整小额授权下，使用修复提交 2c0b046f3 启动新会话 51e473e4-3e3a-4a36-a357-6319ad1b1d44；原报告、EMA30/90 版本和门禁保持，不复用旧风险终态会话。启动前默认服务健康、门禁 HALTED、无运行会话/目标活动订单；切到 Binance 后实际私有身份及统一 run-check 通过，readyForStartRequest=true。会话开始 10:07:40.162，最多至 16:07:40.162（Asia/Shanghai），自然 BUY/SELL 成交均出现且零挂单时提前结束。预算 8.5、会话亏损上限 5、手续费/滑点假设10/5基点，原10/20/20 USDT限额不变。
+
+实际可用 USDT 29.14387178、BTC 0.00000006；USDT 较只读验证增加20，平台本轮没有资金划转，变化来源未确认，不能计入策略收益。早期复核4条 PASSED 对账、双方挂单0、1根闭盘K线信号、订单/成交0、成本与估值完整、会话归属库存和净贡献0、NO_FILLS。10:09守护已再次更新心跳和快照，无新会话告警；账户微量估值变化与会话贡献分开。旧会话1条OPEN告警保留，不称全平台无未处理告警。
+
+独立隐藏守护 run-binance-candidate-watch-20261006.ps1 根PID25180，服务 run-binance-candidate-service.ps1 根PID39820，专属Java子进程核对通过；健康UP、binance-primary、模拟false、实盘/自动true。每分钟守护检查账户、开关、固定预算、心跳/闭盘时间、最新对账增长、挂单一致、亏损、信号幂等、费用及执行链。异常/截止经平台精确停止会话与门禁、撤单检查、身份核对的进程树退出，按start-default-review.ps1恢复无凭据默认并复核三开关false；不强制清仓、买入消除尾仓或自动重启。无法确认清理时如实记录NEEDS_REVIEW。
+
+元数据 .runtime/quant/binance-candidate-watch.json；旧元数据另存日期文件。本次 preflight/running/performance/start-verified-20261006.json 和 watch/service-20261006.*.log 保留非秘密证据。守护语法及健康/十项故障边界/自然周期结束替身检查通过；业务源码/前端/数据库无改动，沿用110项回归、单体构建及既有前端检查，不覆盖运行环境。binance自动化已更新为本会话并ACTIVE，旧24小时任务PAUSED，无新增临时令牌文件。此为启动证据，终态再聚合全会话快照和跨小时幂等、真实费用及归属收益；不能用最近100条详情代替全量，也不宣称自动成交或盈利验证完成。
