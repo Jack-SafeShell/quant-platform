@@ -222,6 +222,7 @@
           </el-table>
         </el-tab-pane>
         <el-tab-pane :label="`告警 (${alerts.length})`" name="alerts">
+          <p class="evidence-note">自动执行故障可在所属账户、执行开关关闭且会话停止后复核。记录解决会保留故障与审计，不重启会话；复核证据两分钟有效。</p>
           <el-table :data="alerts" max-height="420" row-key="id">
             <el-table-column prop="alertType" label="类型" min-width="180" />
             <el-table-column label="状态" width="120"><template #default="s"><el-tag :type="s.row.status === 'OPEN' ? 'danger' : 'success'">{{ s.row.status }}</el-tag></template></el-table-column>
@@ -229,9 +230,15 @@
             <el-table-column label="首次发生" width="180"><template #default="s">{{ formatTime(s.row.firstSeenAt) }}</template></el-table-column>
             <el-table-column label="最后发生" width="180"><template #default="s">{{ formatTime(s.row.lastSeenAt) }}</template></el-table-column>
             <el-table-column label="恢复时间" width="180"><template #default="s">{{ formatTime(s.row.resolvedAt) }}</template></el-table-column>
+            <el-table-column label="处置" width="140"><template #default="s"><el-button v-if="s.row.status === 'OPEN' && s.row.alertType === 'AUTOMATION_FAILURE'" link type="primary" :disabled="loading || !!repairingOrderId || !activeSession?.selectedAccount || activeSession?.status === 'RUNNING' || capabilities?.executionEnabled || capabilities?.liveExecutionEnabled || capabilities?.liveAutomationEnabled" @click="reviewLiveAlert(s.row.id)">只读复核</el-button></template></el-table-column>
           </el-table>
+          <h3>处置审计（最近100条）</h3>
+          <el-table :data="alertActions" max-height="300"><el-table-column label="动作" width="110"><template #default="s">{{ s.row.actionType === 'CHECK' ? '只读复核' : '记录解决' }}</template></el-table-column><el-table-column prop="actorId" label="操作人" width="90" /><el-table-column prop="comment" label="处置说明" min-width="260" /><el-table-column prop="evidenceHash" label="证据摘要" min-width="180" show-overflow-tooltip /><el-table-column label="时间" width="180"><template #default="s">{{ formatTime(s.row.createdAt) }}</template></el-table-column></el-table>
         </el-tab-pane>
       </el-tabs>
+      <el-dialog v-model="recoveryVisible" title="自动执行故障处置" width="760px">
+        <template v-if="recoveryProof"><el-alert title="记录解决仅表示已完成当前安全复核，不保证历史根因已消除，也不授权或重启交易。" type="info" :closable="false" /><p>账户 {{ recoveryProof.accountId }} · 有效至 {{ formatTime(recoveryProof.expiresAt) }}</p><el-table :data="recoveryProof.checks"><el-table-column prop="id" label="检查项" min-width="190" /><el-table-column label="结果" width="70"><template #default="s">{{ s.row.passed ? '通过' : '未通过' }}</template></el-table-column><el-table-column prop="evidence" label="证据" min-width="280" /></el-table><el-input v-model="recoveryComment" class="mt-3" type="textarea" :maxlength="500" show-word-limit placeholder="填写排查结果、已采取措施及仍存在的限制" /><el-button class="mt-3" type="primary" :loading="!!repairingOrderId" :disabled="!recoveryProof.readyForResolution || !recoveryComment.trim() || loading" @click="recordLiveAlertResolution">记录解决</el-button></template>
+      </el-dialog>
       <p class="evidence-note">信号及对账各显示最近 100 条，完整验收以数据库留存证据为准。</p>
     </ContentWrap>
 
@@ -303,6 +310,11 @@ import type { EChartsOption } from 'echarts'
 import {
   getCapabilities,
   getLiveAutomation,
+  checkLiveAlert,
+  resolveLiveAlert,
+  listLiveAlertActions,
+  type LiveRecoveryCheck,
+  type LiveAlertAction,
   listBacktests,
   listLiveAutomations,
   listLiveControls,
@@ -341,6 +353,10 @@ const paperExecutions = ref<PaperExecution[]>([])
 const policies = ref<LiveControlPolicy[]>([])
 const sessions = ref<LiveAutomationSession[]>([])
 const activeSession = ref<LiveAutomationSession>()
+const alertActions = ref<LiveAlertAction[]>([])
+const recoveryProof = ref<LiveRecoveryCheck>()
+const recoveryVisible = ref(false)
+const recoveryComment = ref('')
 const liveOrders = ref<LiveExchangeOrder[]>([])
 const performance = ref<LivePerformance>()
 const traceOrdersOnly = ref(false)
@@ -460,6 +476,7 @@ async function refresh() {
     const selected = availableSessions.find((item) => item.id === selectedSessionId.value)
       || availableSessions.find((item) => item.status === 'RUNNING') || availableSessions[0]
     const detail = selected ? await getLiveAutomation(selected.id) : undefined
+    const actions = selected ? await listLiveAlertActions(selected.id) : []
     let attribution: LivePerformance | undefined
     let attributionError = ''
     if (selected) {
@@ -475,6 +492,8 @@ async function refresh() {
     sessions.value = availableSessions
     selectedSessionId.value = selected?.id
     activeSession.value = detail
+    alertActions.value = actions
+    if (recoveryProof.value && recoveryProof.value.sessionId !== detail?.id) { recoveryVisible.value = false; recoveryProof.value = undefined }
     performance.value = attribution
     performanceError.value = attributionError
     liveOrders.value = orders
@@ -488,6 +507,21 @@ async function refresh() {
 }
 
 function changeAccount() { selectedSessionId.value = undefined; refresh() }
+
+async function reviewLiveAlert(alertId:string) {
+  if (!activeSession.value?.selectedAccount || loading.value || repairingOrderId.value) return
+  repairingOrderId.value = `alert:${alertId}`
+  try { recoveryProof.value = await checkLiveAlert(alertId); recoveryComment.value = ''; recoveryVisible.value = true }
+  finally { repairingOrderId.value = ''; await refresh() }
+}
+async function recordLiveAlertResolution() {
+  const proof = recoveryProof.value
+  if (!proof || !recoveryComment.value.trim() || repairingOrderId.value || proof.sessionId !== activeSession.value?.id) return
+  if (Date.now() > proof.expiresAt) { ElMessage.warning('复核已过期，请重新复核'); return }
+  repairingOrderId.value = `alert:${proof.alertId}`
+  try { await resolveLiveAlert(proof.alertId,{checkId:proof.checkId,evidenceHash:proof.evidenceHash,comment:recoveryComment.value.trim()}); recoveryVisible.value = false; recoveryProof.value = undefined; ElMessage.success('解决记录及审计已保存，会话保持停止') }
+  finally { repairingOrderId.value = ''; await refresh() }
+}
 
 async function stopCurrentSession() {
   const session = activeSession.value

@@ -609,3 +609,19 @@ Binance单次慢/失败请求计时追加固定failureKind，值为NONE、CONNEC
 随后在临时Binance部署显式关闭三个执行开关，用原DPAPI引用只读run-check；初次预检及额外三轮均成功，额外轮次00:04:39.759/00:05:28.615/00:06:19.133，耗时3838/5500/4985ms，开始跨度99.374秒，覆盖原60秒校时缓存过期后的重新取时。来源/账户一致、实际资金/权限/规则/挂单检查通过；USDT29.14387178、BTC0.00000012，ordersSent=0、fundsReserved=false、readyForStartRequest=false、门禁历史订单3→3，未创建新会话、预约或转资。仅预检的假设首次买单数量/价格不是真实成交；不归属原微量余额估值为策略收益。
 
 临时只读部署退出，最终默认根42344经start-default-review.ps1身份核对，UP、okx-primary、原无凭据默认命令、三个开关false、所有门禁HALTED、运行会话/活动订单0。旧-1021和本次校时失败各1条OPEN告警仍保留，两个跟踪任务PAUSED，不直接改库解决或重启旧会话。非秘密binance-clock-routes-20261007.jsonl、binance-transport-readonly-rounds/default-final-20261007.json与binance-transport-build-20261007.log留在.runtime/quant，无新增临时令牌文件，git diff --check通过。下一任务为补齐自动会话故障告警的审计处置与受控恢复入口，绑定已停止、零挂单和连接复核证据，沿原额度/授权推进候选；本轮不声明历史网络根因已修复。
+
+### 自动停机告警的审计处置入口（2026-10-07）
+
+新增sql/quant/028_live_automation_alert_action.sql，数据库quant-platform已执行并验证15列，quant表43张。该表追加保存CHECK/RESOLVE事件、操作者、处置说明、前后状态、证据JSON及SHA-256；原告警消息/发生时间与风险停机会话保持，不以无审计SQL改写状态。单体现有quant模块自动扫描新服务/Controller，无新增配置或独立服务。
+
+POST /quant/backtest/live-control/automation/alert/check只读复核，GET同前缀/alert-actions按会话读取最近100条审计，POST /alert/resolve记录解决。仅支持OPEN AUTOMATION_FAILURE，先核对tenant/owner、固定账户、三个执行开关关闭、终止会话、HALTED门禁和账户零运行/活动订单，再复用真实run-check检查策略/双确认、来源、权限/规则/资金、挂单和共享额度。服务端生成两分钟有效的证据，绑定状态摘要；失败复核也保留CHECK且禁止解决，缺失/伪造/过期/未来证据、告警最后发生时间或门禁变化均拒绝。解决事务锁定门禁/告警，重新核对状态、平台订单和证据，原告警status/resolved_at更新与RESOLVE插入原子提交；重复请求不新增处置。两个动作均activationAllowed=false，不签发令牌、预约资金、开启执行、重启会话或发送真实订单。
+
+运行面板“告警”新增只读复核、当前复核结果/处置说明和审计表。错部署账户、运行会话或执行开启时禁用入口，跨会话切换关闭旧复核，过期须重新复核；记录解决只代表当前安全复核完成，不能将它解释为历史根因已消除。128项Java回归及单体聚合install/package通过，八项新增H2测试使用真实迁移/仓库SQL，覆盖归属隔离、未停止/未知活动订单、失败/缺失/过期/未来/伪造证据、状态变化、幂等及审计插入失败时状态回滚。前端ts:check/build:local通过，未进行浏览器交互验收。
+
+实际验收（2026-10-07 00:32–00:36，Asia/Shanghai）：
+
+- 默认OKX部署拒绝Binance告警复核且未增加审计；临时Binance部署关闭三个执行开关，分别对旧-1021会话849f846f-6dae-41f4-8b8f-07f62dd88ede及校时传输失败会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa完成真实只读复核。处置前错误摘要被拒绝；两条告警经平台接口变为RESOLVED，各追加CHECK/RESOLVE两条记录，重复提交返回同一actionId，无重复审计。两条原会话仍RISK_STOPPED，消息及故障时间未改写，rootCauseFixed=false、activationAllowed=false。
+- 复核证据摘要分别942a4b4d1e2b04452164081db31b1dbc21b854937b1f7c4fd5e1a40ba4d8834d、a6e784f45269c97cd25c4bdfded40ea91f000de18c46610c7d08f8416e1dc565；处置ID分别67fac0f2-7f12-4187-8cf3-2b87c4bf2bac、2208c8e3-3790-4740-8d5b-a8cff92c98ae。非秘密摘要live-alert-recovery-acceptance-20261007.json留在.runtime/quant。
+- 真实可用USDT9.14387178、BTC0.00000012，USDT较此前减少20，来源未确认；本轮未转资、下单、预约或新建会话，历史门禁订单3→3，不将资金变化归为策略损益。当前8.5预算检查通过，交易所/平台活动挂单均0，readyForStartRequest=false。
+- 临时只读部署退出后恢复默认根38712，最终UP/okx-primary、三开关false、全部门禁HALTED、运行会话及平台活动订单0，两条告警RESOLVED且各审计2条；两项跟踪自动化保持PAUSED，没有新增临时令牌文件。完整证据在live-alert-recovery-default-final-20261007.json。
+- 处置表示当前只读连接、规则、资金与零挂单证据已复核并留痕，不代表偶发传输根因确定、长时稳定或盈利验证。下一任务为在原确认和授权额度内新建最多6小时的自然信号候选，重新核对启动条件、真实费用和归属收益，不自动重启旧会话。

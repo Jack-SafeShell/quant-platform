@@ -184,6 +184,11 @@ export const startLiveAutomation=(id:string,data:{confirmation:'CONFIRM_AUTO_LIV
 export const stopLiveAutomation=(sessionId:string,comment:string):Promise<string>=>request.post({url:'/quant/backtest/live-control/automation/stop',params:{sessionId},data:{comment}})
 export const listLiveAutomations=(id:string):Promise<LiveAutomationSession[]>=>request.get({url:'/quant/backtest/live-control/automation/list',params:{id}})
 export const getLiveAutomation=(sessionId:string):Promise<LiveAutomationSession>=>request.get({url:'/quant/backtest/live-control/automation/get',params:{sessionId}})
+export interface LiveRecoveryCheck { checkId:string;alertId:string;sessionId:string;accountId:string;exchangeName:string;checkedAt:number;expiresAt:number;evidenceHash:string;readyForResolution:boolean;activationAllowed:false;checks:Array<{id:string;passed:boolean;evidence:string}> }
+export interface LiveAlertAction { id:string;alertId:string;actorId:number;actionType:'CHECK'|'RESOLVE';fromStatus:string;toStatus:string;comment?:string;evidenceHash:string;createdAt:number;expiresAt?:number }
+export const checkLiveAlert=(alertId:string):Promise<LiveRecoveryCheck>=>request.post({url:'/quant/backtest/live-control/automation/alert/check',params:{alertId}})
+export const resolveLiveAlert=(alertId:string,data:{checkId:string;evidenceHash:string;comment:string}):Promise<{actionId:string;status:'RESOLVED';activationAllowed:false}>=>request.post({url:'/quant/backtest/live-control/automation/alert/resolve',params:{alertId},data})
+export const listLiveAlertActions=(sessionId:string):Promise<LiveAlertAction[]>=>request.get({url:'/quant/backtest/live-control/automation/alert-actions',params:{sessionId}})
 export const listLiveOrders=(id:string):Promise<LiveExchangeOrder[]>=>request.get({url:'/quant/backtest/live-control/order/list',params:{id}})
 
 export interface LiveRunBudget { orderNotional:number; maxSessionLoss:number; feeBps:number; slippageBps:number }

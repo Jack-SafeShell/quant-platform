@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**自动会话故障告警审计处置与受控恢复。** Binance校时两条现有代理路径的短时探测及关闭执行的真实账户复核通过，故障分类已补齐；原三次15秒失败未复现，不能宣称根因修复或长时稳定。下一阶段补齐AUTOMATION_FAILURE的有审计处置入口，绑定停机会话、零挂单和只读连接复核证据，再在原授权/额度内安排一次受控候选；保留风险记录，不直接改库消警或自动重启旧会话。当前默认三开关关闭、跟踪PAUSED，旧-1021及校时失败告警仍OPEN。A 股暂缓。
+**Binance 自动候选受控运行与自然成交/收益复核。** 两条自动停机故障已在关闭执行的 Binance 部署中复核并经平台接口追加处置审计，告警为 RESOLVED，原会话仍 RISK_STOPPED；不表示偶发网络根因已修复。下一阶段沿现有策略、报告确认与小额授权，新建一次最多6小时的候选会话，预算8.5、每单/日额/敞口10/20/20、会话亏损5 USDT，仅观察自然已闭盘1h信号及真实费用和归属收益，不强造交易、扩大限额或重启旧会话。启动前重新核对实际账户资金与零挂单；本次可用USDT9.14387178，较前次减少20，平台本轮未转资或下单，来源未核实，不归入策略亏损。当前默认UP/okx-primary、三开关false、门禁HALTED、跟踪PAUSED。A股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -447,3 +447,13 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 关闭三个执行开关的临时Binance部署，先完成真实run-check，再于00:04:39.759、00:05:28.615、00:06:19.133（Asia/Shanghai）三轮只读复核，耗时3838/5500/4985ms，覆盖60秒校时缓存过期后的重新取时。账户归属/研究来源、权限规则和零挂单检查均通过；USDT29.14387178、BTC0.00000012，ordersSent=0、fundsReserved=false、readyForStartRequest=false，门禁订单3→3，无新会话/转资/订单。短时成功不是长时稳定或盈利证据。
 - 120项Java回归与单体聚合install/package通过，JAVA_HOME为Corretto25.0.4、Maven3.9.9。新测试覆盖固定分类、嵌套DNS异常脱敏、三次校时GET失败有限重试及日志不含秘密；既有真实写入至多一次和未知状态测试通过。前端未改，沿用已通过ts:check/build:local；git diff --check通过。
 - 临时只读部署退出；最终默认根42344按start-default-review.ps1恢复、健康UP、okx-primary、无凭据默认命令、三开关false、全部门禁HALTED、运行会话/活动订单0。候选仍RISK_STOPPED，本次校时失败与旧-1021各1条OPEN告警保留，binance及旧24小时跟踪均PAUSED；不自动重启或清警。非秘密binance-clock-routes、binance-transport-readonly-rounds、binance-transport-default-final-20261007.json/jsonl及构建/只读部署日志留在.runtime/quant，无新增临时令牌文件。下一唯一任务见上方：故障告警审计处置与受控恢复，不继续拆分固定24小时等待。
+
+
+## 自动停机故障审计处置验收（2026-10-07）
+
+- 开始main跟踪origin/main、5163ffe23，工作区干净。新增028_live_automation_alert_action.sql并实际应用项目MySQL：43张quant表，新增审计表15列。原故障消息、首次/末次时间、会话风险终态和历史交易记录保留；告警状态仅通过平台事务接口更新并追加CHECK/RESOLVE审计，没有直接改库清警。
+- 新增所属账户的只读复核、证据绑定处置及最近100条审计查询；量化运营告警页可复核、填写说明并记录处置。仅支持停止会话的OPEN AUTOMATION_FAILURE，要求门禁HALTED、三个执行开关false、平台与交易所零挂单及当前研究/确认/规则/资金检查。证据摘要绑定会话、告警、门禁状态，有效2分钟；过期、摘要错误、状态变化拒绝。事务锁、条件更新和审计同成同败；重复处置返回原actionId。处置activationAllowed=false，不启用门禁、重启会话、预约资金或发送订单。
+- 真实默认OKX部署拒绝Binance告警复核，未增加审计。切至三开关关闭的Binance部署，00:32:15.079复核旧会话849f846f-6dae-41f4-8b8f-07f62dd88ede的-1021告警f9b54c4d-47e6-425a-a944-ae3ffa2cc1d0，00:32:23.473复核会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa的校时传输告警23d74d72-54b3-4846-b484-6f1f07359bef。两者均通过真实只读证据；错误摘要被拒绝，处置后RESOLVED、审计0→2，重复请求actionId相同。处置ID分别67fac0f2-7f12-4187-8cf3-2b87c4bf2bac、2208c8e3-3790-4740-8d5b-a8cff92c98ae。原会话仍RISK_STOPPED，rootCauseFixed=false，原三次15秒网络故障根因尚未确定。
+- 实际账户复核USDT9.14387178、BTC0.00000012，USDT较上轮减少20；本轮ordersSent=0、fundsReserved=false、历史门禁订单3→3，没有转资或新会话，变化来源未核实，不归入本平台策略盈亏。8.5预算资金检查仍通过，双方活动挂单0。
+- 128项Java回归及单体聚合install/package通过，新增八项覆盖范围隔离、账户/开关/门禁/活动状态、失败/缺失/过期/未来/伪造证据、状态变化、重复处置与审计失败事务回滚。前端ts:check/build:local通过；未进行浏览器交互验收。只读临时服务已退出，00:36:17.777最终核对默认根38712及原脚本/Java身份、UP、okx-primary、三开关false、全部门禁HALTED、运行会话和平台活动订单0，两条告警各CHECK/RESOLVE审计2条且无OPEN。binance及旧24小时自动化仍PAUSED。
+- 非秘密live-alert-recovery-acceptance/default-final-20261007.json、alert-recovery-readonly-rounds-20261007.json及构建日志留在.runtime/quant；没有新增临时令牌文件，不提交运行环境或凭据。尚无新自然成交/盈利证据，下一唯一任务见上方，不拆分固定24小时等待。
