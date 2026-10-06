@@ -549,3 +549,15 @@ GET IOException 重试每次重新生成时间戳及 HMAC；-1021 在同一 live
 独立隐藏守护 run-binance-candidate-watch-20261006.ps1 根PID25180，服务 run-binance-candidate-service.ps1 根PID39820，专属Java子进程核对通过；健康UP、binance-primary、模拟false、实盘/自动true。每分钟守护检查账户、开关、固定预算、心跳/闭盘时间、最新对账增长、挂单一致、亏损、信号幂等、费用及执行链。异常/截止经平台精确停止会话与门禁、撤单检查、身份核对的进程树退出，按start-default-review.ps1恢复无凭据默认并复核三开关false；不强制清仓、买入消除尾仓或自动重启。无法确认清理时如实记录NEEDS_REVIEW。
 
 元数据 .runtime/quant/binance-candidate-watch.json；旧元数据另存日期文件。本次 preflight/running/performance/start-verified-20261006.json 和 watch/service-20261006.*.log 保留非秘密证据。守护语法及健康/十项故障边界/自然周期结束替身检查通过；业务源码/前端/数据库无改动，沿用110项回归、单体构建及既有前端检查，不覆盖运行环境。binance自动化已更新为本会话并ACTIVE，旧24小时任务PAUSED，无新增临时令牌文件。此为启动证据，终态再聚合全会话快照和跨小时幂等、真实费用及归属收益；不能用最近100条详情代替全量，也不宣称自动成交或盈利验证完成。
+
+### Binance 快照进展异常终态复核（2026-10-06）
+
+守护因SNAPSHOT_NOT_ADVANCING在11:31:37.907（Asia/Shanghai）经平台停止会话51e473e4-3e3a-4a36-a357-6319ad1b1d44，状态STOPPED，门禁HALTED；从10:07:40.162起实际5037.745秒（1小时23分57.745秒），未完成6小时观察。11:32:03元数据NEEDS_REVIEW/outcome=FAILED是运行判定，cleanupConfirmed和defaultRestored均true。
+
+按精确会话、tenant_id/owner_id=1只读聚合全部quant_live_reconciliation_snapshot：274条均PASSED、挂单差异0，10:07:46.673至11:31:43.423跨度5036.750秒，最大相邻间隔108.443秒，最大会话亏损0.00000450 USDT。最终在途快照晚于停止写入5.516秒，照实保留。两根不同已闭盘1h K线均NONE/NO_ACTION，重复K线组0；会话订单/成交0，成本和估值完整、净归属库存0、净贡献0、NO_FILLS。账户权益变化-0.00000321来自原微量BTC估值口径，不是策略已结盈亏；无自然买卖或盈利验证证据。
+
+新会话告警0，本轮服务安全诊断未记录code -1021、无效/过期校时或Binance传输失败。守护Assert-CandidateSnapshot每分钟要求最新reconciledAt严格大于上一轮，并另设180秒陈旧门限；一次无增长即可停止，尚未达到180秒也会触发。已确认108.443秒采样间隔，尚无每次请求耗时/采样阶段证据，不能认定网络、调度、数据库或主机为根因；停止附近未确认匹配的系统睡眠事件。下一任务为对账采样延迟诊断与守护判定修复，区分一次暂未新增、持续陈旧及明确异常，保留资金/挂单/告警风控和有界停机，不直接延长观察时限或自动重启。
+
+安全清理后的实际run-check ACCOUNT_ORDERS_CLEAR通过，交易所和平台账户活动挂单0，USDT29.14387178、BTC0.00000006；没有额外下单、转资或强制清尾仓。后续现场复核目标STOPPED、HALTED、新会话未解决告警0，旧会话849f846f-6dae-41f4-8b8f-07f62dd88ede的1条OPEN告警仍保留；无对应审计处置能力，未直接改数据库或宣称旧告警解决。
+
+守护25180和执行39820均已退出；默认根4400及Java存在、健康UP、okx-primary、无凭据配置、三个开关false、全部门禁HALTED、运行会话0。binance自动化已PAUSED，旧24小时跟踪保持暂停；前端不参与停机。本阶段仅更新文档，沿用110项Java回归/单体及既有前端检查，不覆盖运行环境；git diff --check通过。全量与终态非秘密binance-candidate-summary/stopped/performance/final-account/default-final-20261006.json留在.runtime/quant，无新增临时令牌文件，不提交运行数据。
