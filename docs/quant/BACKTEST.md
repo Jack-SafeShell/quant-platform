@@ -585,3 +585,15 @@ Binance发送HTTP的单次耗时>=2000 ms或传输失败时输出固定operation
 守护根37296、服务根37600，身份依据.runtime/quant/binance-candidate-watch.json及路径核对；新守护run-binance-candidate-watch-20261006-diagnostics.ps1每分钟沿原180秒阈值判定有界等待，并保存当前进程采样摘要到binance-candidate-sampling-20261006-diagnostics.jsonl。实际available=true、scope=CURRENT_PROCESS、persisted=false，序列8完成3123ms、序列9在途OPEN_ORDERS可见；尚未确认历史108秒延迟来源。binance小时跟踪ACTIVE，旧24小时跟踪PAUSED；异常或截止精确停止、核对撤单、HALTED并按原命令恢复默认UP/okx-primary/三开关false。无法证明零挂单须保留限制，不自动清仓、追加买入或重启。
 
 本轮无源码、前端或数据库变更，守护语法和边界测试通过，沿用118项Java回归、单体与既有前端检查，不覆盖运行环境。启动证据preflight/running/performance/start-verified-20261006-diagnostics.json及必要日志仅保留于.runtime/quant，无新增临时令牌文件；启动不是稳定性、自然成交或盈利验收完成。下一任务为完成本会话自然信号、真实费用/归属收益及全量对账/延迟复核，再记录终态和默认恢复证据。
+
+### 带诊断候选校时超时及安全收尾（2026-10-06）
+
+会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa从17:08:23.686至22:10:23.993（Asia/Shanghai），18120.307秒，终态RISK_STOPPED，原因Binance clock transport failure after 3 attempt(s)。平台自动风险停机先发生，守护SESSION_OR_ACCOUNT_CHANGED为发现终态的结果，不证明账户改变；metadata=NEEDS_REVIEW，cleanupConfirmed/defaultRestored/executionProcessStopped均true，未正常满6小时。
+
+精确session及tenant/owner=1数据库全量聚合972条对账、全部PASSED，17:08:31.035至22:09:12.606跨度18041.571秒，最大间隔35.567秒，挂单不一致0、最大观测sessionLoss0.00004102 USDT。六根闭盘各NONE/NO_ACTION一条、重复组0；本会话关联订单/成交0、真实买卖金额0、NO_FILLS、归属库存/收益贡献0、closedPositionNetPnl=null，未产生会话手续费。账户权益变化+0.00002869 USDT为原微量BTC估值变化，不是已结收益；真实费用及自然BUY/SELL链仍无本轮成交证据。
+
+最后采样序列973为FAILED/ACCOUNT，总耗时56081ms、ACCOUNT55637ms。实际服务日志提取固定计时字段：末三次SERVER_TIME/GET各15000ms、responseReceived=false；全段慢/失败计时11条（CANDLES2、ACCOUNT4、OPEN_ORDERS1、SERVER_TIME4），无响应3条。账户采样中的校时HTTP传输失败已确认，未确定代理/网络/TLS/交易所链路具体原因；不将其当作-1021返回或180秒守护误停，历史108秒间隔也尚未解释。每分钟JSONL观测293次、353个不同采样序列、最大观测快照年龄34285ms、等待次数0，属于部分采样证据；末失败诊断另保存在停止详情，重启后缓存不持久。
+
+守护精确emergency-stop后门禁HALTED，结束时真实run-check核对交易所及平台活动挂单均0，USDT29.14387178、BTC0.00000012；再次按实际平台活动状态枚举确认0，无新订单、转资或清仓。新会话保留OPEN AUTOMATION_FAILURE一条（23d74d72-54b3-4846-b484-6f1f07359bef），旧849f846f-6dae-41f4-8b8f-07f62dd88ede的OPEN -1021一条仍保留，无审计处置能力不直接改库。守护37296和执行37600已退出，默认根38708及Java经路径核对、健康UP、okx-primary、模拟/实盘/自动均false；binance跟踪PAUSED，旧24小时跟踪保持暂停，不自动重启。
+
+非秘密binance-candidate-summary/default-final/stopped/performance/final-account-20261006-diagnostics.json、binance-candidate-diagnostic-summary-20261006.json及sampling JSONL保留于.runtime/quant。实际服务日志为该目录binance-candidate-service-20261006-diagnostics.out.log/.err.log，守护日志binance-candidate-watch-20261006-diagnostics.*.log；更正此前自动跟踪提示的子目录路径，未经筛选不输出原始日志。本阶段无源码/数据库/前端修改或新增临时令牌文件，沿用118项Java回归、单体和已通过前端检查，git diff --check通过。不能声明6小时稳定性、自动买卖或盈利验证通过；下一唯一任务为Binance校时连接稳定性诊断和有界只读验证，保持原重试、写入至多一次及风控门限，依据证据再安排候选运行。

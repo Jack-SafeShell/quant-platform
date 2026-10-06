@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**完成带采样诊断的 Binance 候选运行与收益复核。** 新会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa已于2026-10-06 17:08:23.686启动，最晚23:08:23.686（Asia/Shanghai）停止；沿原EMA30/90、8.5 USDT预算和既有授权，观察自然信号、采样延迟阶段、真实费用与归属收益。独立每分钟守护和binance小时跟踪ACTIVE；当前模拟false、实盘/自动true，终态必须恢复默认三开关false。相同快照仅在原180秒有效期内等待，陈旧或风险继续停机；不强造信号、不扩大额度或自动重启。A 股暂缓。
+**Binance 校时连接稳定性诊断与有界只读验证。** 带诊断候选运行5小时2分钟后因校时GET三次15秒传输超时而RISK_STOPPED，未触发守护误停；972条对账全部PASSED、六根闭盘无交易信号、无新增订单。默认UP/okx-primary/三开关false已恢复，跟踪PAUSED。下一阶段复核私有主机所用代理链路、超时类别及校时读取，保留脱敏证据和原有限重试/写入至多一次边界，再决定受控候选是否可继续；不自动重启或仅扩大超时/限额。旧-1021及本次AUTOMATION_FAILURE共两条OPEN告警保留，无审计处置能力时不直接改数据库。A 股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -429,3 +429,12 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 独立隐藏守护根37296、执行服务根37600，以.runtime/quant/binance-candidate-watch.json及进程路径核对身份。守护run-binance-candidate-watch-20261006-diagnostics.ps1每60秒执行原风险检查，相同且年龄<=180000ms的快照有界等待；新增samplingDiagnostics.current-process摘要留存至binance-candidate-sampling-20261006-diagnostics.jsonl。实际available=true、scope=CURRENT_PROCESS、persisted=false：已完成序列8耗时3123ms，在途序列9可看到OPEN_ORDERS阶段，尚未确认历史108秒延迟根因。旧首轮元数据另存binance-candidate-watch-20261006-first.json，日期带diagnostics后缀，未覆盖旧验收证据。
 - binance小时跟踪已ACTIVE，目标及截止更新至新会话；旧24小时跟踪保持PAUSED。正常安静，异常或截止由独立守护精确停会话及门禁、核对撤单、终止核对过的执行树，按start-default-review.ps1恢复无凭据默认单体并确认三开关false。当前仍运行，未完成稳定性、自然BUY/SELL或盈利验证。
 - 本轮无业务源码、数据库或前端变更；守护脚本语法与受版本管理的守护边界测试通过，沿用118项Java回归、单体及已通过前端检查，不在运行中重复构建。非秘密preflight/running/performance/start-verified-20261006-diagnostics.json留在.runtime/quant，无新增临时令牌文件。唯一下一任务见上方。
+
+## 带诊断候选校时传输异常收尾（2026-10-06）
+
+- 会话400ce3d4-7e03-41fd-ab30-1b11d553b1aa于22:10:23.993（Asia/Shanghai）RISK_STOPPED，从17:08:23.686运行18120.307秒，即5小时2分0.307秒，未满6小时。直接原因为Binance clock transport failure after 3 attempt(s)。平台先风险停机，守护随后发现会话终态，reason=SESSION_OR_ACCOUNT_CHANGED仅表示守护条件不再满足，不证明账户切换。守护最终NEEDS_REVIEW、cleanupConfirmed/defaultRestored/executionProcessStopped均true，未伪造正常完成。
+- tenant/owner=1、精确会话的全量只读聚合：972条对账全部PASSED，跨度18041.571秒，最大间隔35.567秒、挂单不一致0、最大观测sessionLoss=0.00004102 USDT。六根闭盘K线各一条NONE/NO_ACTION、重复组0、关联真实订单/成交0。收益NO_FILLS、归属净库存/贡献0、closedPositionNetPnl=null；账户权益变化+0.00002869 USDT来自原微量BTC估值，不是本会话已结盈利。预算/原10/20/20及5 USDT亏损门限未修改。
+- 最后序列973在ACCOUNT失败，总耗时56081ms，其中ACCOUNT55637ms；服务固定脱敏计时记录最后三次SERVER_TIME/GET均15000ms、responseReceived=false。全段11条慢/失败请求计时，含CANDLES2、ACCOUNT4、OPEN_ORDERS1、SERVER_TIME4，其中三条未收到响应。本次定位到账户采样内的校时HTTP传输失败，尚不能区分本机代理、网络、TLS或交易所链路根因；不是-1021响应或快照180秒陈旧触发，也没有证明历史108秒间隔根因相同。
+- 独立守护保存293次观测，最大观测快照年龄34285ms、WAITING_FOR_NEXT_SAMPLE次数0；仅观察353个不同采样序列，巡检不是每次采样的完整追踪。终态详情保留失败序列973，重启后当前进程缓存不可重建。实际日志路径为.runtime/quant/binance-candidate-service-20261006-diagnostics.out.log及.err.log，守护日志同目录binance-candidate-watch-20261006-diagnostics.*.log；先前跟踪提示中的子目录路径应以实际启动脚本为准。只提取固定操作/方法/耗时/收到响应字段，不输出原始日志或异常。
+- 守护已通过平台emergency-stop使门禁HALTED；结束时真实只读run-check确认交易所/平台活动挂单均0、USDT可用29.14387178、BTC0.00000012，无预约、订单、转资、强制清仓或尾仓买入。实际再次按SUBMITTING/SUBMIT_UNKNOWN/LIVE/PARTIALLY_FILLED/CANCEL_REQUESTED枚举核对平台活动订单0；历史门禁FILLED2/FAILED1保留，不归属本会话。新告警23d74d72-54b3-4846-b484-6f1f07359bef为OPEN AUTOMATION_FAILURE，旧-1021 OPEN1保留；未直接改数据库或宣称故障已解决。
+- 守护37296及执行37600已不存在，默认根38708经start-default-review.ps1路径与Java子进程核对、UP、okx-primary、三个开关false；恢复无凭据默认命令。binance跟踪收尾后PAUSED，旧24小时任务仍暂停，不自动重启。非秘密summary/diagnostic-summary/stopped/performance/final-account/default-final-20261006-diagnostics.json及采样JSONL、必要日志保留于.runtime/quant；诊断摘要文件名为binance-candidate-diagnostic-summary-20261006.json。无新增临时令牌文件。本轮仅文档变更，沿用118项回归/单体与已通过前端检查，不覆盖运行环境；git diff --check通过。运行未达6小时、未出现自然BUY/SELL，不能声称长时稳定性或盈利验收通过；唯一下一任务见上方。
