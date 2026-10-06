@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.function.LongSupplier;
 
 /** Binance spot HMAC adapter. Normalized responses preserve the existing ledger contract. */
+@lombok.extern.slf4j.Slf4j
 @Component
 public class BinancePrivateApiClient implements LiveTradingClient {
     private final QuantProperties properties;
@@ -194,7 +195,7 @@ public class BinancePrivateApiClient implements LiveTradingClient {
     private JsonNode exchangeOnce(String method,String path,String apiKey,boolean privateHost)throws IOException,InterruptedException{
         String base=privateHost?properties.getLiveBinanceBaseUrl():"https://data-api.binance.vision";
         var builder=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(15)).header("Accept","application/json").header("User-Agent","quant-platform/1.0");if(apiKey!=null)builder.header("X-MBX-APIKEY",apiKey);
-        var response=(privateHost?http:publicHttp).send(builder.method(method,HttpRequest.BodyPublishers.noBody()).build(),HttpResponse.BodyHandlers.ofString());
+        var response=sendTimed(privateHost?http:publicHttp,builder.method(method,HttpRequest.BodyPublishers.noBody()).build(),timingOperation(path));
         if(response.statusCode()>=500||response.statusCode()==429||response.statusCode()==418)throw new IllegalStateException("Binance request uncertain/unavailable HTTP "+response.statusCode());
         JsonNode node;try{node=JsonUtils.getObjectMapper().readTree(response.body());}catch(RuntimeException invalid){throw new IllegalStateException("Binance malformed JSON response");}
         if(node==null)throw new IllegalStateException("Binance malformed JSON response");
@@ -205,6 +206,19 @@ public class BinancePrivateApiClient implements LiveTradingClient {
         }
         return node;
     }
+    private HttpResponse<String> sendTimed(HttpClient client,HttpRequest request,String operation)throws IOException,InterruptedException{
+        long start=nanoTime.getAsLong();boolean received=false;
+        try{var response=client.send(request,HttpResponse.BodyHandlers.ofString());received=true;return response;}
+        finally{long millis=Math.max(0,nanoTime.getAsLong()-start)/1_000_000;
+            if(millis>=2000||!received)log.warn("Binance request timing operation={} method={} elapsedMillis={} responseReceived={}",operation,request.method(),millis,received);
+        }
+    }
+    static String timingOperation(String path){return switch(path.split("\\?",2)[0]){
+        case "/api/v3/time"->"SERVER_TIME";case "/api/v3/account"->"ACCOUNT";case "/api/v3/openOrders"->"OPEN_ORDERS";
+        case "/api/v3/klines"->"CANDLES";case "/api/v3/ticker/bookTicker"->"QUOTE";case "/api/v3/exchangeInfo"->"RULES";
+        case "/api/v3/myTrades"->"FILLS";case "/api/v3/order"->"ORDER";
+        case "/api/v3/account/commission"->"COMMISSION";case "/sapi/v1/account/apiRestrictions"->"PERMISSIONS";default->"OTHER";
+    };}
     private void retryPause(){try{Thread.sleep(properties.getLivePrivateReadRetryDelayMillis());}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Binance retry interrupted");}}
     private static final class BinanceResponseException extends IllegalStateException {
         private final int code;

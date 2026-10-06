@@ -561,3 +561,17 @@ GET IOException 重试每次重新生成时间戳及 HMAC；-1021 在同一 live
 安全清理后的实际run-check ACCOUNT_ORDERS_CLEAR通过，交易所和平台账户活动挂单0，USDT29.14387178、BTC0.00000006；没有额外下单、转资或强制清尾仓。后续现场复核目标STOPPED、HALTED、新会话未解决告警0，旧会话849f846f-6dae-41f4-8b8f-07f62dd88ede的1条OPEN告警仍保留；无对应审计处置能力，未直接改数据库或宣称旧告警解决。
 
 守护25180和执行39820均已退出；默认根4400及Java存在、健康UP、okx-primary、无凭据配置、三个开关false、全部门禁HALTED、运行会话0。binance自动化已PAUSED，旧24小时跟踪保持暂停；前端不参与停机。本阶段仅更新文档，沿用110项Java回归/单体及既有前端检查，不覆盖运行环境；git diff --check通过。全量与终态非秘密binance-candidate-summary/stopped/performance/final-account/default-final-20261006.json留在.runtime/quant，无新增临时令牌文件，不提交运行数据。
+
+### 采样阶段诊断与有界等待（2026-10-06）
+
+script/quant/binance_candidate_guard.ps1现为受版本管理的守护判定源，本地.runtime/quant/binance-candidate-guard.ps1仅加载它；独立守护的启停、清理和原限额不变。巡检最新时间等于前次且年龄<=180000 ms时返回snapshotProgress=WAITING_FOR_NEXT_SAMPLE与snapshotAgeMillis，允许尚在进行的采样完成；时间新增则ADVANCING，时间回退、缺失/未来或年龄>180000 ms立即拒绝。不是重置等待计时：每次都用原快照时间计算年龄，连续巡检不能续期。等待仍检查心跳、账户、闭盘、挂单、亏损、未解决告警、信号幂等与费用链，不放宽资金风控或运行截止。
+
+可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File script/quant/test_binance_candidate_guard.ps1` 验证。替身涵盖60/108.443/180秒同快照等待、180.001秒陈旧拒绝、恢复推进、倒退/未来/缺失时间、等待时风险拒绝和自然成交周期完成。历史108秒间隔对应的误停条件已修复，导致采样延迟的具体来源尚未复现或确认。
+
+GET /quant/backtest/live-control/automation/get?sessionId=...增加samplingDiagnostics。仅在当前租户/用户拥有该会话后返回，scope=CURRENT_PROCESS、persisted=false；包括latest和lastCompleted的sampleSequence、startedAt、outcome、stage、elapsedMillis、各stageMillis及完成时间。阶段固定为BINDING、ORDER_RECONCILIATION、ACCOUNT、INVENTORY、OPEN_ORDERS、CANDLES、VALUATION、SNAPSHOT_WRITE、SIGNAL_EXECUTION，可在请求未结束时定位所处阶段；耗时使用单调时钟。最多缓存64个会话，重启或淘汰则available=false，不能将它当作持久验收证据；需保留守护读取的非秘密详情。COMPLETED只表示调用完成，实际对账结果仍读取原快照。没有新增数据库结构、调度并行度或环境配置。
+
+Binance发送HTTP的单次耗时>=2000 ms或传输失败时输出固定operation、method、elapsedMillis、responseReceived。operation按固定接口类别映射，未知路径为OTHER，完全丢弃查询参数；无URI、签名、头、凭据、响应或异常链。此计时不改变15秒超时、原有限重试/校时和POST/DELETE一次发送语义；阶段耗时还可能包含DPAPI读取、数据库访问或调度等待，不将全部耗时直接归因网络。
+
+118项Java回归及yudao-server聚合install/package通过；新增LiveSamplingDiagnosticsTest六项及BinanceRequestTimingTest两项，覆盖在途/失败、时钟跳变、隔离与授权、并发完成不覆盖新采样、有界缓存、日志脱敏和固定操作名。前端未改，沿用已通过ts:check/build:local；git diff --check通过。实际以三开关false完成Binance预检及两轮run-check，规则/权限、资金和零挂单通过，单轮约3.8秒，ordersSent=0、fundsReserved=false、readiness=false，门禁订单总数不变。可用USDT29.14387178、BTC0.00000012，后者变化来源未确认，本轮无交易或转资，不计入策略收益。
+
+结束恢复默认根41568、Java存在、健康UP、okx-primary、无凭据配置、三开关false、门禁HALTED、无运行会话/目标活动订单。实际旧停止会话返回samplingDiagnostics.available=false，未知会话code=400；旧-1021 OPEN告警及两项PAUSED自动化保持。未启用候选，未新增临时令牌文件。非秘密sampling-preflight-binance-20261006.json、binance-sampling-readonly-rounds/default-final-20261006.json及sampling-diagnostics-build.log留在.runtime/quant。下一任务为沿原授权带诊断复验候选，核对自然信号、真实费用、收益及采样延迟证据，不强造交易或再设固定24小时等待。
