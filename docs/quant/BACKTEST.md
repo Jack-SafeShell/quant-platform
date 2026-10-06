@@ -597,3 +597,15 @@ Binance发送HTTP的单次耗时>=2000 ms或传输失败时输出固定operation
 守护精确emergency-stop后门禁HALTED，结束时真实run-check核对交易所及平台活动挂单均0，USDT29.14387178、BTC0.00000012；再次按实际平台活动状态枚举确认0，无新订单、转资或清仓。新会话保留OPEN AUTOMATION_FAILURE一条（23d74d72-54b3-4846-b484-6f1f07359bef），旧849f846f-6dae-41f4-8b8f-07f62dd88ede的OPEN -1021一条仍保留，无审计处置能力不直接改库。守护37296和执行37600已退出，默认根38708及Java经路径核对、健康UP、okx-primary、模拟/实盘/自动均false；binance跟踪PAUSED，旧24小时跟踪保持暂停，不自动重启。
 
 非秘密binance-candidate-summary/default-final/stopped/performance/final-account-20261006-diagnostics.json、binance-candidate-diagnostic-summary-20261006.json及sampling JSONL保留于.runtime/quant。实际服务日志为该目录binance-candidate-service-20261006-diagnostics.out.log/.err.log，守护日志binance-candidate-watch-20261006-diagnostics.*.log；更正此前自动跟踪提示的子目录路径，未经筛选不输出原始日志。本阶段无源码/数据库/前端修改或新增临时令牌文件，沿用118项Java回归、单体和已通过前端检查，git diff --check通过。不能声明6小时稳定性、自动买卖或盈利验证通过；下一唯一任务为Binance校时连接稳定性诊断和有界只读验证，保持原重试、写入至多一次及风控门限，依据证据再安排候选运行。
+
+### Binance 脱敏传输分类与校时探测（2026-10-07）
+
+Binance单次慢/失败请求计时追加固定failureKind，值为NONE、CONNECT_TIMEOUT、REQUEST_TIMEOUT、TLS_FAILURE、DNS_FAILURE、CONNECT_FAILURE、INTERRUPTED或IO_FAILURE；最多检查八层已知异常类型，不输出异常类名、消息、原因链、URL、签名、响应、头或凭据。分类保留原异常传播和线程中断语义，不改变15秒请求超时、10秒连接超时、读取有限重试、校时缓存/2.5秒往返有效性及写入至多一次。历史停机日志没有该字段，不将此次分类倒填为已证明的历史根因。
+
+可用 `& "$env:JAVA_HOME\bin\java.exe" script/quant/BinanceClockProbe.java 4` 进行无认证探测（JAVA_HOME按DEVELOPMENT配置）。该工具只请求固定api.binance.com/api/v3/time，对比本地3067私有路径和3066行情路径，单次最多15秒、最多六轮，不读密钥、不访问订单、不切换应用代理配置；输出仅固定字段和校时响应是否有效。使用与单体一致的Java HttpClient、连接超时及请求头，当前探测只是链路快照。2026-10-07 00:02:39至00:02:40八次全部HTTP200、有效serverTime、2.5秒内，3067耗时67/68/68/438ms、3066为67/67/69/262ms；端口均由同一个karingService进程监听，不能据此将另一端口视为独立出口或擅自切换私有路由。
+
+120项相关Java回归及yudao-server聚合install/package通过；新增覆盖超时、连接、TLS、DNS、线程中断、未知IO的固定类别及三次校时GET失败日志脱敏，既有POST/DELETE至多一次与未知订单状态测试保持通过。未新增数据库结构、环境配置或前端变化，沿用已通过前端ts:check/build:local。故障仍可能是瞬时代理或网络/TLS/交易所链路问题，短时通过不证明长时稳定，不延长风控阈值或自动恢复实盘。
+
+随后在临时Binance部署显式关闭三个执行开关，用原DPAPI引用只读run-check；初次预检及额外三轮均成功，额外轮次00:04:39.759/00:05:28.615/00:06:19.133，耗时3838/5500/4985ms，开始跨度99.374秒，覆盖原60秒校时缓存过期后的重新取时。来源/账户一致、实际资金/权限/规则/挂单检查通过；USDT29.14387178、BTC0.00000012，ordersSent=0、fundsReserved=false、readyForStartRequest=false、门禁历史订单3→3，未创建新会话、预约或转资。仅预检的假设首次买单数量/价格不是真实成交；不归属原微量余额估值为策略收益。
+
+临时只读部署退出，最终默认根42344经start-default-review.ps1身份核对，UP、okx-primary、原无凭据默认命令、三个开关false、所有门禁HALTED、运行会话/活动订单0。旧-1021和本次校时失败各1条OPEN告警仍保留，两个跟踪任务PAUSED，不直接改库解决或重启旧会话。非秘密binance-clock-routes-20261007.jsonl、binance-transport-readonly-rounds/default-final-20261007.json与binance-transport-build-20261007.log留在.runtime/quant，无新增临时令牌文件，git diff --check通过。下一任务为补齐自动会话故障告警的审计处置与受控恢复入口，绑定已停止、零挂单和连接复核证据，沿原额度/授权推进候选；本轮不声明历史网络根因已修复。

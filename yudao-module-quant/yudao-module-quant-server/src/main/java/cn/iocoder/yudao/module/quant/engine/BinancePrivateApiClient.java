@@ -207,11 +207,24 @@ public class BinancePrivateApiClient implements LiveTradingClient {
         return node;
     }
     private HttpResponse<String> sendTimed(HttpClient client,HttpRequest request,String operation)throws IOException,InterruptedException{
-        long start=nanoTime.getAsLong();boolean received=false;
+        long start=nanoTime.getAsLong();boolean received=false;String failure="NONE";
         try{var response=client.send(request,HttpResponse.BodyHandlers.ofString());received=true;return response;}
+        catch(IOException|InterruptedException e){failure=timingFailure(e);throw e;}
         finally{long millis=Math.max(0,nanoTime.getAsLong()-start)/1_000_000;
-            if(millis>=2000||!received)log.warn("Binance request timing operation={} method={} elapsedMillis={} responseReceived={}",operation,request.method(),millis,received);
+            if(millis>=2000||!received)log.warn("Binance request timing operation={} method={} elapsedMillis={} responseReceived={} failureKind={}",operation,request.method(),millis,received,failure);
         }
+    }
+    // Classify only known types; never include exception messages, class names or signed URIs.
+    static String timingFailure(Throwable failure){
+        for(int depth=0;failure!=null&&depth<8;depth++,failure=failure.getCause()){
+            if(failure instanceof HttpConnectTimeoutException)return "CONNECT_TIMEOUT";
+            if(failure instanceof HttpTimeoutException)return "REQUEST_TIMEOUT";
+            if(failure instanceof javax.net.ssl.SSLException)return "TLS_FAILURE";
+            if(failure instanceof UnknownHostException)return "DNS_FAILURE";
+            if(failure instanceof ConnectException)return "CONNECT_FAILURE";
+            if(failure instanceof InterruptedException)return "INTERRUPTED";
+        }
+        return "IO_FAILURE";
     }
     static String timingOperation(String path){return switch(path.split("\\?",2)[0]){
         case "/api/v3/time"->"SERVER_TIME";case "/api/v3/account"->"ACCOUNT";case "/api/v3/openOrders"->"OPEN_ORDERS";

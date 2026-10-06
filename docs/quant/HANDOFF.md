@@ -1,6 +1,6 @@
 # 项目交接
 
-更新：2026-10-06（Asia/Shanghai）。路线已确定：Freqtrade + Spring Boot 单体；OKX 和 Binance 已有实际小额成交与费用证据，当前默认执行关闭。最新阶段结果见文末。
+更新：2026-10-07（Asia/Shanghai）。路线已确定：Freqtrade + Spring Boot 单体；OKX 和 Binance 已有实际小额成交与费用证据，当前默认执行关闭。最新阶段结果见文末。
 
 ## 已落地
 
@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**Binance 校时连接稳定性诊断与有界只读验证。** 带诊断候选运行5小时2分钟后因校时GET三次15秒传输超时而RISK_STOPPED，未触发守护误停；972条对账全部PASSED、六根闭盘无交易信号、无新增订单。默认UP/okx-primary/三开关false已恢复，跟踪PAUSED。下一阶段复核私有主机所用代理链路、超时类别及校时读取，保留脱敏证据和原有限重试/写入至多一次边界，再决定受控候选是否可继续；不自动重启或仅扩大超时/限额。旧-1021及本次AUTOMATION_FAILURE共两条OPEN告警保留，无审计处置能力时不直接改数据库。A 股暂缓。
+**自动会话故障告警审计处置与受控恢复。** Binance校时两条现有代理路径的短时探测及关闭执行的真实账户复核通过，故障分类已补齐；原三次15秒失败未复现，不能宣称根因修复或长时稳定。下一阶段补齐AUTOMATION_FAILURE的有审计处置入口，绑定停机会话、零挂单和只读连接复核证据，再在原授权/额度内安排一次受控候选；保留风险记录，不直接改库消警或自动重启旧会话。当前默认三开关关闭、跟踪PAUSED，旧-1021及校时失败告警仍OPEN。A 股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -438,3 +438,12 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 独立守护保存293次观测，最大观测快照年龄34285ms、WAITING_FOR_NEXT_SAMPLE次数0；仅观察353个不同采样序列，巡检不是每次采样的完整追踪。终态详情保留失败序列973，重启后当前进程缓存不可重建。实际日志路径为.runtime/quant/binance-candidate-service-20261006-diagnostics.out.log及.err.log，守护日志同目录binance-candidate-watch-20261006-diagnostics.*.log；先前跟踪提示中的子目录路径应以实际启动脚本为准。只提取固定操作/方法/耗时/收到响应字段，不输出原始日志或异常。
 - 守护已通过平台emergency-stop使门禁HALTED；结束时真实只读run-check确认交易所/平台活动挂单均0、USDT可用29.14387178、BTC0.00000012，无预约、订单、转资、强制清仓或尾仓买入。实际再次按SUBMITTING/SUBMIT_UNKNOWN/LIVE/PARTIALLY_FILLED/CANCEL_REQUESTED枚举核对平台活动订单0；历史门禁FILLED2/FAILED1保留，不归属本会话。新告警23d74d72-54b3-4846-b484-6f1f07359bef为OPEN AUTOMATION_FAILURE，旧-1021 OPEN1保留；未直接改数据库或宣称故障已解决。
 - 守护37296及执行37600已不存在，默认根38708经start-default-review.ps1路径与Java子进程核对、UP、okx-primary、三个开关false；恢复无凭据默认命令。binance跟踪收尾后PAUSED，旧24小时任务仍暂停，不自动重启。非秘密summary/diagnostic-summary/stopped/performance/final-account/default-final-20261006-diagnostics.json及采样JSONL、必要日志保留于.runtime/quant；诊断摘要文件名为binance-candidate-diagnostic-summary-20261006.json。无新增临时令牌文件。本轮仅文档变更，沿用118项回归/单体与已通过前端检查，不覆盖运行环境；git diff --check通过。运行未达6小时、未出现自然BUY/SELL，不能声称长时稳定性或盈利验收通过；唯一下一任务见上方。
+
+## 校时传输分类与关闭执行的连接复核（2026-10-07）
+
+- 开始main跟踪origin/main、3f1aaf462，工作区干净；默认根38708、UP/okx-primary、三开关false、全部门禁HALTED、运行会话0。本地3066/3067均由karingService进程32420监听，未修改或重启该外部服务、代理路由或默认交易配置。
+- Binance慢/失败HTTP日志新增固定failureKind，区分连接超时、请求超时、TLS、DNS、连接失败、线程中断及其他IO；最多检查八层异常类型，不包含消息、动态类名、URI、签名、请求头、响应或异常链。成功慢请求标记NONE；原异常传播、中断、15秒请求超时、校时缓存/2.5秒有效性、有限读取重试与POST/DELETE至多一次不变，无数据库或单体配置变更。
+- 新增受版本管理的script/quant/BinanceClockProbe.java：同款Java HttpClient仅向固定无认证校时接口GET，对比3067/3066、最多六轮、每次15秒，不读密钥或访问订单。实际八次HTTP200、serverTime有效且均在2.5秒内，往返67–438ms；两端口同一代理进程，不能当作独立出口或据此切换私有路径。旧三次15秒故障未复现，未记录故障类别的历史日志不能倒填根因。
+- 关闭三个执行开关的临时Binance部署，先完成真实run-check，再于00:04:39.759、00:05:28.615、00:06:19.133（Asia/Shanghai）三轮只读复核，耗时3838/5500/4985ms，覆盖60秒校时缓存过期后的重新取时。账户归属/研究来源、权限规则和零挂单检查均通过；USDT29.14387178、BTC0.00000012，ordersSent=0、fundsReserved=false、readyForStartRequest=false，门禁订单3→3，无新会话/转资/订单。短时成功不是长时稳定或盈利证据。
+- 120项Java回归与单体聚合install/package通过，JAVA_HOME为Corretto25.0.4、Maven3.9.9。新测试覆盖固定分类、嵌套DNS异常脱敏、三次校时GET失败有限重试及日志不含秘密；既有真实写入至多一次和未知状态测试通过。前端未改，沿用已通过ts:check/build:local；git diff --check通过。
+- 临时只读部署退出；最终默认根42344按start-default-review.ps1恢复、健康UP、okx-primary、无凭据默认命令、三开关false、全部门禁HALTED、运行会话/活动订单0。候选仍RISK_STOPPED，本次校时失败与旧-1021各1条OPEN告警保留，binance及旧24小时跟踪均PAUSED；不自动重启或清警。非秘密binance-clock-routes、binance-transport-readonly-rounds、binance-transport-default-final-20261007.json/jsonl及构建/只读部署日志留在.runtime/quant，无新增临时令牌文件。下一唯一任务见上方：故障告警审计处置与受控恢复，不继续拆分固定24小时等待。
