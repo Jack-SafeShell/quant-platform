@@ -635,3 +635,15 @@ POST /quant/backtest/live-control/automation/alert/check只读复核，GET同前
 独立守护run-binance-candidate-watch-20261007-recovery.ps1每分钟核对固定账户/报告/限额及原风险边界；同一快照<=180秒有界等待，异常/截止精确stop/emergency-stop并确认撤单后恢复start-default-review.ps1默认服务及三开关false，不强制清仓或补买。binance小时跟踪ACTIVE、旧24小时PAUSED，正常保持安静。非秘密元数据、preflight/running/performance/start-verified与sampling文件后缀20261007-recovery，旧元数据另存且原证据不覆盖。
 
 本轮没有源码、数据库或前端变动，脚本语法和守护边界替身通过，沿用128项回归及单体/前端已通过检查，不构建覆盖当前服务。结束时按全量对账总数/跨度/间隔、信号幂等、真实费用与归属库存/收益收尾，再更新唯一推荐任务；最近100条接口记录不代表全量。无新增临时令牌文件。
+
+### Binance 六小时候选终态验收（2026-10-07）
+
+会话38c9919d-dac7-42d4-8739-3ff14709ca44于06:44:11.400（Asia/Shanghai）STOPPED，运行21632.421秒（6小时32.421秒）；分钟守护比计划截止晚32.421秒执行停止，reason=SIX_HOUR_BOUND_REACHED。守护收尾COMPLETED、撤单确认/默认恢复/执行退出均true，策略HALTED，不代表盈利验证完成。
+
+只读MySQL按tenant/owner=1及精确会话聚合全量：1196条PASSED对账，00:43:45.886至06:44:08.204、跨度21622.318秒，最大间隔23.317秒、挂单不一致0、最大sessionLoss0.00002844 USDT；七根不同闭盘K线各NONE/NO_ACTION且NO_CROSS，重复组0、关联订单/成交0、告警0。收益NO_FILLS、归属库存/净贡献0、closedPositionNetPnl=null；费用完整性通过但没有真实手续费样本。账户权益变化-0.00001272 USDT为原微量BTC估值，不归入会话交易损益。
+
+结束实际私有run-check确认交易所/平台活动挂单均0、USDT9.14387178、BTC0.00000012未变，ordersSent=0、fundsReserved=false；未转资、清仓、追加买入或扩大原8.5/10/20/20/5限额。346次分钟观测最大快照年龄19478ms、WAITING0，仅覆盖410个不同采样序列；全量对账以数据库1196条为准。终态采样1196耗时3184ms，部分观测最大5567ms；日志只提取固定字段，两条慢GET为ACCOUNT2512ms和QUOTE4891ms，responseReceived=true、failureKind=NONE，未记录该类失败计时。原校时传输故障本轮未复现，不能追认根因修复。
+
+实际守护41180/执行42888已退出，默认根33064与原脚本/Java身份核对、UP/okx-primary、三开关false，全部门禁HALTED、运行会话/活动订单0；历史门禁3条订单和两条旧告警审计保留。binance跟踪及旧24小时任务均PAUSED，不自动重启。本轮无源码/数据库/前端改变，沿用128项回归、单体和前端已通过检查，仅更新文档并执行git diff --check。非秘密summary/diagnostic-summary/stopped/performance/final-account/default-final-20261007-recovery.json及采样JSONL/必要日志保留，无新增临时令牌文件。
+
+结论限定为本轮六小时对账连续性、信号幂等和安全收尾通过；没有自然BUY/SELL或盈利证据。下一唯一任务转向数字货币候选策略评估与参数调整，在共享样本及费用假设下比较EMA与突破候选，形成不可变版本和资金分配建议，新证据仍须所有者复核，不反复固定时长等待。

@@ -263,7 +263,7 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 
 ## 下一步唯一推荐任务
 
-**完成当前 Binance 自然信号候选的运行与收益复核。** 新会话38c9919d-dac7-42d4-8739-3ff14709ca44于2026-10-07 00:43:38.979启动，最晚06:43:38.979（Asia/Shanghai）停止，或自然买卖均成交且无挂单时提前结束。预算8.5、每单/日额/敞口10/20/20、最多1挂单、会话亏损5 USDT，沿原策略/报告确认和小额授权。独立分钟守护及binance小时跟踪ACTIVE；运行中只读监控，不构建覆盖服务，不强造信号或自动重启。截止/异常后停止精确会话及门禁、核对撤单、恢复默认无凭据单体并确认三开关false，按全量快照、实际费用和归属收益记录结果。早期无成交，不等于盈利验证；旧故障已审计处置但网络根因未确定。A股暂缓。
+**数字货币候选策略评估与参数调整。** Binance EMA30/90已完成本轮6小时稳定运行及安全收尾，但七根已闭盘1h K线均NO_CROSS，没有自然成交或盈利证据，不重复固定时长等待。下一阶段在共同行情样本和费用假设下比较现有EMA与突破候选，围绕扣费后收益、回撤、成交频率和稳定性形成可复现配置版本及小额资金分配建议；新策略/报告证据仍须所有者复核，不用已有订单授权替代新证据确认。当前默认UP/okx-primary、三开关false、全部门禁HALTED、无运行会话和活动订单，两项跟踪PAUSED，不自动重启。A股暂缓。
 
 ## 原会话真实退出验收（2026-10-03）
 
@@ -467,3 +467,13 @@ Northstar=SIM_TRADE、Freqtrade=dry_run=true 边界继续有效；PoC 未改，�
 - 独立隐藏守护根41180、服务根42888；以.runtime/quant/binance-candidate-watch.json和进程路径识别，守护run-binance-candidate-watch-20261007-recovery.ps1、服务run-binance-candidate-service.ps1。每60秒核对心跳、闭盘、对账、损失、费用/关联、账户及报告/固定限额；相同快照年龄<=180秒有界等待，超时/回退/风险立即停，不延长6小时边界。旧元数据备份binance-candidate-watch-20261006-diagnostics-final.json，日志和证据使用20261007-recovery后缀，旧证据保留。
 - binance小时跟踪已更新新会话并ACTIVE，原24小时跟踪仍PAUSED；正常安静，自然成交可通知，异常/截止后精确停止、核对撤单、按原命令恢复无凭据默认服务及三开关false。不自动清仓、补买消尾仓或重启旧会话。尚未出现自然BUY/SELL，不声称稳定性或盈利验收完成。
 - 本轮无业务源码、数据库或前端变更；守护脚本语法与原有边界替身验证通过，沿用128项Java回归、单体及前端ts:check/build:local，不在运行中重复构建。非秘密preflight/running/performance/start-verified-20261007-recovery.json和采样JSONL留在.runtime/quant，无新增临时令牌文件；唯一下一任务见上方。
+
+
+## Binance 六小时自然信号候选收尾（2026-10-07）
+
+- main跟踪origin/main、bce9a6307，开始工作区干净。会话38c9919d-dac7-42d4-8739-3ff14709ca44从00:43:38.979运行至06:44:11.400（Asia/Shanghai），状态STOPPED，21632.421秒（6小时32.421秒），reason=SIX_HOUR_BOUND_REACHED。分钟守护于截止后32.421秒执行精确停止及emergency-stop；元数据COMPLETED、cleanupConfirmed/defaultRestored/executionProcessStopped均true，表示边界收尾完成，不等于盈利验收通过。
+- tenant/owner=1、精确会话只读全量聚合：1196条对账全部PASSED，首次00:43:45.886、最后06:44:08.204，跨度21622.318秒（6小时22.318秒），最大间隔23.317秒，挂单不一致0、最大观测sessionLoss=0.00002844 USDT。七根不同已闭盘1h K线各一条NONE/NO_ACTION，原因NO_CROSS、重复组0；关联订单/成交0，无告警。已有历史门禁FILLED2/FAILED1不归属本会话。
+- 收益为NO_FILLS、归属净库存/净贡献0、closedPositionNetPnl=null，费用和估值完整性检查通过但本轮没有实际手续费样本。账户权益变化-0.00001272 USDT来自原微量BTC估值，不算本会话交易亏损。结束时真实run-check确认交易所及平台账户活动挂单0、USDT9.14387178、BTC0.00000012与启动余额相同，ordersSent=0、fundsReserved=false；无追加订单、转资或强制清仓，限额及原报告不变。
+- 守护保存346次观测，最大观测快照年龄19478ms、WAITING次数0；仅观察410个不同采样序列，不能代替全量1196条数据库证据。终态采样1196完成耗时3184ms；部分观察到的最大采样耗时5567ms。全段两条固定脱敏慢请求为ACCOUNT/GET2512ms、QUOTE/GET4891ms，均收到响应且failureKind=NONE，无该类失败计时事件。此前三次校时15秒故障本轮未复现，不能宣称瞬时网络根因已消除。
+- 守护41180与执行服务42888已退出；最终默认根33064经start-default-review.ps1及Java子进程核对，UP/okx-primary、三个执行开关false、全部门禁HALTED、运行会话及活动订单0。两条旧故障仍RESOLVED、各审计2条且原会话RISK_STOPPED。binance跟踪已PAUSED、旧24小时仍暂停，不自动重启。
+- 非秘密summary/diagnostic-summary/stopped/performance/final-account/default-final-20261007-recovery.json、采样JSONL及必要脱敏日志保留在.runtime/quant；无新增临时令牌文件。本轮仅收尾文档变化，沿用128项Java回归、单体与前端已通过检查，不覆盖运行环境，git diff --check通过。六小时稳定观测及安全停止通过，自然BUY/SELL和盈利仍无证据；唯一下一任务见上方，以策略评估和参数调整推进，不反复拆分固定时长等待。
