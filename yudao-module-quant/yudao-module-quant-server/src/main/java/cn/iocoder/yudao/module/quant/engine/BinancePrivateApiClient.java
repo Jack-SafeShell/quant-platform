@@ -16,6 +16,7 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.function.LongSupplier;
 
 /** Binance spot HMAC adapter. Normalized responses preserve the existing ledger contract. */
 @Component
@@ -25,10 +26,17 @@ public class BinancePrivateApiClient implements LiveTradingClient {
     private final ExchangeAccountRepository accounts;
     private final HttpClient http;
     private final HttpClient publicHttp;
+    private final LongSupplier nanoTime;
+    private volatile ServerClock serverClock;
+    private record ServerClock(long serverMillis,long receivedNanos) {}
+    private static final long CLOCK_TTL_NANOS=Duration.ofSeconds(60).toNanos();
+    private static final long MAX_CLOCK_ROUND_TRIP_NANOS=Duration.ofMillis(2500).toNanos();
     @org.springframework.beans.factory.annotation.Autowired
     public BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts){this(properties,credentials,accounts,http(properties.getExchangeProxy()),http(properties.getDatasetHttpProxy()));}
     BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http){this(properties,credentials,accounts,http,http);}
-    private BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http,HttpClient publicHttp){this.properties=properties;this.credentials=credentials;this.accounts=accounts;this.http=http;this.publicHttp=publicHttp;}
+    BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http,LongSupplier nanoTime){this(properties,credentials,accounts,http,http,nanoTime);}
+    private BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http,HttpClient publicHttp){this(properties,credentials,accounts,http,publicHttp,System::nanoTime);}
+    private BinancePrivateApiClient(QuantProperties properties,LiveCredentialProvider credentials,ExchangeAccountRepository accounts,HttpClient http,HttpClient publicHttp,LongSupplier nanoTime){this.properties=properties;this.credentials=credentials;this.accounts=accounts;this.http=http;this.publicHttp=publicHttp;this.nanoTime=nanoTime;}
     public boolean configured(){return "binance".equals(properties.getLiveExchange())&&credentials.configured();}
     public void preflightSpotLimitOrder(String side,String price,String amount){validateSpotLimitOrder(side,price,amount);}
     private void requireSelected(){if(!"binance".equals(properties.getLiveExchange())||!"BTC/USDT".equals(properties.getLivePair()))throw new IllegalStateException("Binance account/pair not selected");}
@@ -139,20 +147,68 @@ public class BinancePrivateApiClient implements LiveTradingClient {
     private static void validateId(String id){if(id==null||!id.matches("[A-Za-z0-9_-]{1,36}"))throw new IllegalArgumentException("Invalid Binance client order id");}
     private static void requireSymbol(JsonNode node){if(!"BTCUSDT".equals(node.path("symbol").asText()))throw new IllegalStateException("Binance symbol mismatch");}
     private JsonNode publicGet(String path){return transport("GET",path,null);}
-    private JsonNode signed(String method,String path,String query,LiveCredentialProvider.OkxCredential key){String payload=(query.isEmpty()?"":query+"&")+"recvWindow=5000&timestamp="+System.currentTimeMillis();return transport(method,path+"?"+payload+"&signature="+sign(payload,key.secretKey()),key.apiKey());}
+    private JsonNode signed(String method,String path,String query,LiveCredentialProvider.OkxCredential key){
+        boolean read="GET".equals(method),resynced=false;
+        int attempts=read?properties.getLivePrivateReadMaxAttempts():1;
+        for(int attempt=1;attempt<=attempts;attempt++){
+            var clock=clock();
+            // Server time at receipt is conservative: do not advance by half the round trip.
+            long elapsed=nanoTime.getAsLong()-clock.receivedNanos();
+            if(elapsed<0||elapsed>=CLOCK_TTL_NANOS)throw new IllegalStateException("Binance server clock expired before signing");
+            long timestamp;try{timestamp=Math.addExact(clock.serverMillis(),elapsed/1_000_000);}catch(ArithmeticException e){throw new IllegalStateException("Binance server clock invalid");}
+            String payload=(query.isEmpty()?"":query+"&")+"recvWindow=5000&timestamp="+timestamp;
+            try{return exchangeOnce(method,path+"?"+payload+"&signature="+sign(payload,key.secretKey()),key.apiKey(),true);}
+            catch(BinanceResponseException e){
+                if(!read||e.code!=-1021||resynced||attempt==attempts)throw e;
+                invalidate(clock);resynced=true;retryPause();
+            }catch(IOException e){if(attempt==attempts)throw new IllegalStateException("Binance transport failure after "+attempts+" attempt(s)");retryPause();}
+            catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Binance request interrupted");}
+        }
+        throw new IllegalStateException("Binance request failed");
+    }
+    private synchronized void invalidate(ServerClock used){if(serverClock==used)serverClock=null;}
+    private synchronized ServerClock clock(){
+        long now=nanoTime.getAsLong();var cached=serverClock;
+        if(cached!=null&&now-cached.receivedNanos()>=0&&now-cached.receivedNanos()<CLOCK_TTL_NANOS)return cached;
+        serverClock=null;
+        int attempts=properties.getLivePrivateReadMaxAttempts();
+        for(int attempt=1;attempt<=attempts;attempt++)try{
+            long start=nanoTime.getAsLong();
+            // Same private host and proxy as signed operations, without API key or signature.
+            var response=exchangeOnce("GET","/api/v3/time",null,true);long end=nanoTime.getAsLong();
+            var time=response.path("serverTime");
+            if(end-start<0||end-start>MAX_CLOCK_ROUND_TRIP_NANOS||!time.isIntegralNumber()||!time.canConvertToLong()||time.asLong()<=0)throw new IllegalStateException("Binance server clock invalid or response too slow");
+            serverClock=new ServerClock(time.asLong(),end);return serverClock;
+        }catch(IOException e){if(attempt==attempts)throw new IllegalStateException("Binance clock transport failure after "+attempts+" attempt(s)");retryPause();}
+        catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Binance clock request interrupted");}
+        throw new IllegalStateException("Binance server clock unavailable");
+    }
     private JsonNode transport(String method,String path,String apiKey){
         int attempts="GET".equals(method)?properties.getLivePrivateReadMaxAttempts():1;
         for(int attempt=1;attempt<=attempts;attempt++)try{
-            String base=apiKey==null?"https://data-api.binance.vision":properties.getLiveBinanceBaseUrl();
-            var builder=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(15)).header("Accept","application/json").header("User-Agent","quant-platform/1.0");if(apiKey!=null)builder.header("X-MBX-APIKEY",apiKey);
-            var response=(apiKey==null?publicHttp:http).send(builder.method(method,HttpRequest.BodyPublishers.noBody()).build(),HttpResponse.BodyHandlers.ofString());
-            // Never expose the signed URI, API key, raw body or cause in diagnostics.
-            if(response.statusCode()>=500||response.statusCode()==429||response.statusCode()==418)throw new IllegalStateException("Binance request uncertain/unavailable HTTP "+response.statusCode());
-            JsonNode node;try{node=JsonUtils.getObjectMapper().readTree(response.body());}catch(RuntimeException invalid){throw new IllegalStateException("Binance malformed JSON response");}
-            if(node.has("code")||response.statusCode()/100!=2){if(!"GET".equals(method)&&Set.of(-1013,-1021,-1022,-1100,-1101,-1102,-1111,-1116,-1117,-1118,-1119,-1121,-2010,-2011,-2014,-2015).contains(node.path("code").asInt()))return node;throw new IllegalStateException("Binance request rejected or uncertain code "+node.path("code").asText());}return node;
+            return exchangeOnce(method,path,apiKey,apiKey!=null);
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Binance request interrupted");}
-        catch(IOException e){if(attempt==attempts)throw new IllegalStateException("Binance transport failure after "+attempts+" attempt(s)");try{Thread.sleep(properties.getLivePrivateReadRetryDelayMillis());}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException("Binance retry interrupted");}}
+        catch(IOException e){if(attempt==attempts)throw new IllegalStateException("Binance transport failure after "+attempts+" attempt(s)");retryPause();}
         throw new IllegalStateException("Binance request failed");
+    }
+    private JsonNode exchangeOnce(String method,String path,String apiKey,boolean privateHost)throws IOException,InterruptedException{
+        String base=privateHost?properties.getLiveBinanceBaseUrl():"https://data-api.binance.vision";
+        var builder=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(15)).header("Accept","application/json").header("User-Agent","quant-platform/1.0");if(apiKey!=null)builder.header("X-MBX-APIKEY",apiKey);
+        var response=(privateHost?http:publicHttp).send(builder.method(method,HttpRequest.BodyPublishers.noBody()).build(),HttpResponse.BodyHandlers.ofString());
+        if(response.statusCode()>=500||response.statusCode()==429||response.statusCode()==418)throw new IllegalStateException("Binance request uncertain/unavailable HTTP "+response.statusCode());
+        JsonNode node;try{node=JsonUtils.getObjectMapper().readTree(response.body());}catch(RuntimeException invalid){throw new IllegalStateException("Binance malformed JSON response");}
+        if(node==null)throw new IllegalStateException("Binance malformed JSON response");
+        if(node.has("code")||response.statusCode()/100!=2){
+            int code=node.path("code").isIntegralNumber()?node.path("code").asInt():Integer.MIN_VALUE;
+            if(!"GET".equals(method)&&Set.of(-1013,-1021,-1022,-1100,-1101,-1102,-1111,-1116,-1117,-1118,-1119,-1121,-2010,-2011,-2014,-2015).contains(code))return node;
+            throw new BinanceResponseException(code);
+        }
+        return node;
+    }
+    private void retryPause(){try{Thread.sleep(properties.getLivePrivateReadRetryDelayMillis());}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Binance retry interrupted");}}
+    private static final class BinanceResponseException extends IllegalStateException {
+        private final int code;
+        private BinanceResponseException(int code){super("Binance request rejected or uncertain code "+(code==Integer.MIN_VALUE?"unavailable":code));this.code=code;}
     }
     public static String sign(String payload,String secret){try{var mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException("Binance signing failed");}}
     private static String envelope(Object data){return JsonUtils.toJsonString(Map.of("code","0","data",data));}

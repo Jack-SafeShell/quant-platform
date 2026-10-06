@@ -525,3 +525,17 @@ budgetValid 仅表示规划金额合规；readyForPortfolioStart、multiStrategy
 据 [Binance 官方错误代码](https://developers.binance.com/en/docs/products/spot/errors)，-1021 为 INVALID_TIMESTAMP，可表示时间戳超出 recvWindow 或领先服务器时间。现有客户端安全错误只保存代码，未保留错误分支，故不能认定停电、电脑关机、主机时间偏差或纯网络故障是本次根因。代码使用 System.currentTimeMillis() 与 recvWindow=5000，signed() 一次生成 URL 后 transport() 对 GET IOException 有限重试，复用旧时间戳；应核对交易所时钟偏差与代理延迟，并增加只读请求校时和重新签名的有限恢复。写入请求不重发、原风险额度和默认关闭边界保持。
 
 本阶段无业务源码、前端或数据库结构变化，沿用已通过 102 项 Java 回归、单体及前端检查，不重复构建影响默认环境；git diff --check 通过。没有新增临时令牌文件；名称含 token 的旧 token_metadata.py 是脚本，予以保留。唯一下一任务为 Binance 签名时间窗口与只读重试修复，验证后再处置告警并推进既有授权自然信号运行。
+
+### Binance 服务器校时与重新签名验收（2026-10-06）
+
+BinancePrivateApiClient 使用同一私有主机 api.binance.com 与私有 HTTP 代理查询 `/api/v3/time`，不附密钥/签名。以返回的服务器时间加 System.nanoTime 流逝量签名，缓存 60 秒；采用接收时的保守基准，不添加半程 RTT。校时 RTT 超过 2500 ms、时间缺失/无效/溢出或刷新失败时拒绝，禁止本机时间或过期缓存回退。原 recvWindow=5000 不扩大，无新增环境配置，所有单体执行开关默认 false。
+
+GET IOException 重试每次重新生成时间戳及 HMAC；-1021 在同一 livePrivateReadMaxAttempts（默认 3）预算内只允许一次校时恢复，再失败终止。校时自身传输重试同样有上限，失败后不继续发送签名请求。POST/DELETE 不做错误恢复或重复发送，保留明确拒绝与提交不确定区分；429/418/5xx 不重试，诊断仅保留安全代码。符合 [Binance 签名请求时间规则](https://developers.binance.com/en/docs/products/spot/rest-api)，并不保证未来网络故障可恢复。
+
+新增 BinanceClockTest 八项：服务器时间/单调推进且校时不带凭据、超过 6 秒的传输重试重签及 HMAC 校验、-1021 最多恢复一次、传输/时间错误共享预算、写入错误不重发、无效/慢时钟拒绝、过期缓存/刷新失败不回退、校时传输上限及安全错误。共 110 项 Java 回归通过，yudao-server 聚合 install/package 成功；前端没有变化，沿用上阶段已通过 ts:check/build:local。数据库无修改，git diff --check 通过。
+
+实际通过平台以三开关 false 的临时 Binance 只读部署执行首轮预检及六轮 run-check，后六轮于 09:51:41.273 至 09:54:05.295（Asia/Shanghai），跨度 144.022 秒，单轮约 3.7～3.9 秒，跨多个 60 秒校时刷新周期。账户/证据一致、交易权限与规则、可用资金及零挂单检查全部通过；ordersSent=0、fundsReserved=false、readyForStartRequest=false，门禁订单总数前后相同。六轮可用 USDT 9.14387178、BTC 0.00000006 无变化，没有创建会话、订单、令牌或资金划转。
+
+同私有代理无凭据 `/api/v3/time` 三次探测 RTT 为 509/85/85 ms；低延迟样本服务器相对本机偏差区间约 +341～+427 ms。现时偏差在原窗口内，不证明历史故障由单一时钟偏差或代理延迟造成；实际六轮没有注入 -1021，有限错误恢复由替身测试覆盖。未宣称自动成交、长时稳定或盈利验证通过。
+
+临时只读进程经路径核对终止，按原命令恢复默认根 PID 34636，Java 存在、健康 UP、okx-primary、无凭据配置、模拟/实盘/自动 false；全部门禁 HALTED、运行会话与目标门禁活动订单 0。历史会话 849f846f-6dae-41f4-8b8f-07f62dd88ede 保持 RISK_STOPPED，1 条 OPEN/HIGH AUTOMATION_FAILURE 未改写。binance 与旧 24 小时跟踪均保持 PAUSED。本轮未启动新实盘，不改系统时间；下一阶段按原授权受控运行候选，核对跨小时自然信号、真实费用和会话收益，再据运行证据处置告警。非秘密 binance-clock-readonly-rounds/public-probe/final-20261006.json、clock-preflight-binance-20261006.json 保留在 .runtime/quant，未新增临时令牌文件。
