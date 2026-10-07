@@ -647,3 +647,17 @@ POST /quant/backtest/live-control/automation/alert/check只读复核，GET同前
 实际守护41180/执行42888已退出，默认根33064与原脚本/Java身份核对、UP/okx-primary、三开关false，全部门禁HALTED、运行会话/活动订单0；历史门禁3条订单和两条旧告警审计保留。binance跟踪及旧24小时任务均PAUSED，不自动重启。本轮无源码/数据库/前端改变，沿用128项回归、单体和前端已通过检查，仅更新文档并执行git diff --check。非秘密summary/diagnostic-summary/stopped/performance/final-account/default-final-20261007-recovery.json及采样JSONL/必要日志保留，无新增临时令牌文件。
 
 结论限定为本轮六小时对账连续性、信号幂等和安全收尾通过；没有自然BUY/SELL或盈利证据。下一唯一任务转向数字货币候选策略评估与参数调整，在共享样本及费用假设下比较EMA与突破候选，形成不可变版本和资金分配建议，新证据仍须所有者复核，不反复固定时长等待。
+
+### 多时段候选评估（2026-10-07）
+
+POST /quant/backtest/strategy-experiment/assessment为只读研究接口（quant:backtest:query），请求experimentIds为2至4个不同实验ID及feeBps/slippageBps/stressFeeBps/stressSlippageBps；成本各0至100基点且压力不得弱于基础。服务器限定tenant/owner，要求同数据集、参数集及参数快照、2至5个同版本候选、实验终态且训练/验证均成功，验证日期合法且不重叠。复用固定成交成本模型FIXED_TRADE_CASHFLOW_V1，校验来源、任务/产物摘要、完整成交数与有限数值；跨账户/数据、失败/缺失证据不参与排名。
+
+规则CANDIDATE_ASSESSMENT_V1：每窗口少于5笔为INSUFFICIENT_TRADES；最差基础收益<=0为INCONSISTENT；基础均正但最差压力<=0为COST_SENSITIVE；两种成本各窗口均正才为RESEARCH_CANDIDATE。该阈值仅为筛选规则，不授权交易。汇总原最大回撤、正收益窗口数、最少/总成交、总验证天数及每30天频率；按研究候选优先、最差压力/基础收益排序，输入窗口逆序不改变SHA-256。输出包含每窗口成本摘要及每候选产物摘要，autoApplied/activationAllowed均false，各窗口资本重置，不能相加或复利。
+
+实验工作台增加多时段候选评估及JSON导出，当前展示基础手续费10/滑点5、压力20/10基点；变更所选实验会清除旧结果并拒绝迟到响应。服务器可查询自定义合法成本。没有新增单体配置、数据库结构或执行开关，未修改已确认报告和实盘门禁。
+
+真实验收完成Binance数据binance-btc-202601-202609-v1、五个预先冻结版本、两实验共20项Freqtrade任务，均SUCCEEDED。实验A ae2a9d16-9017-47b6-a062-4e4711c303ad：训练1至4月，验证5至8月；实验B df53242f-d410-461e-a8be-b8af449d5a0f：训练5至8月，验证9月。总验证153天，评估摘要70e9227a4ebb9a0795a4add419854defe8e9a0e94ffb0bc58829ab2c18b39690。实际逆序摘要一致、重复ID和混入OKX实验均返回400。141项Java测试、单体聚合install/package、前端类型检查/构建通过，未做新面板浏览器交互验收；非秘密证据和日志在.runtime/quant/*candidate*20261007*。
+
+完整结果及人工复核对应的新突破批次/摘要见CANDIDATE-REVIEW.md：突破20/10基础两段+0.6280%/+0.3898%，压力最差-0.6010%，成本敏感；EMA30/90基础两段均负，五候选没有RESEARCH_CANDIDATE。9月仅为本轮预留验证段，类似OKX区间已用于探索，不能宣称完全未见样本外。固定成交重估不会改变信号、止盈或资金约束，原回撤并非压力回撤；1000模拟资本/每笔100不能推断9.14实际账户可执行收益。当前新增实盘资金建议0，下一任务是复核后突破20/10模拟成交与执行成本验证。
+
+最终默认根36468、UP/okx-primary、三个开关false、所有门禁HALTED、运行会话与活动订单0、Binance历史门禁订单仍3条，两条旧故障告警审计保留、两项跟踪PAUSED。没有交易所私有请求、实盘启动、资金划转、额度修改或新增临时令牌文件；新评估没有自动接受研究证据。既有完整小额订单授权继续有效，新策略研究确认按既有准入处理。

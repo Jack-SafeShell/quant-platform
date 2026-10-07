@@ -1,6 +1,19 @@
 import request from '@/config/axios'
 import type { StrategyConfiguration } from './backtest'
 
+export interface CandidateAssessment {
+  ruleVersion: string; evidenceHash: string; datasetId: string; parametersJson: string;
+  feeBps: number; slippageBps: number; stressFeeBps: number; stressSlippageBps: number;
+  minTradesPerWindow: number; validationDays: number; autoApplied: false; activationAllowed: false;
+  windows: Array<{experimentId:string;validationStart:string;validationEnd:string}>;
+  rows: Array<{strategyVersionId:string;configuration?:StrategyConfiguration;rank:number;classification:string;
+    positiveWindows:number;windowCount:number;worstBaseReturn:number;worstStressReturn:number;
+    maxBaseDrawdown:number;minWindowTrades:number;totalTrades:number;tradesPer30Days:number}>;
+  limitations: string[];
+}
+export const assessCandidates = (data: {experimentIds:string[];feeBps:number;slippageBps:number;stressFeeBps:number;stressSlippageBps:number}): Promise<CandidateAssessment> =>
+  request.post({url:'/quant/backtest/strategy-experiment/assessment',data})
+
 export interface StrategyExperimentRequest {
   requestKey: string
   strategyVersionIds: string[]

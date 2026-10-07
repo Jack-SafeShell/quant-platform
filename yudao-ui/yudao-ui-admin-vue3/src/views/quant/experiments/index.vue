@@ -30,6 +30,32 @@
     </el-table>
   </ContentWrap>
 
+  <ContentWrap title="多时段候选评估">
+    <p>选择2至4个同数据、同资金和同候选的已完成实验；验证时段不得重叠。各时段重置资金，结果不合并为组合收益。</p>
+    <el-select v-model="assessmentIds" multiple :multiple-limit="4" class="w-100%" @change="assessment = undefined">
+      <el-option v-for="e in experiments" :key="e.id" :value="e.id" :label="`${e.datasetId} · ${e.splitDate} ～ ${e.validationEnd} · ${e.id.slice(0, 8)}`" />
+    </el-select>
+    <p>单边手续费/每边滑点：基础10/5基点，压力20/10基点；每个验证时段至少5笔成交只是研究筛选标准。</p>
+    <el-button class="mt-3" :loading="assessmentLoading" :disabled="assessmentIds.length < 2" @click="loadAssessment">评估候选</el-button>
+    <el-button class="mt-3" :disabled="!assessment" @click="exportAssessment">导出评估证据</el-button>
+    <el-alert v-if="assessmentError" :title="assessmentError" type="warning" :closable="false" class="mt-3" />
+    <template v-if="assessment">
+      <p>共{{ assessment.validationDays }}个验证日 · 证据{{ assessment.evidenceHash.slice(0, 12) }} · 仅研究建议，不更改参数或启动交易</p>
+      <el-table :data="assessment.rows">
+        <el-table-column prop="rank" label="排序" width="65" />
+        <el-table-column label="方案" min-width="220"><template #default="s">{{ label(s.row.configuration) }}</template></el-table-column>
+        <el-table-column label="评估" min-width="150"><template #default="s">{{ assessmentLabel(s.row.classification) }}</template></el-table-column>
+        <el-table-column label="正收益时段" width="115"><template #default="s">{{ s.row.positiveWindows }}/{{ s.row.windowCount }}</template></el-table-column>
+        <el-table-column label="最差基础收益"><template #default="s">{{ percent(s.row.worstBaseReturn) }}</template></el-table-column>
+        <el-table-column label="最差压力收益"><template #default="s">{{ percent(s.row.worstStressReturn) }}</template></el-table-column>
+        <el-table-column label="原回测最大回撤"><template #default="s">{{ percent(s.row.maxBaseDrawdown) }}</template></el-table-column>
+        <el-table-column prop="minWindowTrades" label="最少时段成交" />
+        <el-table-column prop="tradesPer30Days" label="成交/30日" />
+      </el-table>
+      <p v-for="limitation in assessment.limitations" :key="limitation" class="text-gray-500">{{ limitation }}</p>
+    </template>
+  </ContentWrap>
+
   <ContentWrap v-if="result" title="比较结果与下一动作">
     <p>实验 {{ result.id }} · {{ parameterSummary }} · {{ result.terminal ? '全部回测结束，按验证收益排序' : '回测执行中，暂不排名' }}</p>
     <Echart v-if="chartRows.length" :options="comparisonOptions" :not-merge="true" height="300px" />
@@ -120,6 +146,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
+import { assessCandidates, type CandidateAssessment } from '@/api/quant/experiments'
 import { getCostSensitivity, type CostSensitivity, getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
 import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, strategyConfigurationLabel, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
 
@@ -129,6 +156,24 @@ const form = reactive({ strategyVersionIds: [] as string[], parameterSetId: '', 
 const trainDates = ref<string[]>([])
 const versions = ref<StrategyVersion[]>([]), parameters = ref<ParameterSet[]>([]), datasets = ref<DatasetQuality[]>([])
 const experiments = ref<StrategyExperiment[]>([]), result = ref<StrategyExperimentResult>()
+const assessmentIds = ref<string[]>([]), assessment = ref<CandidateAssessment>()
+const assessmentLoading = ref(false), assessmentError = ref('')
+function assessmentLabel(value: string) { return ({ RESEARCH_CANDIDATE:'可供研究复核', INSUFFICIENT_TRADES:'成交样本不足', INCONSISTENT:'时段收益不一致', COST_SENSITIVE:'成本敏感' } as Record<string,string>)[value] || value }
+async function loadAssessment() {
+  if (assessmentLoading.value) return
+  const ids = [...assessmentIds.value].sort(), signature = JSON.stringify(ids)
+  assessmentLoading.value = true; assessment.value = undefined; assessmentError.value = ''
+  try {
+    const value = await assessCandidates({experimentIds:ids,feeBps:10,slippageBps:5,stressFeeBps:20,stressSlippageBps:10})
+    if (signature === JSON.stringify([...assessmentIds.value].sort())) assessment.value = value
+  } catch { assessmentError.value = '评估失败，请检查实验是否全部成功、共用条件及验证时段是否重叠。' }
+  finally { assessmentLoading.value = false }
+}
+function exportAssessment() {
+  if (!assessment.value) return
+  const url = URL.createObjectURL(new Blob([JSON.stringify(assessment.value,null,2)],{type:'application/json'})), a = document.createElement('a')
+  a.href = url; a.download = `candidate-assessment-${assessment.value.evidenceHash.slice(0,12)}.json`; a.click(); URL.revokeObjectURL(url)
+}
 const enabled = ref(false), loading = ref(false), submitting = ref(false), presetLoading = ref(false), acting = ref(false)
 const errorMessage = ref(''), reviewVisible = ref(false), reviewComment = ref('')
 const paperReview = ref<PaperExperimentReview>()
