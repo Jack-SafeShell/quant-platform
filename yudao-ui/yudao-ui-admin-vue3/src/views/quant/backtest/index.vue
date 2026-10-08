@@ -1,43 +1,49 @@
 <template>
-  <ContentWrap title="历史回测">
+  <HistoryGuide />
+  <ContentWrap title="设置一次历史回看">
     <el-alert title="EMA 交叉 / 通道突破 · BTC/USDT 现货 · 1 小时 · 可配置版本" type="info" :closable="false" />
-    <p class="text-gray-500">配置保存为不可变策略版本，回测和模拟盘使用所选版本；包含 240 根预热，日期按 UTC，结束日不包含。</p>
-    <el-alert v-if="!enabled" title="回测尚未启用。请先完成数据准备，并在 yudao-server 中启用量化回测配置。" type="warning" :closable="false" />
-    <ExchangeMarketPanel />
+    <p class="text-gray-500">这里只计算过去的买卖结果。直接选择已有策略即可；想调整买卖规则时，再展开“修改策略”。</p>
+    <el-alert v-if="!enabled" title="暂时无法开始回看，请联系维护人员检查回测服务；已有结果仍可查看。" type="warning" :closable="false" />
     <StrategyConfigEditor :versions="strategyVersions" :selected-version-id="form.strategyVersionId" @created="selectCreatedStrategy" />
-    <el-form :model="form" label-width="110px" class="mt-4" @submit.prevent="submit">
-      <el-form-item label="策略版本"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="请选择不可变策略版本"><el-option v-for="item in strategyVersions" :key="item.id" :label="`${strategyLabel(item.configuration)} · ${item.sourceHash.slice(0, 12)}`" :value="item.id" /></el-select></el-form-item>
+    <el-form :model="form" :disabled="submitting" label-width="110px" class="mt-4" @submit.prevent="submit">
+      <el-form-item label="① 买卖策略"><el-select v-model="form.strategyVersionId" class="w-100%" placeholder="选一种买卖规则"><el-option v-for="(item, index) in strategyVersions" :key="item.id" :label="`${strategyLabel(item.configuration)} · 版本 ${index + 1}`" :value="item.id" /></el-select></el-form-item>
       <p class="text-gray-500">所选策略：{{ strategyLabel(strategyVersions.find(v => v.id === form.strategyVersionId)?.configuration) }}</p>
-      <el-form-item label="参数集"><el-select v-model="form.parameterSetId" class="w-70%" placeholder="请选择参数集" @change="applyParameterSet"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select><el-button class="ml-2" @click="saveParameterSet">保存当前参数</el-button></el-form-item>
-      <el-form-item label="数据集"><el-select v-model="form.datasetId" class="w-100%" placeholder="请选择质量校验通过的数据集"><el-option v-for="item in datasets.filter(value => value.status === 'VALID')" :key="item.id" :label="`${item.id} · ${item.exchange} · ${item.candles} 根`" :value="item.id" /></el-select></el-form-item>
-      <el-form-item label="UTC 日期区间"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /></el-form-item>
-      <el-form-item label="初始资金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
-      <el-form-item label="单笔投入"><el-input-number v-model="form.stakeAmount" :min="10" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
-      <el-form-item label="单边费率"><el-input-number v-model="form.fee" :min="0" :max="0.01" :step="0.0001" :precision="4" /><span class="ml-2">0.001 = 0.1%</span></el-form-item>
-      <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">提交历史回测</el-button></el-form-item>
+      <el-collapse class="mb-3"><el-collapse-item title="使用以前保存的金额与费率（可选）" name="saved"><el-form-item label="已保存的金额"><el-select v-model="form.parameterSetId" class="w-70%" placeholder="请选择参数集" @change="applyParameterSet"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select><el-button class="ml-2" @click="saveParameterSet">保存这组金额</el-button></el-form-item></el-collapse-item></el-collapse>
+      <el-form-item label="② 历史行情"><el-select v-model="form.datasetId" class="w-100%" placeholder="选择已准备好的行情"><el-option v-for="item in datasets.filter(value => value.status === 'VALID')" :key="item.id" :label="datasetLabel(item)" :value="item.id" /></el-select></el-form-item>
+      <el-form-item label="③ 回看日期"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /><el-button class="ml-2" :disabled="!form.datasetId" @click="useFullHistory">使用全部可回看日期</el-button></el-form-item>
+      <p class="text-gray-500">{{ datasetHint }} 日期按 UTC；例如结束日选 10 月 1 日，最后一天为 9 月 30 日。前 240 小时用于让策略读取先前行情。</p>
+      <el-form-item label="假设本金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
+      <el-form-item label="每次买入"><el-input-number v-model="form.stakeAmount" :min="10" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
+      <el-form-item label="每次手续费"><el-input-number v-model="feePercent" :min="0" :max="1" :step="0.01" :precision="4" /><span class="ml-2">%；买入和卖出分别计费</span></el-form-item>
+      <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">开始历史回看</el-button><span class="ml-3 text-gray-500">金额与费率会自动保存，无需先建参数集。</span></el-form-item>
     </el-form>
   </ContentWrap>
-  <ContentWrap title="受控历史行情下载">
-    <el-alert title="仅下载所选 OKX / Binance 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
-    <el-form :inline="true" class="mt-4"><el-form-item label="交易所"><el-select v-model="downloadForm.exchange"><el-option label="OKX" value="okx" /><el-option label="Binance" value="binance" /></el-select></el-form-item><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
-    <el-table :data="downloadTasks"><el-table-column prop="exchange_name" label="交易所" /><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
-  </ContentWrap>
-  <ContentWrap title="行情数据集与质量报告">
-    <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
-  </ContentWrap>
-  <ContentWrap title="我的回测任务（最近 100 条）">
+  <ContentWrap title="查看历史回看结果（最近 100 次）">
     <el-button :loading="loading" @click="refresh">刷新</el-button>
-    <el-button class="ml-2" :disabled="selectedIds.length < 2 || selectedIds.length > 5" @click="compare">对比所选</el-button>
-    <el-table :data="tasks" class="mt-3" v-loading="loading" @selection-change="rows => selectedIds = rows.map((row: BacktestTask) => row.id)">
-      <el-table-column type="selection" width="45" :selectable="row => row.status === 'SUCCEEDED'" />
+    <el-button class="ml-2" :disabled="selectedIds.length < 2 || selectedIds.length > 5" @click="compare">比较勾选的结果</el-button><span class="ml-3 text-gray-500">先勾选 2～5 个已完成结果；请使用相同资金和日期进行比较。</span>
+    <el-table :data="visibleTasks" row-key="id" class="mt-3" v-loading="loading" @selection-change="rows => selectedIds = rows.map((row: BacktestTask) => row.id)">
+      <el-table-column type="selection" :reserve-selection="true" width="45" :selectable="row => row.status === 'SUCCEEDED'" />
       <el-table-column label="策略配置" min-width="240"><template #default="s">{{ strategyLabel(s.row.strategyConfiguration) }}</template></el-table-column>
       <el-table-column prop="datasetId" label="数据集" min-width="160" />
       <el-table-column prop="exchangeName" label="交易所" width="100" />
       <el-table-column label="状态" width="130"><template #default="scope"><el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="提交时间" min-width="180"><template #default="scope">{{ new Date(scope.row.createdAt).toLocaleString() }}</template></el-table-column>
-      <el-table-column label="操作" width="100"><template #default="scope"><el-button link type="primary" @click="showDetail(scope.row.id)">详情</el-button></template></el-table-column>
+      <el-table-column label="操作" width="100"><template #default="scope"><el-button link type="primary" @click="showDetail(scope.row.id)">查看结果</el-button></template></el-table-column>
     </el-table>
+    <el-pagination v-model:current-page="taskPage" :page-size="10" :total="tasks.length" layout="total, prev, pager, next" class="mt-3" />
   </ContentWrap>
+  <el-collapse class="mb-4"><el-collapse-item title="没有合适的行情？展开准备数据" name="data">
+  <ContentWrap title="准备新的历史行情">
+    <el-alert title="仅下载所选 OKX / Binance 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
+    <el-form :inline="true" class="mt-4"><el-form-item label="交易所"><el-select v-model="downloadForm.exchange"><el-option label="OKX" value="okx" /><el-option label="Binance" value="binance" /></el-select></el-form-item><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
+    <el-table :data="downloadTasks"><el-table-column prop="exchange_name" label="交易所" /><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
+  </ContentWrap>
+  <ContentWrap title="已有行情的覆盖时间与完整性">
+    <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
+  </ContentWrap>
+  </el-collapse-item></el-collapse>
+  <el-collapse v-model="legacyPanels" @change="refresh"><el-collapse-item title="其他管理与历史执行记录（历史回看无需使用）" name="execution">
+  <ExchangeMarketPanel v-if="legacyPanels.includes('execution')" />
   <ContentWrap title="受控参数优化批次">
     <el-alert title="选择 2 至 5 个参数集；训练区间与验证区间完全分离，各至少 7 天。" type="info" :closable="false" />
     <el-form :inline="true" class="mt-4"><el-form-item label="参数集"><el-select v-model="optimization.parameterSetIds" multiple class="w-300px"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select></el-form-item><el-form-item label="训练/切分/验证"><el-date-picker v-model="optimizationDates" type="dates" value-format="YYYY-MM-DD" /></el-form-item><el-button type="primary" :disabled="!enabled" @click="submitOptimization">提交批次</el-button></el-form>
@@ -65,6 +71,7 @@
     <el-table :data="liveAdmissions.filter(x=>x.confirmationState==='DOUBLE_CONFIRMED')" class="mt-3"><el-table-column prop="reportHash" label="已双确认报告" min-width="360" /><el-table-column label="操作" width="180"><template #default="s"><el-button type="primary" link @click="generateLiveControl(s.row.id)">创建/查看门禁</el-button></template></el-table-column></el-table>
     <el-table :data="liveControls" class="mt-3"><el-table-column prop="policyVersion" label="策略" /><el-table-column prop="exchangeName" label="交易所" /><el-table-column prop="pairSymbol" label="交易对" /><el-table-column prop="status" label="状态" /><el-table-column label="单笔/单日/总仓位" min-width="220"><template #default="s">{{ s.row.maxOrderNotional }} / {{ s.row.maxDailyNotional }} / {{ s.row.maxTotalExposure }} USDT</template></el-table-column><el-table-column label="操作"><template #default="s"><el-button link type="primary" @click="showLiveControl(s.row.id)">管理与查看证据</el-button></template></el-table-column></el-table>
   </ContentWrap>
+  </el-collapse-item></el-collapse>
   <el-dialog v-model="liveControlVisible" title="受控实盘与自动执行" width="85%">
     <template v-if="selectedLiveControl">
       <el-alert :title="selectedLiveControl.liveExecutionEnabled ? '真实执行总开关已启用；操作会产生真实订单。' : '真实执行总开关关闭；订单检查只记录门禁决定。'" :type="selectedLiveControl.liveExecutionEnabled ? 'error' : 'warning'" :closable="false" />
@@ -134,9 +141,12 @@
   <el-dialog v-model="liveAdmissionVisible" title="实盘前只读准入报告" width="75%"><template v-if="selectedLiveAdmission"><el-alert title="activationAllowed=false；该报告及双确认均不构成实盘授权。" type="warning" :closable="false" /><p v-if="liveAdmissionManifest?.strategy"><b>绑定策略：</b>{{ liveAdmissionManifest.strategy.strategyVersionId }} / {{ liveAdmissionManifest.strategy.configuration }}</p><p><b>报告摘要：</b>{{ selectedLiveAdmission.reportHash }}</p><el-table :data="liveAdmissionManifest?.checks || []"><el-table-column prop="id" label="检查项" min-width="220" /><el-table-column label="结果" width="90"><template #default="s"><el-tag :type="s.row.passed?'success':'danger'">{{ s.row.passed?'通过':'未通过' }}</el-tag></template></el-table-column><el-table-column prop="evidence" label="证据" min-width="360" /></el-table><h3>密钥边界</h3><el-descriptions :column="2" border><el-descriptions-item label="当前已配置">否</el-descriptions-item><el-descriptions-item label="权限">只读 + 交易，禁止提现</el-descriptions-item><el-descriptions-item label="IP 白名单">必须</el-descriptions-item><el-descriptions-item label="轮换周期">90 天；疑似泄露立即吊销</el-descriptions-item><el-descriptions-item label="托管" :span="2">{{ liveAdmissionManifest?.keyBoundary.storage }}</el-descriptions-item></el-descriptions><h3>人工双确认</h3><el-form label-width="110px"><el-divider content-position="left">证据复核</el-divider><el-form-item label="复核意见"><el-input v-model="liveEvidenceComment" maxlength="500" placeholder="例如：已核对五项证据，内容与验收记录一致" /></el-form-item><el-form-item label="证据确认语"><el-input v-model="liveEvidencePhrase" placeholder="输入 CONFIRM_EVIDENCE_REVIEWED" /></el-form-item><el-form-item><el-button type="primary" @click="confirmAdmission('EVIDENCE_REVIEW')">确认已复核证据</el-button></el-form-item><el-divider content-position="left">密钥边界复核</el-divider><el-form-item label="复核意见"><el-input v-model="liveKeyComment" maxlength="500" placeholder="例如：接受只读和交易权限、禁止提现及 IP 白名单要求" /></el-form-item><el-form-item label="边界确认语"><el-input v-model="liveKeyPhrase" placeholder="输入 CONFIRM_KEY_BOUNDARY_ACCEPTED" /></el-form-item><el-form-item><el-button type="primary" @click="confirmAdmission('KEY_BOUNDARY_REVIEW')">确认接受密钥边界</el-button></el-form-item></el-form><el-table :data="selectedLiveAdmission.confirmations" class="mt-3"><el-table-column prop="confirmationType" label="确认类型" /><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table></template></el-dialog>
   <el-dialog v-model="optimizationVisible" title="训练/验证结果" width="80%"><el-alert :title="optimizationResult?.terminal ? '结果按验证集收益率排序；系统不会自动采纳参数。' : '任务尚未全部结束，暂不生成排序。'" type="warning" :closable="false" /><el-table :data="optimizationResult?.ranking || []" class="mt-3"><el-table-column prop="rank" label="排名" /><el-table-column prop="parameterSetId" label="参数集" min-width="260" /><el-table-column prop="trainStatus" label="训练状态" /><el-table-column prop="validationStatus" label="验证状态" /><el-table-column prop="trainReturn" label="训练收益率" /><el-table-column prop="validationReturn" label="验证收益率" /><el-table-column prop="overfitGap" label="训练-验证差异" /><el-table-column prop="validationDrawdown" label="验证回撤" /><el-table-column prop="validationTrades" label="验证成交" /></el-table><template v-if="optimizationResult"><h3>研究结论草稿</h3><p>{{ optimizationResult.researchDraft.conclusion }}</p><p><b>证据摘要：</b>{{ optimizationResult.researchDraft.evidenceSha256 }}</p><el-alert v-for="risk in optimizationResult.researchDraft.risks" :key="risk" :title="risk" type="warning" :closable="false" class="mt-2" /><p><b>人工复核：</b>{{ optimizationResult.researchDraft.manualChecks.join('；') }}</p><el-button @click="downloadResearch">导出草稿</el-button><el-input v-model="reviewComment" class="mt-2" maxlength="500" placeholder="填写评审意见" /><el-button class="mt-2" type="success" @click="submitReview('ACCEPTED')">接受研究结论</el-button><el-button class="mt-2" type="danger" @click="submitReview('REJECTED')">拒绝</el-button><el-table :data="optimizationResult.reviews" class="mt-3"><el-table-column prop="decision" label="评审" /><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table><h3>模拟盘准入（只读）</h3><el-alert title="该清单不会启动 dry-run、读取交易凭据或创建订单。" type="info" :closable="false" /><el-table :data="optimizationResult.paperAdmission.checks" class="mt-3"><el-table-column prop="label" label="检查项" /><el-table-column label="结果"><template #default="s"><el-tag :type="s.row.passed ? 'success' : 'danger'">{{ s.row.passed ? '通过' : '未通过' }}</el-tag></template></el-table-column><el-table-column prop="evidence" label="证据" min-width="300" /></el-table><el-input v-model="admissionComment" class="mt-2" maxlength="500" placeholder="填写准入确认意见" /><el-button class="mt-2" type="success" :disabled="!optimizationResult.paperAdmission.eligible" @click="submitAdmission('READY')">确认可进入模拟盘准备</el-button><el-button class="mt-2" type="danger" @click="submitAdmission('NOT_READY')">确认暂不准入</el-button><el-table :data="optimizationResult.paperAdmission.reviews" class="mt-3"><el-table-column prop="decision" label="准入决定" /><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table><el-select v-model="paperParameterSetId" class="mt-3 w-300px" placeholder="人工选择参数集"><el-option v-for="row in optimizationResult.ranking.filter(x => x.validationReturn !== undefined)" :key="row.parameterSetId" :label="row.parameterSetId" :value="row.parameterSetId" /></el-select><el-button class="mt-3" type="primary" :disabled="!optimizationResult.paperAdmission.eligible || !paperParameterSetId" @click="submitPaperSession">创建待审批会话</el-button></template></el-dialog>
   <el-dialog v-model="paperSessionVisible" title="模拟盘会话启动审批" width="65%"><template v-if="selectedPaperSession"><el-descriptions :column="1" border><el-descriptions-item label="状态">{{ selectedPaperSession.status }}</el-descriptions-item><el-descriptions-item label="参数集">{{ selectedPaperSession.parameter_set_id }}</el-descriptions-item><el-descriptions-item label="准入证据">{{ selectedPaperSession.admission_evidence_hash }}</el-descriptions-item><el-descriptions-item label="执行能力">关闭</el-descriptions-item></el-descriptions><el-input v-model="sessionReviewComment" class="mt-3" maxlength="500" placeholder="填写启动审批意见" /><el-button class="mt-2" type="success" :disabled="selectedPaperSession.status !== 'PENDING_APPROVAL'" @click="submitPaperSessionReview('APPROVED')">批准启动准备</el-button><el-button class="mt-2" type="danger" :disabled="selectedPaperSession.status !== 'PENDING_APPROVAL'" @click="submitPaperSessionReview('REJECTED')">拒绝</el-button><el-table :data="selectedPaperSession.reviews || []" class="mt-3"><el-table-column prop="decision" label="决定" /><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table><h3>启动前环境校验</h3><el-button type="primary" :disabled="selectedPaperSession.status !== 'APPROVED'" @click="generateReadiness">生成配置与校验快照</el-button><el-button type="warning" :disabled="!readinessSnapshots[0]?.ready" @click="planExecution">创建执行计划（不启动）</el-button><el-table :data="readinessSnapshots" class="mt-3"><el-table-column label="结果"><template #default="s"><el-tag :type="s.row.ready ? 'success' : 'danger'">{{ s.row.ready ? '通过' : '未通过' }}</el-tag></template></el-table-column><el-table-column prop="manifestHash" label="清单摘要" min-width="300" /><el-table-column label="时间"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table><el-alert v-if="readinessSnapshots.length" class="mt-3" :title="readinessSummary" type="info" :closable="false" /></template></el-dialog>
-  <el-dialog v-model="detailVisible" title="回测结果与实验记录" width="80%">
+  <el-dialog v-model="detailVisible" title="这次历史回看赚亏如何？" width="80%">
     <template v-if="selected">
       <el-alert v-if="selected.errorMessage" :title="selected.errorMessage" type="error" :closable="false" />
+      <p>{{ strategyLabel(selected.strategyConfiguration) }} · {{ statusLabel(selected.status) }}</p>
+      <p v-if="selected.status === 'QUEUED' || selected.status === 'RUNNING'">系统正在计算历史买卖，请稍候；此窗口会自动更新。</p>
+      <el-collapse><el-collapse-item title="技术记录（需要核对版本时再展开）" name="technical">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="任务编号">{{ selected.id }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ statusLabel(selected.status) }}</el-descriptions-item>
@@ -148,21 +158,24 @@
         <el-descriptions-item label="引擎版本">{{ selected.engineVersion || '尚未完成' }}</el-descriptions-item>
         <el-descriptions-item label="参数">{{ selected.parametersJson }}</el-descriptions-item>
       </el-descriptions>
+      </el-collapse-item></el-collapse>
       <div v-if="selected.status === 'SUCCEEDED'" class="mt-3"><el-button @click="downloadReport('md')">导出实验报告</el-button><el-button @click="downloadReport('json')">导出可复现清单</el-button></div>
       <template v-if="result">
         <el-descriptions class="mt-4" :column="3" border>
-          <el-descriptions-item label="成交数">{{ result.totalTrades }}</el-descriptions-item>
-          <el-descriptions-item label="净收益 USDT">{{ result.netProfit.toFixed(4) }}</el-descriptions-item>
+          <el-descriptions-item label="历史买卖次数">{{ result.totalTrades }}</el-descriptions-item>
+          <el-descriptions-item label="合计赚亏 USDT">{{ result.netProfit.toFixed(4) }}</el-descriptions-item>
           <el-descriptions-item label="收益率">{{ (result.returnRatio * 100).toFixed(3) }}%</el-descriptions-item>
           <el-descriptions-item label="最大回撤">{{ (result.maxDrawdownRatio * 100).toFixed(3) }}%</el-descriptions-item>
         </el-descriptions>
+        <el-alert class="mt-3" :title="resultExplanation" type="info" :closable="false" show-icon />
+        <p>最大回撤表示测试中资产从高点最多回落了多少，数值越大，经历的波动越大。下面逐笔查看当时的买入、卖出和赚亏。</p>
         <el-alert v-if="result.totalTrades === 0" class="mt-3" title="本区间没有成交；这不代表策略盈利能力已验证。" type="warning" :closable="false" />
         <el-table :data="result.trades" max-height="360" class="mt-4">
           <el-table-column prop="instrument" label="交易对" />
-          <el-table-column prop="openedAt" label="开仓 UTC" min-width="180" />
-          <el-table-column prop="closedAt" label="平仓 UTC" min-width="180" />
+          <el-table-column prop="openedAt" label="买入时间 UTC" min-width="180" />
+          <el-table-column prop="closedAt" label="卖出时间 UTC" min-width="180" />
           <el-table-column prop="netProfit" label="收益 USDT" />
-          <el-table-column prop="exitReason" label="退出原因" />
+          <el-table-column label="为什么卖出"><template #default="s">{{ exitReasonLabel(s.row.exitReason) }}</template></el-table-column>
         </el-table>
       </template>
     </template>
@@ -174,6 +187,7 @@
 </template>
 
 <script setup lang="ts">
+import HistoryGuide from '../HistoryGuide.vue'
 import ExchangeMarketPanel from './ExchangeMarketPanel.vue'
 import LiveRunPlanEditor from './LiveRunPlanEditor.vue'
 import PortfolioBudgetEditor from './PortfolioBudgetEditor.vue'
@@ -261,8 +275,32 @@ const liveAutomationPhrase=ref('')
 const okxReadComment=ref('')
 const okxReadPhrase=ref('')
 const liveOrderForm=reactive({clientOrderId:`offline-${Date.now()}`,side:'BUY' as 'BUY'|'SELL',orderType:'LIMIT' as const,price:100,amount:0.05,currentExposure:0,dailyExecutedNotional:0,openOrders:0})
+const legacyPanels = ref<string[]>([])
+const feePercent = computed({ get: () => Number((form.fee * 100).toFixed(4)), set: value => { form.fee = Number((value / 100).toFixed(6)) } })
+const datasetLabel = (item: DatasetQuality) => `${item.exchange.toUpperCase()} · ${item.pair} · ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)} · ${item.candles} 根`
+const datasetHint = computed(() => {
+  const item = datasets.value.find(d => d.id === form.datasetId)
+  return item ? `所选行情覆盖 ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)}。` : '请先选择历史行情。'
+})
+const resultExplanation = computed(() => {
+  if (!result.value) return ''
+  const params = JSON.parse(selected.value?.parametersJson || '{}')
+  return `假设本金 ${params.startingBalance ?? '未记录'} USDT，这段历史按所选策略买卖后的净赚亏为 ${Number(result.value.netProfit).toFixed(4)} USDT（已计所选手续费），收益率 ${(result.value.returnRatio * 100).toFixed(3)}%。这不是实际到账金额。`
+})
+const exitReasonLabel = (reason: string) => ({ roi: '达到止盈条件', stop_loss: '触发止损', trailing_stop_loss: '触发移动止损', exit_signal: '策略发出卖出信号', force_exit: '回看区间结束时结算' } as Record<string, string>)[reason] || reason
 const dates = ref<string[]>([])
+function useFullHistory() {
+  const data = datasets.value.find(d => d.id === form.datasetId)
+  if (!data) return
+  const day = 24 * 60 * 60 * 1000
+  const start = Math.ceil((data.firstTimestamp + 240 * 60 * 60 * 1000) / day) * day
+  const end = Math.floor((data.lastTimestamp + 60 * 60 * 1000) / day) * day
+  if (start >= end) { ElMessage.warning('该行情还没有足够的完整日期，请准备更长的历史行情'); return }
+  dates.value = [new Date(start).toISOString().slice(0, 10), new Date(end).toISOString().slice(0, 10)]
+}
 const tasks = ref<BacktestTask[]>([])
+const taskPage = ref(1)
+const visibleTasks = computed(() => tasks.value.slice((taskPage.value - 1) * 10, taskPage.value * 10))
 const selected = ref<BacktestTask>()
 const detailVisible = ref(false)
 const enabled = ref(false)
@@ -276,18 +314,33 @@ let lastPayload = ''
 let requestKey = ''
 async function submit() {
   if (submitting.value) return
-  if (!form.strategyVersionId || !form.parameterSetId || !/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
-    ElMessage.warning('请选择策略版本、参数集并填写有效数据集编号和日期区间')
+  if (!form.strategyVersionId || !/^[A-Za-z0-9_-]{1,64}$/.test(form.datasetId) || dates.value?.length !== 2 || !dates.value[0] || !dates.value[1]) {
+    ElMessage.warning('请先选择买卖策略、历史行情和完整回看日期')
     return
   }
+  if (dates.value[0] >= dates.value[1]) { ElMessage.warning('结束日必须晚于开始日'); return }
+  if (!Number.isFinite(form.startingBalance) || form.startingBalance < 100 || form.startingBalance > 1000000 || !Number.isFinite(form.stakeAmount) || form.stakeAmount < 10 || form.stakeAmount > form.startingBalance || !Number.isFinite(form.fee) || form.fee < 0 || form.fee > 0.01) {
+    ElMessage.warning('假设本金为 100～1000000 USDT；每次买入至少 10 USDT，且不能超过本金；手续费为 0～1%'); return
+  }
+  submitting.value = true
+  try {
+    const matching = parameterSets.value.find(item => {
+      const p = parseParameters(item)
+      return p.startingBalance === form.startingBalance && p.stakeAmount === form.stakeAmount && p.fee === form.fee
+    })
+    form.parameterSetId = matching?.id || await createParameterSet({ startingBalance: form.startingBalance, stakeAmount: form.stakeAmount, fee: form.fee })
+    if (!matching) parameterSets.value = await listParameterSets()
+  } catch { submitting.value = false; return }
   const params = { ...form, startDate: dates.value[0], endDate: dates.value[1] }
   const payload = JSON.stringify(params)
   if (payload !== lastPayload) { requestKey = crypto.randomUUID(); lastPayload = payload }
   submitting.value = true
   try {
-    await createBacktest({ ...params, requestKey })
+    const id = await createBacktest({ ...params, requestKey })
+    selected.value = await getBacktest(id)
+    detailVisible.value = true
     lastPayload = ''
-    ElMessage.success('任务已提交')
+    ElMessage.success('历史回看已开始，完成后可查看赚亏与买卖记录')
     await refresh()
   } finally { submitting.value = false }
 }
@@ -298,11 +351,13 @@ async function refresh() {
     tasks.value = await listBacktests()
     downloadTasks.value = await listDatasetDownloads()
     datasets.value = await listDatasets()
+    if (legacyPanels.value.includes('execution')) {
     optimizationBatches.value = await listOptimizations()
     paperSessions.value = await listPaperSessions()
     paperExecutions.value = await listPaperExecutions()
     liveAdmissions.value = await listLiveAdmissions()
     liveControls.value = await listLiveControls()
+    }
     if (detailVisible.value && selected.value) selected.value = await getBacktest(selected.value.id)
   } finally { loading.value = false }
 }
@@ -361,7 +416,7 @@ async function selectCreatedStrategy(id: string) {
   ElMessage.success('策略版本已保存并选中，可提交回测')
 }
 const parseParameters = (item: ParameterSet) => JSON.parse(item.parametersJson)
-const parameterLabel = (item: ParameterSet) => { const p = parseParameters(item); return `${p.startingBalance} / ${p.stakeAmount} / ${p.fee}` }
+const parameterLabel = (item: ParameterSet) => { const p = parseParameters(item); return `本金 ${p.startingBalance} USDT · 每次 ${p.stakeAmount} USDT · 手续费 ${(p.fee * 100).toFixed(2)}%` }
 function applyParameterSet(id: string) { const item = parameterSets.value.find(value => value.id === id); if (item) Object.assign(form, parseParameters(item)) }
 async function saveParameterSet() { form.parameterSetId = await createParameterSet({ startingBalance: form.startingBalance, stakeAmount: form.stakeAmount, fee: form.fee }); parameterSets.value = await listParameterSets(); ElMessage.success('参数集已保存') }
 async function compare() { comparisons.value = await compareBacktests(selectedIds.value); compareVisible.value = true }
@@ -381,3 +436,12 @@ onMounted(async () => {
 })
 onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
+
+<style scoped>
+:deep(.el-date-editor--daterange) { max-width: 100%; }
+@media (max-width: 768px) {
+  :deep(.el-form-item) { flex-direction: column; align-items: stretch; }
+  :deep(.el-form-item__label) { justify-content: flex-start; }
+  :deep(.el-form-item__content) { min-width: 0; gap: 8px; }
+}
+</style>

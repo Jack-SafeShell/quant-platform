@@ -1,19 +1,23 @@
 <template>
   <div class="operations-page">
+    <HistoryGuide />
     <ContentWrap>
       <div class="page-head">
         <div>
           <div class="eyebrow">QUANT OPERATIONS</div>
-          <h1>策略与运行面板</h1>
-          <p>集中查看策略版本、参数、模拟盘、实盘会话、订单和风险状态。</p>
+          <h1>量化工具：从历史回看开始</h1>
+          <p>先看过去的赚亏和买卖过程。交易与运行历史可在下方按需展开。</p>
         </div>
         <div class="head-actions">
           <span class="updated">更新于 {{ formatTime(lastUpdated) }}</span>
           <el-switch v-model="autoRefresh" active-text="自动刷新" />
           <el-button :loading="loading" @click="refresh">刷新</el-button>
-          <el-button type="primary" @click="openResearch">研究与回测</el-button>
+          <el-button type="primary" @click="openResearch">开始历史回看</el-button>
         </div>
       </div>
+    </ContentWrap>
+    <el-collapse><el-collapse-item title="交易与运行历史（仅需要时展开）" name="operations">
+    <ContentWrap>
       <el-alert
         :title="switchSummary"
         :type="capabilities?.liveExecutionEnabled && capabilities?.liveAutomationEnabled ? 'warning' : 'info'"
@@ -294,10 +298,12 @@
         <el-table-column prop="clientOrderId" label="客户端订单" min-width="220" show-overflow-tooltip />
       </el-table>
     </ContentWrap>
+    </el-collapse-item></el-collapse>
   </div>
 </template>
 
 <script setup lang="ts">
+import HistoryGuide from '../HistoryGuide.vue'
 import { exitOwnedSession } from '@/api/quant/portfolio'
 import { getTradingAccount, type TradingAccountSummary } from '@/api/quant/exchanges'
 import { strategyConfigurationLabel } from '@/api/quant/backtest'

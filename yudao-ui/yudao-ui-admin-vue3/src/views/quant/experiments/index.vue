@@ -1,21 +1,23 @@
 <template>
-  <ContentWrap title="策略实验工作台">
-    <p>用相同资金、费率和数据比较候选方案，再进入评审、模拟盘及交易运行。收益、回撤和执行表现共同决定后续选择。</p>
+  <HistoryGuide />
+  <ContentWrap title="用同一段历史比较多个策略">
+    <p>用相同资金、费率和数据比较候选方案，查看历史赚亏与买卖记录。收益、回撤和执行表现共同决定后续选择。</p>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />
     <el-form label-width="110px" class="mt-4" @submit.prevent="submit">
       <el-form-item label="候选方案">
         <el-select v-model="form.strategyVersionIds" multiple class="w-100%" :multiple-limit="5" placeholder="选择 2 至 5 个策略版本">
-          <el-option v-for="version in versions" :key="version.id" :value="version.id" :label="`${label(version.configuration)} · ${version.sourceHash.slice(0, 10)}`" />
+          <el-option v-for="(version, index) in versions" :key="version.id" :value="version.id" :label="`${label(version.configuration)} · 版本 ${index + 1}`" />
         </el-select>
       </el-form-item>
       <el-form-item><el-button v-hasPermi="['quant:backtest:create']" :loading="presetLoading" @click="addPresets">添加三组 EMA 研究预设</el-button><el-button @click="router.push('/quant/backtest')">自定义策略配置</el-button></el-form-item>
       <el-form-item label="资金与费率">
         <el-select v-model="form.parameterSetId" class="w-100%" placeholder="所有方案共用一个资金参数集"><el-option v-for="p in parameters" :key="p.id" :value="p.id" :label="parameterLabel(p)" /></el-select>
       </el-form-item>
-      <el-form-item label="行情数据"><el-select v-model="form.datasetId" class="w-100%"><el-option v-for="d in datasets.filter(d => d.status === 'VALID')" :key="d.id" :value="d.id" :label="`${d.id} · ${d.exchange} · ${d.candles} 根`" /></el-select></el-form-item>
-      <el-form-item label="训练区间"><el-date-picker v-model="trainDates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="UTC 开始日" end-placeholder="切分日（不含）" /></el-form-item>
-      <el-form-item label="验证结束"><el-date-picker v-model="form.validationEnd" value-format="YYYY-MM-DD" placeholder="从训练切分日开始验证，结束日不含" /></el-form-item>
-      <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">提交多方案实验</el-button><span class="ml-3">每个方案生成训练、验证各一次回测，两段各至少 7 天。</span></el-form-item>
+      <el-form-item label="行情数据"><el-select v-model="form.datasetId" class="w-100%"><el-option v-for="d in datasets.filter(d => d.status === 'VALID')" :key="d.id" :value="d.id" :label="`${d.exchange.toUpperCase()} · ${d.pair} · ${new Date(d.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(d.lastTimestamp).toISOString().slice(0, 10)}`" /></el-select></el-form-item>
+      <p class="text-gray-500">前一段用于比较方案；后一段从切分日开始，用来检查换一段行情后是否还能保持表现。两段各至少 7 天，结束日不计入。</p>
+      <el-form-item label="前一段历史"><el-date-picker v-model="trainDates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="UTC 开始日" end-placeholder="切分日（不含）" /></el-form-item>
+      <el-form-item label="后一段结束日"><el-date-picker v-model="form.validationEnd" value-format="YYYY-MM-DD" placeholder="从训练切分日开始验证，结束日不含" /></el-form-item>
+      <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="submitting" :disabled="!enabled" @click="submit">开始比较这些策略</el-button><span class="ml-3">每个方案生成训练、验证各一次回测，两段各至少 7 天。</span></el-form-item>
     </el-form>
   </ContentWrap>
 
@@ -23,10 +25,10 @@
     <el-button :loading="loading" @click="refresh">刷新</el-button>
     <el-table :data="experiments" class="mt-3">
       <el-table-column prop="datasetId" label="数据集" min-width="160" />
-      <el-table-column label="训练区间" min-width="220"><template #default="s">{{ s.row.trainStart }} ～ {{ s.row.splitDate }}</template></el-table-column>
+      <el-table-column label="前一段历史" min-width="220"><template #default="s">{{ s.row.trainStart }} ～ {{ s.row.splitDate }}</template></el-table-column>
       <el-table-column label="验证区间" min-width="220"><template #default="s">{{ s.row.splitDate }} ～ {{ s.row.validationEnd }}</template></el-table-column>
       <el-table-column label="创建时间" min-width="180"><template #default="s">{{ time(s.row.createdAt) }}</template></el-table-column>
-      <el-table-column label="操作" width="110"><template #default="s"><el-button link type="primary" @click="selectExperiment(s.row.id)">查看进度</el-button></template></el-table-column>
+      <el-table-column label="操作" width="110"><template #default="s"><el-button link type="primary" @click="selectExperiment(s.row.id)">查看结果</el-button></template></el-table-column>
     </el-table>
   </ContentWrap>
 
@@ -56,22 +58,22 @@
     </template>
   </ContentWrap>
 
-  <ContentWrap v-if="result" title="比较结果与下一动作">
+  <ContentWrap v-if="result" title="比较历史表现与回看结论">
     <p>实验 {{ result.id }} · {{ parameterSummary }} · {{ result.terminal ? '全部回测结束，按验证收益排序' : '回测执行中，暂不排名' }}</p>
     <Echart v-if="chartRows.length" :options="comparisonOptions" :not-merge="true" height="300px" />
     <el-table :data="result.rows" row-key="strategyVersionId">
       <el-table-column prop="rank" label="排名" width="65" />
       <el-table-column label="方案" min-width="245"><template #default="s">{{ label(s.row.configuration) }}</template></el-table-column>
-      <el-table-column label="训练 / 验证" width="205"><template #default="s">{{ s.row.trainStatus }} / {{ s.row.validationStatus }}</template></el-table-column>
+      <el-table-column label="训练 / 验证" width="205"><template #default="s">{{ taskStatus(s.row.trainStatus) }} / {{ taskStatus(s.row.validationStatus) }}</template></el-table-column>
       <el-table-column label="训练收益" width="105"><template #default="s">{{ percent(s.row.trainReturn) }}</template></el-table-column>
       <el-table-column label="验证收益" width="105"><template #default="s">{{ percent(s.row.validationReturn) }}</template></el-table-column>
       <el-table-column label="验证回撤" width="105"><template #default="s">{{ percent(s.row.validationDrawdown) }}</template></el-table-column>
       <el-table-column label="收益差" width="100"><template #default="s">{{ percent(s.row.overfitGap) }}</template></el-table-column>
       <el-table-column prop="validationTrades" label="验证成交" width="95" />
       <el-table-column label="当前阶段" min-width="160"><template #default="s">{{ stage(s.row) }}</template></el-table-column>
-      <el-table-column label="操作" width="125"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">评审与模拟盘</el-button></template></el-table-column>
+      <el-table-column label="操作" width="125"><template #default="s"><el-button link type="primary" @click="openReview(s.row)">查看回看结论</el-button></template></el-table-column>
     </el-table>
-    <p class="text-gray-500">历史排名用于筛选候选方案，需结合样本外表现与模拟运行。此处的收益率已计入所选费率，不能等同于未来实盘收益。</p>
+    <p class="text-gray-500">历史排名用于比较过去的表现，建议再用另一段历史检查结果是否稳定。此处的收益率已计入所选费率，不能等同于未来实盘收益。</p>
   </ContentWrap>
 
   <ContentWrap v-if="result" title="费用与滑点敏感性">
@@ -80,7 +82,7 @@
       <el-form-item label="单边手续费（基点）"><el-input-number v-model="costAssumptions.feeBps" :min="0" :max="100" :precision="0" /></el-form-item>
       <el-form-item label="每边滑点（基点）"><el-input-number v-model="costAssumptions.slippageBps" :min="0" :max="100" :precision="0" /></el-form-item>
       <el-button :loading="costLoading" @click="loadCosts">计算比较</el-button>
-      <el-button :disabled="!costs" @click="exportCosts">导出证据 JSON</el-button>
+      <el-button :disabled="!costs" @click="exportCosts">导出详细记录</el-button>
     </el-form>
     <el-alert v-if="costError" :title="costError" type="warning" :closable="false" />
     <template v-if="costs">
@@ -99,56 +101,33 @@
     <p>已平仓权益回撤只在退出时计算，与原回测逐 K 线回撤口径不同。费用变化可能改变入场、退出及资金可用性，此处不重跑信号或撮合，也不修改原排名、审批和运行参数。</p>
   </ContentWrap>
 
-  <ContentWrap v-if="result" title="候选方案模拟运行与复盘">
-    <el-alert v-if="paperReviewError" title="模拟复盘读取失败，请确认新增接口已部署后重试。" type="warning" :closable="false" />
-    <template v-if="paperReview">
-      <p>共同初始资金 {{ paperReview.startingBalance }} USDT · 数据生成 {{ time(paperReview.generatedAt) }}</p>
-      <p class="text-gray-500">每个方案展示最新模拟会话的最新执行；观测起止和保留快照数分别列出。运行时长、市场区间及成交样本可能不同，暂不自动排名或选用。收益仅为引擎报告的已平仓收益，未包含当前持仓浮盈亏；零成交不能代表方案有效。</p>
-      <el-button @click="exportPaperReview">导出复盘 JSON</el-button>
-      <el-button @click="router.push('/quant/backtest')">进入模拟审批与运行</el-button>
-      <el-table :data="paperReview.rows" class="mt-3" row-key="strategyVersionId">
-        <el-table-column label="方案" min-width="250"><template #default="s">{{ label(s.row.configuration) }}</template></el-table-column>
-        <el-table-column label="运行阶段" min-width="150"><template #default="s">{{ s.row.executionStatus || s.row.sessionStatus || '尚未准备模拟盘' }}</template></el-table-column>
-        <el-table-column label="已平仓收益 USDT" width="155"><template #default="s">{{ s.row.realizedProfit == null ? '-' : Number(s.row.realizedProfit).toFixed(6) }}</template></el-table-column>
-        <el-table-column label="相对初始资金" width="130"><template #default="s">{{ percent(s.row.realizedReturnRatio) }}</template></el-table-column>
-        <el-table-column label="成交 / 持仓 / 挂单" width="175"><template #default="s">{{ s.row.closedTrades ?? '-' }} / {{ s.row.openPositions ?? '-' }} / {{ s.row.openOrders ?? '-' }}</template></el-table-column>
-        <el-table-column prop="snapshotCount" label="保留快照" width="100" />
-        <el-table-column label="观测起止" min-width="210"><template #default="s">{{ s.row.firstObservedAt ? time(s.row.firstObservedAt) : '-' }}<br />{{ s.row.lastObservedAt ? time(s.row.lastObservedAt) : '-' }}</template></el-table-column>
-        <el-table-column label="对账 / 未知订单" width="160"><template #default="s">{{ s.row.reconciliationStatus || '-' }} / {{ s.row.unknownOrders ?? '-' }}</template></el-table-column>
-        <el-table-column label="未解决告警" width="105"><template #default="s">{{ s.row.executionId ? s.row.unresolvedAlerts : '-' }}</template></el-table-column>
-        <el-table-column label="样本情况" width="155"><template #default="s">{{ s.row.sampleState === 'NO_READABLE_TELEMETRY' ? '无可读观测' : s.row.sampleState === 'NO_CLOSED_TRADES' ? '尚无已平仓成交' : '有成交，待复盘' }}</template></el-table-column>
-      </el-table>
-      <p class="text-gray-500">这是保留快照的历史摘要，不调用交易所或启动容器。历史执行停止后数据不会继续更新；快照保留清理可能缩短可见区间。未读取到遥测时收益显示为空，不按零收益填补。</p>
-    </template>
-  </ContentWrap>
-
-  <el-dialog v-model="reviewVisible" title="评审与模拟盘准备" width="80%">
+  <el-dialog v-model="reviewVisible" title="回看结论与研究笔记" width="80%">
     <template v-if="activeBatch && activeRow">
       <p>{{ label(activeRow.configuration) }} · 版本 {{ activeRow.strategyVersionId }}</p>
       <p>{{ activeBatch.researchDraft.conclusion }}</p>
       <el-alert v-for="risk in activeBatch.researchDraft.risks" :key="risk" :title="risk" type="warning" :closable="false" class="mt-2" />
-      <el-table :data="activeBatch.paperAdmission.checks" class="mt-3"><el-table-column prop="label" label="模拟盘条件" /><el-table-column label="结果" width="80"><template #default="s">{{ s.row.passed ? '通过' : '待满足' }}</template></el-table-column><el-table-column prop="evidence" label="说明" min-width="260" /></el-table>
-      <el-input v-model="reviewComment" class="mt-3" maxlength="500" placeholder="填写研究结论与模拟盘准备意见" type="textarea" />
+      <p>这里记录你对历史结果的判断，保存笔记即可完成本次回看；不会创建模拟盘或运行交易。</p>
+      <el-input v-model="reviewComment" class="mt-3" maxlength="500" placeholder="写下你对收益、回撤、成交次数和成本的判断" type="textarea" />
       <div class="mt-3">
-        <el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!canPrepare" :loading="acting" @click="preparePaper">接受评审并创建模拟会话</el-button>
-        <el-button v-hasPermi="['quant:backtest:create']" type="danger" plain :disabled="!activeBatch.terminal" :loading="acting" @click="rejectReview">拒绝方案</el-button>
-        <el-button @click="router.push('/quant/backtest')">进入模拟盘审批与执行</el-button>
-        <el-button @click="router.push('/quant/operations')">运行面板</el-button>
+        <el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!activeBatch.terminal" :loading="acting" @click="acceptResearch">保存：保留这个方案</el-button>
+        <el-button v-hasPermi="['quant:backtest:create']" type="danger" plain :disabled="!activeBatch.terminal" :loading="acting" @click="rejectReview">保存：暂不采用</el-button>
+        <el-button @click="router.push('/quant/backtest')">查看单次回看和买卖记录</el-button>
       </div>
-      <el-table :data="activeBatch.reviews" class="mt-3"><el-table-column prop="decision" label="评审决定" /><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ time(s.row.createdAt) }}</template></el-table-column></el-table>
+      <el-table :data="activeBatch.reviews" class="mt-3"><el-table-column label="回看判断"><template #default="s">{{ s.row.decision === 'ACCEPTED' ? '保留研究' : '暂不采用' }}</template></el-table-column><el-table-column prop="comment" label="意见" /><el-table-column label="时间"><template #default="s">{{ time(s.row.createdAt) }}</template></el-table-column></el-table>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
+import HistoryGuide from '../HistoryGuide.vue'
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import type { EChartsOption } from 'echarts'
 import { assessCandidates, type CandidateAssessment } from '@/api/quant/experiments'
-import { getCostSensitivity, type CostSensitivity, getPaperExperimentReview, type PaperExperimentReview, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
-import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, reviewPaperAdmission, createPaperSession, strategyConfigurationLabel, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
+import { getCostSensitivity, type CostSensitivity, createStrategyExperiment, listStrategyExperiments, getStrategyExperiment, type StrategyExperiment, type StrategyExperimentResult, type ExperimentRow } from '@/api/quant/experiments'
+import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets, createStrategyVersion, getOptimization, reviewOptimization, strategyConfigurationLabel, type StrategyVersion, type ParameterSet, type DatasetQuality, type OptimizationResult } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantExperiments' })
 const router = useRouter()
@@ -176,8 +155,6 @@ function exportAssessment() {
 }
 const enabled = ref(false), loading = ref(false), submitting = ref(false), presetLoading = ref(false), acting = ref(false)
 const errorMessage = ref(''), reviewVisible = ref(false), reviewComment = ref('')
-const paperReview = ref<PaperExperimentReview>()
-const paperReviewError = ref('')
 const costs = ref<CostSensitivity>(), costLoading = ref(false), costError = ref('')
 const costAssumptions = reactive({ feeBps: 10, slippageBps: 5 })
 let costRequest = 0
@@ -202,8 +179,6 @@ const activeBatch = ref<OptimizationResult>(), activeRow = ref<ExperimentRow>()
 let pendingRequest: { signature: string; key: string } | undefined
 let timer: number | undefined
 let disposed = false
-let reviewParameterId = ''
-const canPrepare = computed(() => Boolean(activeBatch.value?.terminal && activeBatch.value.paperAdmission.checks.filter(c => c.id !== 'RESEARCH_ACCEPTED').every(c => c.passed)))
 const chartRows = computed(() => result.value?.rows.filter(row => row.validationReturn != null) || [])
 const comparisonOptions = computed<EChartsOption>(() => ({
   tooltip: { trigger: 'axis' }, legend: { data: ['验证收益 %', '验证回撤 %'] },
@@ -216,30 +191,18 @@ const comparisonOptions = computed<EChartsOption>(() => ({
   ]
 }))
 const parameterSummary = computed(() => {
-  try { const p = JSON.parse(result.value?.parametersJson || '{}'); return `初始 ${p.startingBalance} USDT / 单笔 ${p.stakeAmount} USDT / 单边费率 ${p.fee}` }
+  try { const p = JSON.parse(result.value?.parametersJson || '{}'); return `初始 ${p.startingBalance} USDT / 单笔 ${p.stakeAmount} USDT / 每次手续费 ${(Number(p.fee) * 100).toFixed(2)}%` }
   catch { return '资金参数待加载' }
 })
 const label = strategyConfigurationLabel
-function parameterLabel(p: ParameterSet) { try { const v = JSON.parse(p.parametersJson); return `${v.startingBalance} USDT / 单笔 ${v.stakeAmount} / 费率 ${v.fee}` } catch { return p.id } }
+function parameterLabel(p: ParameterSet) { try { const v = JSON.parse(p.parametersJson); return `${v.startingBalance} USDT / 单笔 ${v.stakeAmount} / 手续费 ${(Number(v.fee) * 100).toFixed(2)}%` } catch { return p.id } }
 function percent(value?: number | null) { return value == null ? '-' : `${(Number(value) * 100).toFixed(3)}%` }
 function time(value: number) { return new Date(value).toLocaleString() }
+function taskStatus(status: string) { return ({ QUEUED: '排队中', RUNNING: '计算中', SUCCEEDED: '已完成', FAILED: '计算失败' } as Record<string, string>)[status] || status }
 function stage(row: ExperimentRow) {
-  if (row.paperExecutionStatus) return `模拟盘 ${row.paperExecutionStatus}`
-  if (row.paperSessionStatus) return `模拟会话 ${row.paperSessionStatus}`
-  if (row.paperEligible) return '可准备模拟盘'
-  if (row.researchDecision === 'REJECTED') return '方案已拒绝'
-  return row.researchDecision === 'ACCEPTED' ? '已评审，条件待满足' : '待评审'
-}
-async function loadPaperReview(id: string) {
-  if (costs.value?.experimentId !== id) { costs.value = undefined; costError.value = ''; ++costRequest; costLoading.value = false }
-  try { paperReview.value = await getPaperExperimentReview(id); paperReviewError.value = '' }
-  catch { paperReview.value = undefined; paperReviewError.value = 'SIMULATION_REVIEW_UNAVAILABLE' }
-}
-function exportPaperReview() {
-  if (!paperReview.value) return
-  const blob = new Blob([JSON.stringify(paperReview.value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob), a = document.createElement('a')
-  a.href = url; a.download = `paper-review-${paperReview.value.experimentId}.json`; a.click(); URL.revokeObjectURL(url)
+  if (row.trainStatus !== 'SUCCEEDED' || row.validationStatus !== 'SUCCEEDED') return '先等待两段历史计算完成'
+  if (row.researchDecision === 'REJECTED') return '已记录：暂不采用'
+  return row.researchDecision === 'ACCEPTED' ? '已记录：保留研究' : '已完成，查看回看结论'
 }
 async function refresh() {
   if (loading.value) return
@@ -248,7 +211,7 @@ async function refresh() {
     const list = await listStrategyExperiments()
     const detail = result.value ? await getStrategyExperiment(result.value.id) : undefined
     experiments.value = list
-    if (detail) { result.value = detail; await loadPaperReview(detail.id) }
+    if (detail) result.value = detail
     errorMessage.value = ''
   } catch { errorMessage.value = '工作台刷新失败；已有结果可能不是最新数据，请重试。' }
   finally { loading.value = false }
@@ -256,7 +219,7 @@ async function refresh() {
 async function selectExperiment(id: string) {
   if (loading.value) return
   loading.value = true
-  try { result.value = await getStrategyExperiment(id); await loadPaperReview(id); errorMessage.value = '' }
+  try { result.value = await getStrategyExperiment(id); costs.value = undefined; costError.value = ''; ++costRequest; errorMessage.value = '' }
   finally { loading.value = false }
 }
 async function addPresets() {
@@ -274,7 +237,7 @@ async function addPresets() {
 }
 async function submit() {
   if (form.strategyVersionIds.length < 2 || !form.parameterSetId || !form.datasetId || trainDates.value?.length !== 2 || !form.validationEnd) {
-    ElMessage.warning('请选择方案、资金参数、数据及完整训练/验证日期'); return
+    ElMessage.warning('请选择至少两个策略、一组金额、历史行情及前后两段日期'); return
   }
   const data = { strategyVersionIds: [...form.strategyVersionIds].sort(), parameterSetId: form.parameterSetId, datasetId: form.datasetId, trainStart: trainDates.value[0], splitDate: trainDates.value[1], validationEnd: form.validationEnd }
   const signature = JSON.stringify(data)
@@ -284,24 +247,20 @@ async function submit() {
     const id = await createStrategyExperiment({ ...data, requestKey: pendingRequest.key })
     result.value = await getStrategyExperiment(id)
     pendingRequest = undefined
-    await refresh(); ElMessage.success('多方案实验已进入持久回测队列')
+    await refresh(); ElMessage.success('比较任务已开始，请在下方查看结果')
   } finally { submitting.value = false }
 }
 async function openReview(row: ExperimentRow) {
-  activeBatch.value = await getOptimization(row.batchId); activeRow.value = row; reviewComment.value = ''; reviewParameterId = result.value?.parameterSetId || ''; reviewVisible.value = true
+  activeBatch.value = await getOptimization(row.batchId); activeRow.value = row; reviewComment.value = ''; reviewVisible.value = true
 }
-async function preparePaper() {
-  const batch = activeBatch.value, row = activeRow.value, comment = reviewComment.value.trim()
-  if (!batch || !row || !result.value || !comment) { ElMessage.warning('请填写评审意见'); return }
+async function acceptResearch() {
+  const batch = activeBatch.value, comment = reviewComment.value.trim()
+  if (!batch || !batch.terminal || !comment) { ElMessage.warning('请写下你的回看结论'); return }
   acting.value = true
   try {
     await reviewOptimization(batch.id, { decision: 'ACCEPTED', comment, evidenceHash: batch.researchDraft.evidenceSha256 })
-    const current = await getOptimization(batch.id); activeBatch.value = current
-    if (!current.paperAdmission.eligible) { ElMessage.warning('评审已保存，模拟盘条件尚未全部满足'); return }
-    await reviewPaperAdmission(batch.id, { decision: 'READY', comment, evidenceHash: current.paperAdmission.evidenceSha256 })
-    const id = await createPaperSession({ batchId: batch.id, parameterSetId: reviewParameterId })
     activeBatch.value = await getOptimization(batch.id); await refresh()
-    ElMessage.success(`待审批模拟会话已创建：${id}`)
+    ElMessage.success('回看结论已保存，没有启动模拟盘或交易')
   } finally { acting.value = false }
 }
 async function rejectReview() {

@@ -1,18 +1,19 @@
 <template>
   <el-collapse class="mt-3">
-    <el-collapse-item title="配置策略并保存新版本" name="configuration">
+    <el-collapse-item title="修改策略（可选，已有策略可直接使用）" name="configuration">
       <p>BTC/USDT 现货 · 1 小时。突破策略使用此前 N 根 K 线最高/最低价，排除当前 K 线；周期 2～120。保存后选中新版本，再提交回测；已有任务与版本保留原配置。</p>
+      <p>{{ form.template === 'EMA' ? '均线交叉：短期平均价格向上穿过长期平均价格时买入，向下穿过时卖出。' : '价格突破：价格突破此前买入参考时段的高点时买入，跌破卖出参考时段的低点时卖出。' }} 止损是允许下跌的比例，止盈是达到后尝试卖出的上涨比例。</p>
       <el-form :inline="true" @submit.prevent="save">
-        <el-form-item label="模板"><el-select v-model="form.template" style="width: 180px"><el-option label="EMA 交叉" value="EMA" /><el-option label="通道突破" value="CHANNEL_BREAKOUT" /></el-select></el-form-item>
-        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="入场通道"><el-input-number v-model="form.entryPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
-        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="退出通道"><el-input-number v-model="form.exitPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
-        <el-form-item v-if="form.template === 'EMA'" label="快 EMA"><el-input-number v-model="form.fastPeriod" :min="2" :max="119" :precision="0" /></el-form-item>
-        <el-form-item v-if="form.template === 'EMA'" label="慢 EMA"><el-input-number v-model="form.slowPeriod" :min="3" :max="120" :precision="0" /></el-form-item>
+        <el-form-item label="买卖规则"><el-select v-model="form.template" style="width: 180px"><el-option label="均线交叉（EMA）" value="EMA" /><el-option label="价格突破" value="CHANNEL_BREAKOUT" /></el-select></el-form-item>
+        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="买入参考小时数"><el-input-number v-model="form.entryPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
+        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="卖出参考小时数"><el-input-number v-model="form.exitPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
+        <el-form-item v-if="form.template === 'EMA'" label="短期均线小时数"><el-input-number v-model="form.fastPeriod" :min="2" :max="119" :precision="0" /></el-form-item>
+        <el-form-item v-if="form.template === 'EMA'" label="长期均线小时数"><el-input-number v-model="form.slowPeriod" :min="3" :max="120" :precision="0" /></el-form-item>
         <el-form-item label="止损 %"><el-input-number v-model="form.stopLossPercent" :min="0.1" :max="20" :step="0.1" :precision="4" /></el-form-item>
         <el-form-item label="止盈 %"><el-input-number v-model="form.takeProfitPercent" :min="0.1" :max="50" :step="0.1" :precision="4" /></el-form-item>
-        <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="saving" @click="save">保存并选择版本</el-button></el-form-item>
+        <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="saving" @click="save">保存为新策略并选中</el-button></el-form-item>
       </el-form>
-      <p>模拟盘沿用评审批次绑定的策略版本与参数集；EMA 和突破实盘均须绑定同版本回测与模拟证据、确认准入报告并通过资金门禁。保存配置不会改变已有会话。实盘止损止盈按已收盘 1h K 线判断，可能延迟至下一小时，不等同于引擎盘中撮合。</p>
+      <p>保存只会新增一份买卖规则，已有回看结果保留原规则。选择新策略后，点击“开始历史回看”重新计算即可。</p>
     </el-collapse-item>
   </el-collapse>
 </template>
