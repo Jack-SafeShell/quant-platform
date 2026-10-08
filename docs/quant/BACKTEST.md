@@ -680,4 +680,6 @@ POST /quant/backtest/strategy-experiment/assessment为只读研究接口（quant
 
 默认单体根45084、Java路径与父子关系核对、UP/okx-primary、paper/live/automation三开关false、全部实盘门禁HALTED、实盘运行会话/活动订单0；旧Binance历史订单仍3条、旧两条故障审计及RESOLVED状态保持。当前模拟PROCESS_EXITED告警1条OPEN保留，未无审计改写。binance-20-10已通过应用工具PAUSED，旧两项实盘自动化仍PAUSED；没有重启模拟、真实订单、凭据加载/转资或新增临时令牌文件。
 
-非秘密全量与SQLite核对在.runtime/quant/breakout-paper-summary-20261008.json，原阶段final保留FAILED和收尾成功事实，默认核对breakout-paper-default-final-20261008.json；原采样及日志保留。仅文档修改，无源码/配置/表结构改动，不在默认服务上重复构建；沿用141项回归、单体及前端已通过检查，本阶段补做全量只读统计、实际安全恢复和git diff --check。唯一下一任务为先复核运行环境退出原因，再决定同方案模拟重新观察，不新增功能或自动切换实盘。
+非秘密全量与SQLite核对在.runtime/quant/breakout-paper-summary-20261008.json，原阶段final保留FAILED和收尾成功事实，默认核对breakout-paper-default-final-20261008.json；原采样及日志保留。仅文档修改，无源码/配置/表结构改动，不在默认服务上重复构建；沿用141项回归、单体及前端已通过检查，本阶段补做全量只读统计、实际安全恢复和git diff --check。唯一下一任务按用户后续说明调整为原方案模拟观察，不再排查退出原因，不新增功能或自动切换实盘。
+
+用户后续说明（2026-10-08）：环境已能够长期运行，退出不是代码本身原因，并明确不用再查。已取消退出原因排查这一前置任务；历史FAILED、退出告警和NO_FILLS证据保留，不把该说明记为新的成交或盈利证据。本次仅更新说明，没有启动新执行或改动开关，下一使用任务为继续原突破20/10无凭据模拟成交观察。
