@@ -58,6 +58,7 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/026_live_account_reservation.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/027_live_portfolio.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/028_exchange_accounts.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/029_historical_segments.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -68,6 +69,81 @@ class QuantBacktestTest {
     StrategyExperimentService experiments() {
         return new StrategyExperimentService(new cn.iocoder.yudao.module.quant.dal.StrategyExperimentRepository(jdbc), repository,
                 new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc), repository, service), transactions);
+    }
+    HistoricalSegmentsService segments() {
+        return new HistoricalSegmentsService(new cn.iocoder.yudao.module.quant.dal.HistoricalSegmentsRepository(jdbc),repository,service,datasets,transactions);
+    }
+    cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest segmentsRequest(String key) {
+        return new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest(key,versionId,parameterSetId,"test","2025-01-11","2025-02-03",3);
+    }
+    @Test void segmentsCoverRangeExactlyWithoutOverlapAndValidateDates() {
+        var rows=HistoricalSegmentsService.windows("2025-01-11","2025-02-03",3);
+        assertEquals(List.of(7L,8L,8L),rows.stream().map(row->row.get("days")).toList());
+        assertEquals("2025-01-11",rows.getFirst().get("startDate"));assertEquals("2025-02-03",rows.getLast().get("endDate"));
+        for(int i=1;i<rows.size();i++) assertEquals(rows.get(i-1).get("endDate"),rows.get(i).get("startDate"));
+        assertThrows(IllegalArgumentException.class,()->HistoricalSegmentsService.windows("2025-02-30","2025-03-30",2));
+        assertThrows(IllegalArgumentException.class,()->HistoricalSegmentsService.windows("2025-01-01","2025-01-21",3));
+        assertThrows(IllegalArgumentException.class,()->HistoricalSegmentsService.windows("2025-01-01","2026-01-03",2));
+        assertThrows(IllegalArgumentException.class,()->HistoricalSegmentsService.windows("2025-01-01","2025-04-01",6));
+    }
+    @Test void segmentsPreviewDoesNotEnqueueAndCreateIsIdempotentAndScoped() throws Exception {
+        var s=segments();var r=segmentsRequest("segments");var preview=s.preview(1,10,r);
+        assertEquals("1h",preview.get("timeframe"));assertEquals(0,repository.pending(1,10));
+        String id=s.create(1,10,r);assertEquals(id,s.create(1,10,r));assertEquals(3,repository.pending(1,10));
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest("segments",versionId,parameterSetId,"test","2025-01-11","2025-02-02",3)));
+        assertEquals(1,s.list(1,10).size());assertTrue(s.list(2,10).isEmpty());assertTrue(s.list(1,11).isEmpty());
+        assertThrows(IllegalArgumentException.class,()->s.get(2,10,id));assertThrows(IllegalArgumentException.class,()->s.get(1,11,id));
+        assertThrows(IllegalArgumentException.class,()->s.preview(2,10,r));
+        assertEquals(false,s.get(1,10,id).get("terminal"));assertFalse(s.get(1,10,id).containsKey("summary"));
+    }
+    @Test void segmentsRollbackAllTasksWhenLaterEnqueueFails() {
+        BacktestService failing=new BacktestService(repository,datasets,properties,transactions) {
+            int count;
+            @Override public String create(long tenant,long owner,BacktestRequest r)throws Exception {
+                String id=super.create(tenant,owner,r);if(++count==2) throw new IllegalArgumentException("fixture failure");return id;
+            }
+        };
+        var s=new HistoricalSegmentsService(new cn.iocoder.yudao.module.quant.dal.HistoricalSegmentsRepository(jdbc),repository,failing,datasets,transactions);
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,segmentsRequest("rollback")));
+        assertEquals(0,repository.pending(1,10));assertTrue(s.list(1,10).isEmpty());
+    }
+    @Test void segmentsRejectCapacityAndInvalidDatasetWithoutPartialRecords() throws Exception {
+        var s=segments();for(int i=0;i<8;i++) service.create(1,10,request("capacity-"+i));
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,segmentsRequest("capacity")));
+        assertEquals(8,repository.pending(1,10));assertTrue(s.list(1,10).isEmpty());
+        assertThrows(Exception.class,()->s.preview(1,10,new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest("bad",versionId,parameterSetId,"missing","2025-01-11","2025-02-03",3)));
+    }
+    @SuppressWarnings("unchecked")
+    @Test void segmentsAggregateOnlyCompleteEvidenceAndDistinguishNoFills() throws Exception {
+        var s=segments();String id=s.create(1,10,segmentsRequest("metrics"));var rows=(List<Map<String,Object>>)s.get(1,10,id).get("rows");
+        double[] returns={-0.02,0,0.03};int[] counts={3,0,6};
+        for(int i=0;i<rows.size();i++) {String task=(String)rows.get(i).get("taskId");repository.claim(task);repository.complete(task,new BacktestEngine.Output("fixture",JsonUtils.toJsonString(Map.of("totalTrades",counts[i],"netProfit",returns[i]*1000,"returnRatio",returns[i],"maxDrawdownRatio",0.04)),"artifact-"+i));}
+        var result=s.get(1,10,id);var summary=(Map<String,Object>)result.get("summary");
+        assertEquals("SUCCEEDED",result.get("status"));assertEquals(1L,summary.get("positiveWindows"));assertEquals(1L,summary.get("noFillWindows"));
+        assertEquals(0,((BigDecimal)summary.get("worstReturn")).compareTo(new BigDecimal("-0.02")));assertEquals(0,summary.get("minTrades"));
+        assertEquals(false,result.get("autoApplied"));assertEquals(false,result.get("executionAllowed"));assertEquals(result.get("evidenceHash"),s.get(1,10,id).get("evidenceHash"));
+        assertFalse(summary.containsKey("totalReturn"));
+        jdbc.update("UPDATE quant_backtest_task SET dataset_hash='tampered' WHERE id=?",rows.getFirst().get("taskId"));
+        var mismatch=s.get(1,10,id);assertEquals(true,mismatch.get("terminal"));assertFalse(mismatch.containsKey("summary"));
+        assertEquals("EVIDENCE_MISMATCH",((List<Map<String,Object>>)mismatch.get("rows")).getFirst().get("status"));
+        assertNotEquals(result.get("evidenceHash"),mismatch.get("evidenceHash"));
+    }
+    @SuppressWarnings("unchecked")
+    @Test void segmentsFailedAndMissingMetricsNeverBecomeZeroReturns() throws Exception {
+        var s=segments();String id=s.create(1,10,segmentsRequest("failed"));var rows=(List<Map<String,Object>>)s.get(1,10,id).get("rows");
+        for(var row:rows) {String task=(String)row.get("taskId");repository.claim(task);if(row==rows.getFirst()) repository.fail(task,"fixture failure");else repository.complete(task,new BacktestEngine.Output("fixture","{}","artifact"));}
+        var result=s.get(1,10,id);assertEquals(true,result.get("terminal"));assertEquals("INCOMPLETE",result.get("status"));assertFalse(result.containsKey("summary"));
+        assertTrue(((List<Map<String,Object>>)result.get("rows")).stream().allMatch(row->!row.containsKey("returnRatio")));
+    }
+    @Test void segmentsFourHourPreviewUses240CandlesAndBindsMarket() throws Exception {
+        Path dir=root.resolve("datasets/four-hour");Files.createDirectories(dir);var candles=new ArrayList<List<Number>>();
+        long begin=LocalDate.parse("2024-12-01").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+        for(int i=0;i<400;i++) candles.add(List.of(begin+i*14400000L,100,105,95,101,10));
+        byte[] bytes=JsonUtils.toJsonByte(candles);Files.write(dir.resolve("ETH_USDT-4h.json"),bytes);
+        Files.writeString(dir.resolve("manifest.json"),JsonUtils.toJsonString(Map.of("exchange","binance","pair","ETH/USDT","timeframe","4h","tradingMode","spot","sha256",DatasetRegistry.hash(bytes),"source","fixture")));
+        var r=new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest("four",versionId,parameterSetId,"four-hour","2025-01-11","2025-02-03",3);
+        var s=segments();assertEquals("4h",s.preview(1,10,r).get("timeframe"));String id=s.create(1,10,r);assertEquals("ETH/USDT",((Map<?,?>)s.get(1,10,id).get("plan")).get("pair"));
+        assertThrows(Exception.class,()->s.preview(1,10,new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest("early",versionId,parameterSetId,"four-hour","2025-01-09","2025-02-03",3)));
     }
     cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest experimentRequest(String key, List<String> versions, String dataset) {
         return new cn.iocoder.yudao.module.quant.api.backtest.StrategyExperimentRequest(key, versions, parameterSetId, dataset, "2025-01-11", "2025-01-18", "2025-01-25");

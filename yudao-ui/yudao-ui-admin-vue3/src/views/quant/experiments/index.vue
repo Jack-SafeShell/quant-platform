@@ -1,5 +1,6 @@
 <template>
   <HistoryGuide />
+  <SegmentedHistoryPanel :versions="versions" :parameters="parameters" :datasets="datasets" :enabled="enabled" />
   <ContentWrap title="用同一段历史比较多个策略">
     <p>用相同资金、费率和数据比较候选方案，查看历史赚亏与买卖记录。收益、回撤和执行表现共同决定后续选择。</p>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />
@@ -122,6 +123,7 @@
 <script setup lang="ts">
 import HistoryGuide from '../HistoryGuide.vue'
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
+import SegmentedHistoryPanel from './SegmentedHistoryPanel.vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
