@@ -38,6 +38,21 @@ export const listBacktests = (): Promise<BacktestTask[]> =>
   request.get({ url: '/quant/backtest/list' })
 export const getBacktest = (id: string): Promise<BacktestTask> =>
   request.get({ url: '/quant/backtest/get', params: { id } })
+export interface HistoricalTrade {
+  number: number; openedAt: number; closedAt: number; amount: number
+  openPrice: number; closePrice: number; openFee: number; closeFee: number; netProfit: number; exitReason: string
+}
+export interface HistoricalReview {
+  available: boolean; reason?: string; valuation?: string
+  candles: number[][]
+  points: { time: number; equity: number; buyHold: number; drawdownRatio: number }[]
+  trades: HistoricalTrade[]
+  months: { month: string; realizedNetProfit: number; realizedReturnRatio: number; trades: number }[]
+  summary: { startingBalance: number; netProfit: number; finalEquity: number; buyHoldNetProfit: number
+    buyHoldReturnRatio: number; excessReturnRatio: number; hourCloseMaxDrawdownRatio: number; fee: number }
+}
+export const getHistoricalReview = (id: string): Promise<HistoricalReview> =>
+  request.get({ url: '/quant/backtest/review', params: { id } })
 export const exportBacktestReport = (id: string, format: 'md' | 'json'): Promise<Blob> =>
   request.download({ url: '/quant/backtest/report', params: { id, format } })
 export const getCapabilities = (): Promise<{ enabled: boolean; executionEnabled: boolean; liveExecutionEnabled: boolean; liveAutomationEnabled: boolean; riskPolicyVersion: string; snapshotRetentionDays: number }> =>

@@ -46,6 +46,21 @@ public class DatasetRegistry {
             }).toList();
         }
     }
+    public List<List<Number>> readCandles(Dataset dataset, long from, long to) throws Exception {
+        Path file = dataset.directory().resolve("BTC_USDT-1h.json").toRealPath();
+        if (!file.startsWith(dataset.directory()) || Files.size(file) > 10_000_000)
+            throw new IllegalArgumentException("行情文件路径或大小无效");
+        byte[] bytes = Files.readAllBytes(file);
+        if (!hash(bytes).equals(dataset.sha256())) throw new IllegalArgumentException("行情摘要已变化");
+        var rows = JsonUtils.getObjectMapper().readTree(bytes);
+        List<List<Number>> result = new ArrayList<>();
+        for (var row : rows) {
+            long time = row.get(0).asLong();
+            if (time >= from && time < to) result.add(List.of(time, row.get(1).decimalValue(),
+                    row.get(2).decimalValue(), row.get(3).decimalValue(), row.get(4).decimalValue(), row.get(5).decimalValue()));
+        }
+        return result;
+    }
     private DatasetQuality inspect(Path dir) throws Exception {
         String id = dir.getFileName().toString();
         Path manifest = dir.resolve("manifest.json").toRealPath();

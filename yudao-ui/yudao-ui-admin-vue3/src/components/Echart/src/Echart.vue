@@ -104,6 +104,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  echartRef?.dispose()
+  echartRef = null
   window.removeEventListener('resize', resizeHandler)
   unref(contentEl) &&
     (unref(contentEl) as Element).removeEventListener('transitionend', contentResizeHandler)

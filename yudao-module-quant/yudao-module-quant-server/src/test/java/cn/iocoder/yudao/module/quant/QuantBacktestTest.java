@@ -212,6 +212,22 @@ class QuantBacktestTest {
         var otherRequest = new BacktestRequest("same", otherVersion, otherParameter, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         assertNotEquals(id, service.create(2, 10, otherRequest));
     }
+    @Test void historicalReviewIsOwnedAndUsesOriginalData() throws Exception {
+        String id=service.create(1,10,request("historical-review"));
+        var reviews=new BacktestReviewService(service,datasets);
+        assertEquals("TASK_NOT_COMPLETED",reviews.get(1,10,id).get("reason"));
+        assertThrows(IllegalArgumentException.class,()->reviews.get(2,10,id));
+        assertThrows(IllegalArgumentException.class,()->reviews.get(1,11,id));
+        assertTrue(repository.claim(id));
+        repository.complete(id,new BacktestEngine.Output("test","{\"totalTrades\":0,\"netProfit\":0,\"returnRatio\":0,\"trades\":[]}","review-artifact"));
+        assertEquals(true,reviews.get(1,10,id).get("available"));
+        assertEquals(48,((List<?>)reviews.get(1,10,id).get("candles")).size());
+        Path file=root.resolve("datasets/test/BTC_USDT-1h.json");
+        byte[] changed=(Files.readString(file)+" ").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        Files.write(file,changed);
+        Files.writeString(root.resolve("datasets/test/manifest.json"),JsonUtils.toJsonString(Map.of("exchange","okx","pair","BTC/USDT","timeframe","1h","tradingMode","spot","sha256",DatasetRegistry.hash(changed),"source","changed test fixture")));
+        assertEquals("DATASET_CHANGED",reviews.get(1,10,id).get("reason"));
+    }
     @Test void durableQueueCompletesExactlyOnceAndPersistsResult() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         BacktestEngine engine = new BacktestEngine() {
