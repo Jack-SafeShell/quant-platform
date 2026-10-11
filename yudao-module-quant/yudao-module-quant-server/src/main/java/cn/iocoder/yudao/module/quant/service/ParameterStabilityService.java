@@ -29,8 +29,10 @@ public class ParameterStabilityService {
     private static BreakoutStrategyRequest breakout(Map<String,Object> c){return new BreakoutStrategyRequest(number(c,"entryPeriod"),number(c,"exitPeriod"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static RsiStrategyRequest rsi(Map<String,Object> c){return new RsiStrategyRequest(number(c,"rsiPeriod"),number(c,"entryThreshold"),number(c,"exitThreshold"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static BollingerRsiStrategyRequest bollinger(Map<String,Object> c){return new BollingerRsiStrategyRequest(number(c,"bandPeriod"),decimal(c,"bandDeviation"),number(c,"rsiPeriod"),number(c,"rsiCeiling"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
+    private static EmaAdxStrategyRequest emaAdx(Map<String,Object> c){return new EmaAdxStrategyRequest(number(c,"fastPeriod"),number(c,"slowPeriod"),number(c,"adxPeriod"),number(c,"adxThreshold"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static String render(Map<String,Object> c)throws Exception{
         return switch(Objects.toString(c.get("template"),"EMA")){
+            case "EMA_ADX" -> EmaAdxStrategyTemplate.render(emaAdx(c));
             case "BOLLINGER_RSI" -> BollingerRsiStrategyTemplate.render(bollinger(c));
             case "RSI_REVERSION" -> RsiStrategyTemplate.render(rsi(c));
             case "CHANNEL_BREAKOUT" -> BreakoutStrategyTemplate.render(breakout(c));
@@ -42,6 +44,7 @@ public class ParameterStabilityService {
         var base=StrategyTemplates.readConfiguration(source);
         if(base==null || step<1 || step>10) throw new IllegalArgumentException("请选择受控历史策略及1～10的调整幅度");
         var keys=switch(Objects.toString(base.get("template"),"EMA")){
+            case "EMA_ADX" -> List.of("fastPeriod","slowPeriod","adxPeriod","adxThreshold");
             case "BOLLINGER_RSI" -> List.of("bandPeriod","rsiPeriod","rsiCeiling");
             case "RSI_REVERSION" -> List.of("rsiPeriod","entryThreshold","exitThreshold");
             case "CHANNEL_BREAKOUT" -> List.of("entryPeriod","exitPeriod");
@@ -82,6 +85,7 @@ public class ParameterStabilityService {
                         var c=(Map<String,Object>)v.get("configuration");String version;
                         if("BASE".equals(v.get("role")))version=r.strategyVersionId();
                         else version=switch(Objects.toString(c.get("template"),"EMA")){
+                            case "EMA_ADX" -> backtests.createEmaAdxVersion(tenant,owner,emaAdx(c));
                             case "BOLLINGER_RSI" -> backtests.createBollingerRsiVersion(tenant,owner,bollinger(c));
                             case "RSI_REVERSION" -> backtests.createRsiVersion(tenant,owner,rsi(c));
                             case "CHANNEL_BREAKOUT" -> backtests.createBreakoutVersion(tenant,owner,breakout(c));
@@ -138,7 +142,7 @@ public class ParameterStabilityService {
             BigDecimal base=(BigDecimal)rows.get(1).get("returnRatio");for(var row:rows)row.put("returnDelta",((BigDecimal)row.get("returnRatio")).subtract(base));
             result.put("summary",summary(rows));
         }
-        result.put("limitations",List.of("只改变一个周期或RSI阈值；止损、止盈、资金、费用及行情日期保持相同，每组重置本金。", "固定下调/原值/上调三组，不排序、不自动选择参数或启动交易。", "每组至少5笔成交只用于标记样本是否不足，不代表统计显著或稳定盈利；单一历史窗口不足以证明未来表现。", "收益差按本金收益率计算，回撤沿用原历史引擎口径；未重跑压力成本，不代表持仓低点回撤。"));
+        result.put("limitations",List.of(("EMA_ADX".equals(((Map<?,?>)variants.get(1).get("configuration")).get("template"))?"只改变一个周期或ADX强度刻度；":"只改变一个周期或RSI阈值；")+"止损、止盈、资金、费用及行情日期保持相同，每组重置本金。", "固定下调/原值/上调三组，不排序、不自动选择参数或启动交易。", "每组至少5笔成交只用于标记样本是否不足，不代表统计显著或稳定盈利；单一历史窗口不足以证明未来表现。", "收益差按本金收益率计算，回撤沿用原历史引擎口径；未重跑压力成本，不代表持仓低点回撤。"));
         result.put("autoApplied",false);result.put("executionAllowed",false);result.put("evidenceHashVersion","SORTED_JSON_V1");result.put("evidenceHash",HistoricalEvidence.hash(result));return result;
     }
     public static Map<String,Object> summary(List<Map<String,Object>> rows){

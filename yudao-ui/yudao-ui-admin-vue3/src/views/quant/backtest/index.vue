@@ -1,7 +1,7 @@
 <template>
   <HistoryGuide />
   <ContentWrap title="设置一次历史回看">
-    <el-alert title="EMA均线 / 价格突破 / RSI低位回升 · BTC、ETH现货 · 1小时 / 4小时历史回看" type="info" :closable="false" />
+    <el-alert title="数字货币策略历史回看 · BTC、ETH现货 · 1小时 / 4小时 · 可在下方修改买卖规则" type="info" :closable="false" />
     <p class="text-gray-500">这里只计算过去的买卖结果。直接选择已有策略即可；想调整买卖规则时，再展开“修改策略”。</p>
     <el-alert v-if="!enabled" title="暂时无法开始回看，请联系维护人员检查回测服务；已有结果仍可查看。" type="warning" :closable="false" />
     <StrategyConfigEditor :versions="strategyVersions" :selected-version-id="form.strategyVersionId" @created="selectCreatedStrategy" />

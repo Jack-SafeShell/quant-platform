@@ -102,6 +102,12 @@ public class BacktestService {
             return transaction.execute(status->repository.ensureVersion(tenant,owner,"QuantBollingerRsi",source,hash));
         }
     }
+    public String createEmaAdxVersion(long tenant,long owner,cn.iocoder.yudao.module.quant.api.backtest.EmaAdxStrategyRequest request)throws Exception {
+        String source=EmaAdxStrategyTemplate.render(request),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        synchronized(VERSION_LOCKS[Math.floorMod(Objects.hash(tenant,owner),VERSION_LOCKS.length)]) {
+            return transaction.execute(status->repository.ensureVersion(tenant,owner,"QuantEmaAdx",source,hash));
+        }
+    }
     private String ensureStrategyVersion(long tenant, long owner, String source, String hash) {
         synchronized (VERSION_LOCKS[Math.floorMod(Objects.hash(tenant, owner), VERSION_LOCKS.length)]) {
             return transaction.execute(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));

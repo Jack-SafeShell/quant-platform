@@ -39,7 +39,8 @@ import java.util.*;
   var version=backtests.findVersion(t,o,(String)batch.get("strategy_version_id"));
   boolean historicalStrategy=version!=null&&RsiStrategyTemplate.readConfiguration((String)version.get("sourceCode"))!=null;
   boolean bollingerStrategy=version!=null&&BollingerRsiStrategyTemplate.readConfiguration((String)version.get("sourceCode"))!=null;
-  batch.put("terminal",terminal);batch.put("ranking",ranking);batch.put("autoSelected",false);var draft=draft(batch,ranking,terminal);batch.put("researchDraft",draft);var reviews=repo.reviews(t,o,id);batch.put("reviews",reviews);batch.put("paperAdmission",admission(id,terminal,ranking,draft,reviews,repo.admissionReviews(t,o,id),executionMarket,historicalStrategy,bollingerStrategy));return batch;
+  boolean emaAdxStrategy=version!=null&&EmaAdxStrategyTemplate.readConfiguration((String)version.get("sourceCode"))!=null;
+  batch.put("terminal",terminal);batch.put("ranking",ranking);batch.put("autoSelected",false);var draft=draft(batch,ranking,terminal);batch.put("researchDraft",draft);var reviews=repo.reviews(t,o,id);batch.put("reviews",reviews);batch.put("paperAdmission",admission(id,terminal,ranking,draft,reviews,repo.admissionReviews(t,o,id),executionMarket,historicalStrategy,bollingerStrategy,emaAdxStrategy));return batch;
  }
  public String review(long tenant,long owner,String id,ResearchReviewRequest request){var batch=get(tenant,owner,id);if(!Boolean.TRUE.equals(batch.get("terminal")))throw new IllegalArgumentException("批次未结束，不能评审");var draft=(Map<?,?>)batch.get("researchDraft");if(!request.evidenceHash().equals(draft.get("evidenceSha256")))throw new IllegalArgumentException("研究证据已变化，请刷新后重新评审");repo.review(id,owner,request.decision(),request.comment(),request.evidenceHash());return id;}
  public String reviewAdmission(long tenant,long owner,String id,PaperAdmissionReviewRequest request){var batch=get(tenant,owner,id);var admission=(Map<?,?>)batch.get("paperAdmission");if(!request.evidenceHash().equals(admission.get("evidenceSha256")))throw new IllegalArgumentException("准入证据已变化，请刷新后重新确认");if("READY".equals(request.decision())&&!Boolean.TRUE.equals(admission.get("eligible")))throw new IllegalArgumentException("准入检查未全部通过，不能确认 READY");repo.admissionReview(id,owner,request.decision(),request.comment(),request.evidenceHash());return id;}
@@ -51,7 +52,7 @@ import java.util.*;
   else {long failed=ranking.stream().filter(x->!x.containsKey("validationReturn")).count();if(failed>0)risks.add(failed+" 组参数存在失败任务，排序不完整。");var valid=ranking.stream().filter(x->x.containsKey("validationReturn")).toList();if(valid.isEmpty())conclusion="没有同时完成训练和验证的参数组，不能形成结论。";else {var best=valid.getFirst();double validation=((Number)best.get("validationReturn")).doubleValue(),gap=Math.abs(((Number)best.get("overfitGap")).doubleValue());int trades=((Number)best.get("validationTrades")).intValue();conclusion="验证集排名第一的参数集为 "+best.get("parameterSetId")+"，验证收益率为 "+validation+"；该排名仅用于后续人工复核。";if(validation<=0)risks.add("最高验证收益率仍不为正。");if(gap>0.02)risks.add("训练与验证收益率差超过 2 个百分点，存在明显过拟合迹象。");if(trades<10)risks.add("验证集成交少于 10 笔，样本量不足。");}}
   risks.add("仅覆盖单一数据集、交易对和时间切分，不能代表未来表现。");return Map.of("ruleVersion","quant-research-rules/v1","evidenceSha256",hash,"conclusion",conclusion,"risks",risks,"manualChecks",List.of("核对失败任务与日志","检查手续费、滑点和数据覆盖","更换未见数据区间复验"),"autoApplied",false);
  }
- private static Map<String,Object> admission(String batchId,boolean terminal,List<Map<String,Object>> ranking,Map<String,Object> draft,List<Map<String,Object>> reviews,List<Map<String,Object>> admissionReviews,boolean executionMarket,boolean historicalStrategy,boolean bollingerStrategy){
+ private static Map<String,Object> admission(String batchId,boolean terminal,List<Map<String,Object>> ranking,Map<String,Object> draft,List<Map<String,Object>> reviews,List<Map<String,Object>> admissionReviews,boolean executionMarket,boolean historicalStrategy,boolean bollingerStrategy,boolean emaAdxStrategy){
   var valid=ranking.stream().filter(x->x.containsKey("validationReturn")).toList();var best=valid.isEmpty()?null:valid.getFirst();
   boolean complete=terminal&&!ranking.isEmpty()&&valid.size()==ranking.size();
   boolean accepted=false;for(var review:reviews)if(Objects.equals(draft.get("evidenceSha256"),review.get("evidenceHash")))accepted="ACCEPTED".equals(review.get("decision"));
@@ -59,6 +60,7 @@ import java.util.*;
   // Preserve old BTC/1h evidence hashes; new historical contexts cannot enter the old execution adapters.
   if(!executionMarket)check(checks,"HISTORICAL_MARKET_ONLY","当前市场仅支持历史研究",false,"ETH 或4小时结果不适用于既有 BTC/USDT 1h 运行准入");
   if(historicalStrategy)check(checks,"HISTORICAL_STRATEGY_ONLY","当前策略仅支持历史研究",false,"RSI模板不进入模拟或实盘执行准入");
+  if(emaAdxStrategy)check(checks,"HISTORICAL_STRATEGY_ONLY","当前策略仅支持历史研究",false,"EMA＋ADX模板不进入模拟或实盘执行准入");
   if(bollingerStrategy)check(checks,"HISTORICAL_STRATEGY_ONLY","当前策略仅支持历史研究",false,"布林带＋RSI模板不进入模拟或实盘执行准入");
   check(checks,"BATCH_TERMINAL","批次任务全部结束",terminal,terminal?"全部成员已结束":"仍有未结束任务");
   check(checks,"VALIDATION_COMPLETE","训练与验证结果完整",complete,complete?"所有参数组均成功":"存在失败或缺失结果");

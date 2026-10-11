@@ -2,8 +2,8 @@ import request from '@/config/axios'
 import type { StrategyConfiguration } from './backtest'
 import type { SegmentPlan } from './segments'
 
-export const parameterLabels: Record<string, string> = { fastPeriod: 'EMA短期K线数', slowPeriod: 'EMA长期K线数', entryPeriod: '突破买入参考K线数', exitPeriod: '突破卖出参考K线数', rsiPeriod: 'RSI参考K线数', entryThreshold: 'RSI买入线', exitThreshold: 'RSI卖出线', bandPeriod: '布林参考K线数', rsiCeiling: 'RSI买入上限' }
-export const stabilityParameters = (c?: StrategyConfiguration | null): string[] => !c ? [] : 'bandPeriod' in c ? ['bandPeriod', 'rsiPeriod', 'rsiCeiling'] : 'rsiPeriod' in c ? ['rsiPeriod', 'entryThreshold', 'exitThreshold'] : 'entryPeriod' in c ? ['entryPeriod', 'exitPeriod'] : ['fastPeriod', 'slowPeriod']
+export const parameterLabels: Record<string, string> = { fastPeriod: 'EMA短期K线数', slowPeriod: 'EMA长期K线数', entryPeriod: '突破买入参考K线数', exitPeriod: '突破卖出参考K线数', rsiPeriod: 'RSI参考K线数', entryThreshold: 'RSI买入线', exitThreshold: 'RSI卖出线', bandPeriod: '布林参考K线数', rsiCeiling: 'RSI买入上限', adxPeriod: 'ADX参考K线数', adxThreshold: 'ADX最低趋势强度' }
+export const stabilityParameters = (c?: StrategyConfiguration | null): string[] => !c ? [] : 'adxPeriod' in c ? ['fastPeriod', 'slowPeriod', 'adxPeriod', 'adxThreshold'] : 'bandPeriod' in c ? ['bandPeriod', 'rsiPeriod', 'rsiCeiling'] : 'rsiPeriod' in c ? ['rsiPeriod', 'entryThreshold', 'exitThreshold'] : 'entryPeriod' in c ? ['entryPeriod', 'exitPeriod'] : ['fastPeriod', 'slowPeriod']
 export interface StabilityRequest {
   requestKey: string; strategyVersionId: string; parameterSetId: string; datasetId: string;
   startDate: string; endDate: string; parameter: string; step: number

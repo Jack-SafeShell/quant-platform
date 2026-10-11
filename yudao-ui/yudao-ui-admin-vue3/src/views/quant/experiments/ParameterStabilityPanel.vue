@@ -55,7 +55,7 @@ const dates = ref<string[]>([]), plan = ref<StabilityPlan>(), batches = ref<Stab
 const error = ref(''), busy = ref(false), refreshing = ref(false), selectedId = ref(''), reviewId = ref('')
 let requestKey = crypto.randomUUID(), generation = 0, disposed = false, timer: number | undefined
 const parameterOptions = computed(() => stabilityParameters(props.versions.find(v => v.id === form.strategyVersionId)?.configuration))
-const parameterUnit = computed(() => form.parameter.endsWith('Threshold') || form.parameter === 'rsiCeiling' ? 'RSI刻度（0～100），不是百分比' : '根K线，按所选行情周期计算')
+const parameterUnit = computed(() => form.parameter === 'adxThreshold' ? 'ADX刻度（0～100），不是百分比' : form.parameter.endsWith('Threshold') || form.parameter === 'rsiCeiling' ? 'RSI刻度（0～100），不是百分比' : '根K线，按所选行情周期计算')
 const selectedDataset = computed(() => props.datasets.find(d => d.id === form.datasetId))
 const ready = computed(() => !!form.strategyVersionId && !!form.parameterSetId && !!form.datasetId && parameterOptions.value.includes(form.parameter) && dates.value?.length === 2)
 const reviewOpen = computed({ get: () => !!reviewId.value, set: (open) => { if (!open) reviewId.value = '' } })
