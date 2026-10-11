@@ -96,6 +96,12 @@ public class BacktestService {
             return transaction.execute(status->repository.ensureVersion(tenant,owner,"QuantRsiReversion",source,hash));
         }
     }
+    public String createBollingerRsiVersion(long tenant,long owner,cn.iocoder.yudao.module.quant.api.backtest.BollingerRsiStrategyRequest request)throws Exception {
+        String source=BollingerRsiStrategyTemplate.render(request),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
+        synchronized(VERSION_LOCKS[Math.floorMod(Objects.hash(tenant,owner),VERSION_LOCKS.length)]) {
+            return transaction.execute(status->repository.ensureVersion(tenant,owner,"QuantBollingerRsi",source,hash));
+        }
+    }
     private String ensureStrategyVersion(long tenant, long owner, String source, String hash) {
         synchronized (VERSION_LOCKS[Math.floorMod(Objects.hash(tenant, owner), VERSION_LOCKS.length)]) {
             return transaction.execute(status -> repository.ensureVersion(tenant, owner, "QuantEmaBaseline", source, hash));

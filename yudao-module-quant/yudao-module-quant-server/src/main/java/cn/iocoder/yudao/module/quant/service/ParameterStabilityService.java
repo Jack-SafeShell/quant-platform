@@ -28,8 +28,10 @@ public class ParameterStabilityService {
     private static EmaStrategyRequest ema(Map<String,Object> c){return new EmaStrategyRequest(number(c,"fastPeriod"),number(c,"slowPeriod"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static BreakoutStrategyRequest breakout(Map<String,Object> c){return new BreakoutStrategyRequest(number(c,"entryPeriod"),number(c,"exitPeriod"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static RsiStrategyRequest rsi(Map<String,Object> c){return new RsiStrategyRequest(number(c,"rsiPeriod"),number(c,"entryThreshold"),number(c,"exitThreshold"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
+    private static BollingerRsiStrategyRequest bollinger(Map<String,Object> c){return new BollingerRsiStrategyRequest(number(c,"bandPeriod"),decimal(c,"bandDeviation"),number(c,"rsiPeriod"),number(c,"rsiCeiling"),decimal(c,"stopLossRatio"),decimal(c,"takeProfitRatio"));}
     private static String render(Map<String,Object> c)throws Exception{
         return switch(Objects.toString(c.get("template"),"EMA")){
+            case "BOLLINGER_RSI" -> BollingerRsiStrategyTemplate.render(bollinger(c));
             case "RSI_REVERSION" -> RsiStrategyTemplate.render(rsi(c));
             case "CHANNEL_BREAKOUT" -> BreakoutStrategyTemplate.render(breakout(c));
             case "EMA" -> EmaStrategyTemplate.render(ema(c));
@@ -40,6 +42,7 @@ public class ParameterStabilityService {
         var base=StrategyTemplates.readConfiguration(source);
         if(base==null || step<1 || step>10) throw new IllegalArgumentException("请选择受控历史策略及1～10的调整幅度");
         var keys=switch(Objects.toString(base.get("template"),"EMA")){
+            case "BOLLINGER_RSI" -> List.of("bandPeriod","rsiPeriod","rsiCeiling");
             case "RSI_REVERSION" -> List.of("rsiPeriod","entryThreshold","exitThreshold");
             case "CHANNEL_BREAKOUT" -> List.of("entryPeriod","exitPeriod");
             default -> List.of("fastPeriod","slowPeriod");
@@ -79,6 +82,7 @@ public class ParameterStabilityService {
                         var c=(Map<String,Object>)v.get("configuration");String version;
                         if("BASE".equals(v.get("role")))version=r.strategyVersionId();
                         else version=switch(Objects.toString(c.get("template"),"EMA")){
+                            case "BOLLINGER_RSI" -> backtests.createBollingerRsiVersion(tenant,owner,bollinger(c));
                             case "RSI_REVERSION" -> backtests.createRsiVersion(tenant,owner,rsi(c));
                             case "CHANNEL_BREAKOUT" -> backtests.createBreakoutVersion(tenant,owner,breakout(c));
                             default -> backtests.createStrategyVersion(tenant,owner,ema(c));

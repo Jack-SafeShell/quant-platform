@@ -79,14 +79,21 @@ export interface RsiStrategyConfiguration {
   stopLossRatio: number
   takeProfitRatio: number
 }
-export type StrategyConfiguration = EmaStrategyConfiguration | BreakoutStrategyConfiguration | RsiStrategyConfiguration
+export interface BollingerRsiStrategyConfiguration {
+  template: 'BOLLINGER_RSI'
+  bandPeriod: number; bandDeviation: number; rsiPeriod: number; rsiCeiling: number
+  stopLossRatio: number; takeProfitRatio: number
+}
+export type StrategyConfiguration = EmaStrategyConfiguration | BreakoutStrategyConfiguration | RsiStrategyConfiguration | BollingerRsiStrategyConfiguration
+export const createBollingerRsiVersion = (data: Omit<BollingerRsiStrategyConfiguration, 'template'>): Promise<string> =>
+  request.post({ url: '/quant/backtest/strategy-version/bollinger-rsi', data })
 export const createRsiVersion = (data: Omit<RsiStrategyConfiguration, 'template'>): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/rsi', data })
 export const createBreakoutVersion = (data: Omit<BreakoutStrategyConfiguration, 'template'>): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/breakout', data })
 export function strategyConfigurationLabel(config?: StrategyConfiguration | null): string {
   if (!config) return '配置待加载（以版本摘要为准）'
-  const name = 'rsiPeriod' in config ? `RSI${config.rsiPeriod} · 回升越过${config.entryThreshold}买入 / 越过${config.exitThreshold}卖出` : 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
+  const name = 'bandPeriod' in config ? `布林${config.bandPeriod}根/${config.bandDeviation}倍 · RSI${config.rsiPeriod}回升且≤${config.rsiCeiling} · 回到中轨卖出` : 'rsiPeriod' in config ? `RSI${config.rsiPeriod} · 回升越过${config.entryThreshold}买入 / 越过${config.exitThreshold}卖出` : 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
   return `${name} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%`
 }
 export const createStrategyVersion = (data: EmaStrategyConfiguration): Promise<string> =>

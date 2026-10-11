@@ -522,6 +522,28 @@ class QuantBacktestTest {
         assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,batch));
         assertThrows(IllegalArgumentException.class,()->service.create(1,11,new BacktestRequest("foreign-rsi",rsi,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee())));
     }
+    @Test void bollingerHistorySupportsReportsAndNeighboursButNeverExecutionAdmission() throws Exception {
+        String version=service.createBollingerRsiVersion(1,10,BollingerRsiStrategyTemplate.defaults());
+        assertEquals(version,service.createBollingerRsiVersion(1,10,BollingerRsiStrategyTemplate.defaults()));
+        assertNull(repository.findVersion(2,10,version));assertNull(repository.findVersion(1,11,version));
+        var base=request("bb-history");String task=service.create(1,10,new BacktestRequest(base.requestKey(),version,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee()));
+        assertTrue(repository.claim(task));repository.complete(task,new BacktestEngine.Output("test","{\"totalTrades\":14,\"netProfit\":1,\"returnRatio\":0.001,\"maxDrawdownRatio\":0.01}","bb-artifact"));
+        assertEquals("BOLLINGER_RSI",((Map<?,?>)service.get(1,10,task).get("strategyConfiguration")).get("template"));
+        var report=JsonUtils.getObjectMapper().readTree(new String(service.exportReport(1,10,task,"json").content(),java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(20,report.path("strategy").path("configuration").path("bandPeriod").asInt());
+        assertThrows(IllegalArgumentException.class,()->new LiveAdmissionService(new cn.iocoder.yudao.module.quant.dal.LiveAdmissionRepository(jdbc)).create(1,10,task));
+        var optimization=new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc),repository,service);
+        String batch=optimization.createSingleParameter(1,10,new cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest(version,"test","2025-01-11","2025-01-18","2025-01-25",List.of(parameterSetId)));
+        var admission=(Map<String,Object>)optimization.get(1,10,batch).get("paperAdmission");
+        assertEquals(false,admission.get("eligible"));
+        assertTrue(((List<Map<String,Object>>)admission.get("checks")).stream().anyMatch(c->"HISTORICAL_STRATEGY_ONLY".equals(c.get("id"))&&Boolean.FALSE.equals(c.get("passed"))));
+        var r=new cn.iocoder.yudao.module.quant.api.backtest.ParameterStabilityRequest("bb-neighbours",version,parameterSetId,"test","2025-01-11","2025-01-25","bandPeriod",2);
+        var plan=stability().preview(1,10,r);assertEquals(3,((List<?>)plan.get("variants")).size());
+        String group=stability().create(1,10,r);assertEquals(group,stability().create(1,10,r));
+        var rows=(List<Map<String,Object>>)stability().get(1,10,group).get("rows");assertEquals(version,rows.get(1).get("strategyVersionId"));
+        for(var row:rows)assertEquals("BOLLINGER_RSI",((Map<?,?>)service.get(1,10,(String)row.get("taskId")).get("strategyConfiguration")).get("template"));
+        assertThrows(IllegalArgumentException.class,()->service.create(1,11,new BacktestRequest("foreign-bb",version,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee())));
+    }
     @Test void breakoutVersionIsIsolatedAndFlowsIntoTaskReport() throws Exception {
         var config = new cn.iocoder.yudao.module.quant.api.backtest.BreakoutStrategyRequest(20, 10, new BigDecimal("0.03"), new BigDecimal("0.06"));
         String breakout = service.createBreakoutVersion(1, 10, config);
