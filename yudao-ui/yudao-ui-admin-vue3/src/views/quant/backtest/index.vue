@@ -1,7 +1,7 @@
 <template>
   <HistoryGuide />
   <ContentWrap title="设置一次历史回看">
-    <el-alert title="EMA 交叉 / 通道突破 · BTC/USDT 现货 · 1 小时 · 可配置版本" type="info" :closable="false" />
+    <el-alert title="EMA 交叉 / 通道突破 · BTC、ETH 现货历史行情 · 1 小时 / 4 小时" type="info" :closable="false" />
     <p class="text-gray-500">这里只计算过去的买卖结果。直接选择已有策略即可；想调整买卖规则时，再展开“修改策略”。</p>
     <el-alert v-if="!enabled" title="暂时无法开始回看，请联系维护人员检查回测服务；已有结果仍可查看。" type="warning" :closable="false" />
     <StrategyConfigEditor :versions="strategyVersions" :selected-version-id="form.strategyVersionId" @created="selectCreatedStrategy" />
@@ -11,7 +11,7 @@
       <el-collapse class="mb-3"><el-collapse-item title="使用以前保存的金额与费率（可选）" name="saved"><el-form-item label="已保存的金额"><el-select v-model="form.parameterSetId" class="w-70%" placeholder="请选择参数集" @change="applyParameterSet"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select><el-button class="ml-2" @click="saveParameterSet">保存这组金额</el-button></el-form-item></el-collapse-item></el-collapse>
       <el-form-item label="② 历史行情"><el-select v-model="form.datasetId" class="w-100%" placeholder="选择已准备好的行情"><el-option v-for="item in datasets.filter(value => value.status === 'VALID')" :key="item.id" :label="datasetLabel(item)" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="③ 回看日期"><el-date-picker v-model="dates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日（包含）" end-placeholder="结束日（不含）" /><el-button class="ml-2" :disabled="!form.datasetId" @click="useFullHistory">使用全部可回看日期</el-button></el-form-item>
-      <p class="text-gray-500">{{ datasetHint }} 日期按 UTC；例如结束日选 10 月 1 日，最后一天为 9 月 30 日。前 240 小时用于让策略读取先前行情。</p>
+      <p class="text-gray-500">{{ datasetHint }} 日期按 UTC；结束日不含。前 240 根K线用于预热（1小时为10天，4小时为40天）；同一策略的周期数按K线根数解释。</p>
       <el-form-item label="假设本金"><el-input-number v-model="form.startingBalance" :min="100" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
       <el-form-item label="每次买入"><el-input-number v-model="form.stakeAmount" :min="10" :max="1000000" /><span class="ml-2">USDT</span></el-form-item>
       <el-form-item label="每次手续费"><el-input-number v-model="feePercent" :min="0" :max="1" :step="0.01" :precision="4" /><span class="ml-2">%；买入和卖出分别计费</span></el-form-item>
@@ -24,7 +24,7 @@
     <el-table :data="visibleTasks" row-key="id" class="mt-3" v-loading="loading" @selection-change="rows => selectedIds = rows.map((row: BacktestTask) => row.id)">
       <el-table-column type="selection" :reserve-selection="true" width="45" :selectable="row => row.status === 'SUCCEEDED'" />
       <el-table-column label="策略配置" min-width="240"><template #default="s">{{ strategyLabel(s.row.strategyConfiguration) }}</template></el-table-column>
-      <el-table-column prop="datasetId" label="数据集" min-width="160" />
+      <el-table-column prop="datasetId" label="数据集" min-width="160" /><el-table-column label="币种 / 周期" min-width="160"><template #default="s">{{ taskMarket(s.row.parametersJson) }}</template></el-table-column>
       <el-table-column prop="exchangeName" label="交易所" width="100" />
       <el-table-column label="状态" width="130"><template #default="scope"><el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="提交时间" min-width="180"><template #default="scope">{{ new Date(scope.row.createdAt).toLocaleString() }}</template></el-table-column>
@@ -34,12 +34,13 @@
   </ContentWrap>
   <el-collapse class="mb-4"><el-collapse-item title="没有合适的行情？展开准备数据" name="data">
   <ContentWrap title="准备新的历史行情">
-    <el-alert title="仅下载所选 OKX / Binance 公开 BTC/USDT 现货 1 小时行情，不使用交易凭据；数据集不可覆盖。" type="info" :closable="false" />
-    <el-form :inline="true" class="mt-4"><el-form-item label="交易所"><el-select v-model="downloadForm.exchange"><el-option label="OKX" value="okx" /><el-option label="Binance" value="binance" /></el-select></el-form-item><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
-    <el-table :data="downloadTasks"><el-table-column prop="exchange_name" label="交易所" /><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
+    <el-alert title="下载 OKX / Binance 的 BTC、ETH 公开现货行情，不使用交易凭据。选1小时或4小时；系统额外补齐240根预热，数据集不可覆盖。" type="info" :closable="false" />
+    <el-form :inline="true"><el-form-item label="币种"><el-select v-model="downloadForm.pair" style="width: 220px"><el-option label="BTC/USDT（比特币）" value="BTC/USDT" /><el-option label="ETH/USDT（以太坊）" value="ETH/USDT" /></el-select></el-form-item><el-form-item label="K线周期"><el-select v-model="downloadForm.timeframe" style="width: 220px"><el-option label="1小时（每根1小时）" value="1h" /><el-option label="4小时（每根4小时）" value="4h" /></el-select></el-form-item></el-form>
+    <el-form :inline="true" class="mt-4"><el-form-item label="交易所"><el-select v-model="downloadForm.exchange" style="width: 220px"><el-option label="OKX" value="okx" /><el-option label="Binance" value="binance" /></el-select></el-form-item><el-form-item label="数据集编号"><el-input v-model="downloadForm.datasetId" placeholder="例如 okx-btc-202609" /></el-form-item><el-form-item label="UTC 日期"><el-date-picker v-model="downloadDates" type="daterange" value-format="YYYY-MM-DD" /></el-form-item><el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :disabled="!enabled" :loading="downloadSubmitting" @click="submitDownload">提交下载</el-button></el-form-item></el-form>
+    <el-table :data="downloadTasks"><el-table-column prop="exchange_name" label="交易所" /><el-table-column prop="pair_name" label="币种" /><el-table-column prop="timeframe" label="周期" /><el-table-column prop="dataset_id" label="数据集" /><el-table-column label="区间"><template #default="s">{{ s.row.start_date }} ～ {{ s.row.end_date }}</template></el-table-column><el-table-column label="状态"><template #default="s"><el-tag :type="statusType(s.row.status)">{{ statusLabel(s.row.status) }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" /><el-table-column prop="error_message" label="结果" min-width="220" /></el-table>
   </ContentWrap>
   <ContentWrap title="已有行情的覆盖时间与完整性">
-    <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
+    <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column prop="pair" label="币种" width="120" /><el-table-column prop="timeframe" label="周期" width="70" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
   </ContentWrap>
   </el-collapse-item></el-collapse>
   <el-collapse v-model="legacyPanels" @change="refresh"><el-collapse-item title="其他管理与历史执行记录（历史回看无需使用）" name="execution">
@@ -218,7 +219,7 @@ const comparisons = ref<BacktestComparison[]>([])
 const compareVisible = ref(false)
 const datasets = ref<DatasetQuality[]>([])
 const downloadTasks = ref<DatasetDownloadTask[]>([])
-const downloadForm = reactive({ datasetId: '', exchange: 'okx' as 'okx' | 'binance' })
+const downloadForm = reactive({ datasetId: '', exchange: 'okx' as 'okx' | 'binance', pair: 'BTC/USDT' as 'BTC/USDT' | 'ETH/USDT', timeframe: '1h' as '1h' | '4h' })
 const downloadDates = ref<string[]>([])
 const downloadSubmitting = ref(false)
 const optimization=reactive({parameterSetIds: [] as string[]})
@@ -279,10 +280,11 @@ const okxReadPhrase=ref('')
 const liveOrderForm=reactive({clientOrderId:`offline-${Date.now()}`,side:'BUY' as 'BUY'|'SELL',orderType:'LIMIT' as const,price:100,amount:0.05,currentExposure:0,dailyExecutedNotional:0,openOrders:0})
 const legacyPanels = ref<string[]>([])
 const feePercent = computed({ get: () => Number((form.fee * 100).toFixed(4)), set: value => { form.fee = Number((value / 100).toFixed(6)) } })
-const datasetLabel = (item: DatasetQuality) => `${item.exchange.toUpperCase()} · ${item.pair} · ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)} · ${item.candles} 根`
+const taskMarket = (json: string) => { try { const p = JSON.parse(json); return `${p.pair || 'BTC/USDT'} · ${p.timeframe || '1h'}` } catch { return '未记录' } }
+const datasetLabel = (item: DatasetQuality) => `${item.exchange.toUpperCase()} · ${item.pair} · ${item.timeframe === '4h' ? '4小时' : '1小时'} · ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)} · ${item.candles} 根`
 const datasetHint = computed(() => {
   const item = datasets.value.find(d => d.id === form.datasetId)
-  return item ? `所选行情覆盖 ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)}。` : '请先选择历史行情。'
+  return item ? `所选 ${item.pair} ${item.timeframe} 行情覆盖 ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)}。` : '请先选择历史行情。'
 })
 const resultExplanation = computed(() => {
   if (!result.value) return ''
@@ -295,8 +297,9 @@ function useFullHistory() {
   const data = datasets.value.find(d => d.id === form.datasetId)
   if (!data) return
   const day = 24 * 60 * 60 * 1000
-  const start = Math.ceil((data.firstTimestamp + 240 * 60 * 60 * 1000) / day) * day
-  const end = Math.floor((data.lastTimestamp + 60 * 60 * 1000) / day) * day
+  const interval = data.timeframe === '4h' ? 4 * 60 * 60 * 1000 : 60 * 60 * 1000
+  const start = Math.ceil((data.firstTimestamp + 240 * interval) / day) * day
+  const end = Math.floor((data.lastTimestamp + interval) / day) * day
   if (start >= end) { ElMessage.warning('该行情还没有足够的完整日期，请准备更长的历史行情'); return }
   dates.value = [new Date(start).toISOString().slice(0, 10), new Date(end).toISOString().slice(0, 10)]
 }
@@ -400,7 +403,7 @@ async function downloadResearch(){if(!optimizationResult.value)return;const blob
 async function submitDownload() {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(downloadForm.datasetId) || downloadDates.value.length !== 2) { ElMessage.warning('请填写有效的数据集编号和日期区间'); return }
   downloadSubmitting.value = true
-  try { await createDatasetDownload({ requestKey: crypto.randomUUID(), datasetId: downloadForm.datasetId, exchange: downloadForm.exchange, startDate: downloadDates.value[0], endDate: downloadDates.value[1] }); ElMessage.success('下载任务已提交'); await refresh() }
+  try { await createDatasetDownload({ requestKey: crypto.randomUUID(), datasetId: downloadForm.datasetId, exchange: downloadForm.exchange, pair: downloadForm.pair, timeframe: downloadForm.timeframe, startDate: downloadDates.value[0], endDate: downloadDates.value[1] }); ElMessage.success('下载任务已提交'); await refresh() }
   finally { downloadSubmitting.value = false }
 }
 async function showDetail(id: string) { selected.value = await getBacktest(id); detailVisible.value = true }

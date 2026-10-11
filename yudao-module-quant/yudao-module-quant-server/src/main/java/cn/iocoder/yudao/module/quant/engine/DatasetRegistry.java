@@ -12,7 +12,12 @@ import java.util.*;
 @Component
 public class DatasetRegistry {
     public record Dataset(String id, String exchange, String sha256, String source,
-                          Path directory, long firstTimestamp, long lastTimestamp, int candles) { }
+                          Path directory, long firstTimestamp, long lastTimestamp, int candles, String pair, String timeframe) {
+        public Dataset(String id, String exchange, String sha256, String source, Path directory, long first, long last, int candles) {
+            this(id, exchange, sha256, source, directory, first, last, candles, "BTC/USDT", "1h");
+        }
+        public HistoricalMarket market() { return new HistoricalMarket(pair, timeframe); }
+    }
     public record DatasetQuality(String id, String status, String exchange, String pair, String timeframe,
                                  String tradingMode, String sha256, String source, long firstTimestamp,
                                  long lastTimestamp, int candles, int gaps, String error) { }
@@ -31,10 +36,11 @@ public class DatasetRegistry {
         if (!"VALID".equals(quality.status())) throw new IllegalArgumentException(quality.error());
         long from = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
         long to = end.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-        if (quality.firstTimestamp() > from - 240L * 3600000 || quality.lastTimestamp() < to - 3600000 || to > Instant.now().toEpochMilli())
+        long interval = new HistoricalMarket(quality.pair(), quality.timeframe()).intervalMillis();
+        if (quality.firstTimestamp() > from - 240L * interval || quality.lastTimestamp() < to - interval || to > Instant.now().toEpochMilli())
             throw new IllegalArgumentException("数据未覆盖预热或完整回测区间");
         return new Dataset(id, quality.exchange(), quality.sha256(), quality.source(), dir,
-                quality.firstTimestamp(), quality.lastTimestamp(), quality.candles());
+                quality.firstTimestamp(), quality.lastTimestamp(), quality.candles(), quality.pair(), quality.timeframe());
     }
     public List<DatasetQuality> list() throws Exception {
         Path root = Path.of(properties.getWorkspace()).toAbsolutePath().resolve("datasets");
@@ -47,7 +53,7 @@ public class DatasetRegistry {
         }
     }
     public List<List<Number>> readCandles(Dataset dataset, long from, long to) throws Exception {
-        Path file = dataset.directory().resolve("BTC_USDT-1h.json").toRealPath();
+        Path file = dataset.directory().resolve(dataset.market().filename()).toRealPath();
         if (!file.startsWith(dataset.directory()) || Files.size(file) > 10_000_000)
             throw new IllegalArgumentException("行情文件路径或大小无效");
         byte[] bytes = Files.readAllBytes(file);
@@ -64,14 +70,15 @@ public class DatasetRegistry {
     private DatasetQuality inspect(Path dir) throws Exception {
         String id = dir.getFileName().toString();
         Path manifest = dir.resolve("manifest.json").toRealPath();
-        Path data = dir.resolve("BTC_USDT-1h.json").toRealPath();
-        if (!manifest.startsWith(dir) || !data.startsWith(dir)) throw new IllegalArgumentException("数据文件路径越界");
-        if (Files.size(data) > 10_000_000 || Files.size(manifest) > 16_384) throw new IllegalArgumentException("数据集过大");
+        if (!manifest.startsWith(dir) || Files.size(manifest) > 16_384) throw new IllegalArgumentException("数据集清单路径或大小无效");
         JsonNode meta = JsonUtils.getObjectMapper().readTree(Files.readString(manifest));
         String exchange = meta.path("exchange").asText();
-        if (!Set.of("okx", "binance").contains(exchange) || !"BTC/USDT".equals(meta.path("pair").asText())
-                || !"1h".equals(meta.path("timeframe").asText()) || !"spot".equals(meta.path("tradingMode").asText()))
-            throw new IllegalArgumentException("仅支持 OKX/Binance BTC/USDT 现货 1h 数据");
+        if (!Set.of("okx", "binance").contains(exchange) || !"spot".equals(meta.path("tradingMode").asText()))
+            throw new IllegalArgumentException("仅支持 OKX/Binance 现货历史行情");
+        var market = new HistoricalMarket(meta.path("pair").asText(), meta.path("timeframe").asText());
+        long interval = market.intervalMillis();
+        Path data = dir.resolve(market.filename()).toRealPath();
+        if (!data.startsWith(dir) || Files.size(data) > 10_000_000) throw new IllegalArgumentException("行情文件路径或大小无效");
         byte[] content = Files.readAllBytes(data);
         String digest = hash(content);
         if (!digest.equals(meta.path("sha256").asText())) throw new IllegalArgumentException("数据摘要不一致");
@@ -82,7 +89,7 @@ public class DatasetRegistry {
         for (JsonNode row : rows) {
             if (!row.isArray() || row.size() != 6 || !row.get(0).isIntegralNumber()) throw new IllegalArgumentException("OHLCV 格式错误");
             long ts = row.get(0).asLong();
-            if (ts % 3600000 != 0 || (previous >= 0 && ts != previous + 3600000)) { gaps++; throw new IllegalArgumentException("行情时间缺口或重复"); }
+            if (ts < 0 || ts % interval != 0 || (previous >= 0 && ts != previous + interval)) { gaps++; throw new IllegalArgumentException("行情时间缺口或重复"); }
             for (int i = 1; i < 6; i++) if (!row.get(i).isNumber() || !Double.isFinite(row.get(i).asDouble())
                     || row.get(i).asDouble() < 0 || (i < 5 && row.get(i).asDouble() == 0)) throw new IllegalArgumentException("OHLCV 数值无效");
             double high = row.get(2).asDouble(), low = row.get(3).asDouble();

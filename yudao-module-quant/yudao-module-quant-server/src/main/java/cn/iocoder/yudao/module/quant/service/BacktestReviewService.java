@@ -23,11 +23,12 @@ public class BacktestReviewService {
             var start = LocalDate.parse(request.path("startDate").asText());
             var end = LocalDate.parse(request.path("endDate").asText());
             var dataset = datasets.load((String) task.get("datasetId"), start, end);
-            if (!dataset.sha256().equals(task.get("datasetHash"))) return unavailable("DATASET_CHANGED");
+            if (!dataset.sha256().equals(task.get("datasetHash")) || !dataset.exchange().equals(task.get("exchangeName")) || !dataset.pair().equals(request.path("pair").asText("BTC/USDT"))
+                    || !dataset.timeframe().equals(request.path("timeframe").asText("1h"))) return unavailable("DATASET_CHANGED");
             long from = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
             long to = end.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
             return HistoricalReview.calculate((String) task.get("resultJson"), request.path("startingBalance").asDouble(),
-                    request.path("fee").asDouble(), from, to, datasets.readCandles(dataset, from, to));
+                    request.path("fee").asDouble(), from, to, datasets.readCandles(dataset, from, to), dataset.market());
         } catch (Exception e) { return unavailable("HISTORICAL_EVIDENCE_UNAVAILABLE"); }
     }
     static Map<String, Object> unavailable(String reason) { return Map.of("available", false, "reason", reason); }

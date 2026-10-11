@@ -14,12 +14,15 @@ public class DatasetDownloadRepository {
     public List<Map<String,Object>> audits(long tenant,long owner,String id) { return jdbc.queryForList("SELECT a.event_type AS eventType,a.detail,a.created_at AS createdAt FROM quant_dataset_download_audit a JOIN quant_dataset_download_task t ON t.id=a.task_id WHERE t.tenant_id=? AND t.owner_id=? AND t.id=? ORDER BY a.created_at",tenant,owner,id); }
     public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end) {insert(id,tenant,owner,key,hash,dataset,start,end,"okx");}
     public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end,String exchange) {
+        insert(id,tenant,owner,key,hash,dataset,start,end,exchange,"BTC/USDT","1h");
+    }
+    public void insert(String id,long tenant,long owner,String key,String hash,String dataset,String start,String end,String exchange,String pair,String timeframe) {
         long now=System.currentTimeMillis();
-        jdbc.update("INSERT INTO quant_dataset_download_task(id,tenant_id,owner_id,request_key,request_hash,dataset_id,start_date,end_date,exchange_name,pair_name,timeframe,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",id,tenant,owner,key,hash,dataset,start,end,exchange,"BTC/USDT","1h","QUEUED",now);
+        jdbc.update("INSERT INTO quant_dataset_download_task(id,tenant_id,owner_id,request_key,request_hash,dataset_id,start_date,end_date,exchange_name,pair_name,timeframe,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",id,tenant,owner,key,hash,dataset,start,end,exchange,pair,timeframe,"QUEUED",now);
         audit(id,"SUBMITTED","已提交公开历史行情下载",now);
     }
     public Map<String,Object> next(){ return one("SELECT * FROM quant_dataset_download_task WHERE status='QUEUED' ORDER BY created_at LIMIT 1"); }
-    public boolean claim(String id){ long now=System.currentTimeMillis(); int n=jdbc.update("UPDATE quant_dataset_download_task SET status='RUNNING',started_at=? WHERE id=? AND status='QUEUED'",now,id); if(n==1)audit(id,"RUNNING","开始下载 OKX BTC/USDT 1h 公开行情",now); return n==1; }
+    public boolean claim(String id){ long now=System.currentTimeMillis(); int n=jdbc.update("UPDATE quant_dataset_download_task SET status='RUNNING',started_at=? WHERE id=? AND status='QUEUED'",now,id); if(n==1)audit(id,"RUNNING","开始下载任务所选交易所、币种和周期的公开行情",now); return n==1; }
     public void complete(String id,String hash,int candles){ long now=System.currentTimeMillis(); jdbc.update("UPDATE quant_dataset_download_task SET status='SUCCEEDED',dataset_hash=?,candles=?,finished_at=? WHERE id=? AND status='RUNNING'",hash,candles,now,id); audit(id,"SUCCEEDED","数据集已通过完整性校验并发布",now); }
     public void fail(String id,String message){ long now=System.currentTimeMillis(); jdbc.update("UPDATE quant_dataset_download_task SET status='FAILED',error_message=?,finished_at=? WHERE id=? AND status IN ('QUEUED','RUNNING')",message,now,id); audit(id,"FAILED",message,now); }
     public List<String> runningIds(){ return jdbc.queryForList("SELECT id FROM quant_dataset_download_task WHERE status='RUNNING'",String.class); }

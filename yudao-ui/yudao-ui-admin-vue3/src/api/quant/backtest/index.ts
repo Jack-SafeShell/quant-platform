@@ -44,6 +44,7 @@ export interface HistoricalTrade {
 }
 export interface HistoricalReview {
   available: boolean; reason?: string; valuation?: string
+  pair?: string; timeframe?: string; intervalMillis?: number
   candles: number[][]
   points: { time: number; equity: number; buyHold: number; drawdownRatio: number }[]
   trades: HistoricalTrade[]
@@ -126,11 +127,12 @@ export const compareBacktests = (data: string[]): Promise<BacktestComparison[]> 
 export const listDatasets = (): Promise<DatasetQuality[]> => request.get({ url: '/quant/backtest/datasets' })
 export interface DatasetDownloadTask {
   exchange_name: 'okx' | 'binance'
+  pair_name: 'BTC/USDT' | 'ETH/USDT'; timeframe: '1h' | '4h'
   id: string; dataset_id: string; start_date: string; end_date: string
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'; candles?: number
   dataset_hash?: string; error_message?: string; created_at: number
 }
-export const createDatasetDownload = (data: { requestKey: string; datasetId: string; startDate: string; endDate: string; exchange?: 'okx' | 'binance' }): Promise<string> => request.post({ url: '/quant/backtest/dataset-download/create', data })
+export const createDatasetDownload = (data: { requestKey: string; datasetId: string; startDate: string; endDate: string; exchange?: 'okx' | 'binance'; pair?: 'BTC/USDT' | 'ETH/USDT'; timeframe?: '1h' | '4h' }): Promise<string> => request.post({ url: '/quant/backtest/dataset-download/create', data })
 export const listDatasetDownloads = (): Promise<DatasetDownloadTask[]> => request.get({ url: '/quant/backtest/dataset-download/list' })
 export interface OptimizationBatch { id: string; dataset_id: string; train_start: string; split_date: string; validation_end: string; created_at: number }
 export const createOptimization = (data: object): Promise<string> => request.post({ url: '/quant/backtest/optimization/create', data })

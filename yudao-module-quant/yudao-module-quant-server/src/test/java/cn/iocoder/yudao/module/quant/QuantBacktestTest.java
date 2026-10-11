@@ -212,6 +212,57 @@ class QuantBacktestTest {
         var otherRequest = new BacktestRequest("same", otherVersion, otherParameter, "test", "2025-01-11", "2025-01-13", new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("0.001"));
         assertNotEquals(id, service.create(2, 10, otherRequest));
     }
+    @Test void historicalMarketsPersistSnapshotAndRunReviewWithCorrectIntervals() throws Exception {
+        long begin=Instant.parse("2025-01-01T00:00:00Z").toEpochMilli();
+        for(String pair:List.of("BTC/USDT","ETH/USDT"))for(String timeframe:List.of("1h","4h")){
+            var market=new HistoricalMarket(pair,timeframe);String name=pair.substring(0,3)+"-"+timeframe;
+            Path dir=root.resolve("datasets/"+name);Files.createDirectories(dir);
+            List<List<Number>> rows=new ArrayList<>();for(int i=0;i<600;i++)rows.add(List.of(begin+i*market.intervalMillis(),100,105,95,101,10));
+            byte[] bytes=JsonUtils.toJsonByte(rows);Files.write(dir.resolve(market.filename()),bytes);
+            Files.writeString(dir.resolve("manifest.json"),JsonUtils.toJsonString(Map.of("exchange","binance","pair",pair,"timeframe",timeframe,"tradingMode","spot","sha256",DatasetRegistry.hash(bytes),"source","synthetic")));
+            String from="4h".equals(timeframe)?"2025-02-10":"2025-01-11",to="4h".equals(timeframe)?"2025-02-12":"2025-01-13";
+            var req=new BacktestRequest(name,versionId,parameterSetId,name,from,to,new BigDecimal("1000"),new BigDecimal("100"),new BigDecimal("0.001"));
+            String id=service.create(1,10,req);assertEquals(id,service.create(1,10,req));
+            var stored=JsonUtils.parseObject((String)service.get(1,10,id).get("parametersJson"),BacktestRequest.class);
+            assertEquals(pair,stored.pairName());assertEquals(timeframe,stored.candleTimeframe());
+            assertThrows(IllegalArgumentException.class,()->service.create(1,10,new BacktestRequest(name+"-wrong",versionId,parameterSetId,name,from,to,new BigDecimal("1000"),new BigDecimal("100"),new BigDecimal("0.001"),"ETH/USDT".equals(pair)?"BTC/USDT":"ETH/USDT",timeframe)));
+            BacktestEngine engine=new BacktestEngine(){public Output run(Input input){assertEquals(pair,input.dataset().pair());assertEquals(timeframe,input.parameters().candleTimeframe());return new Output("test",JsonUtils.toJsonString(Map.of("pair",pair,"timeframe",timeframe,"totalTrades",0,"netProfit",0,"returnRatio",0,"trades",List.of())),"artifact");}public void stop(String ignored){}};
+            new BacktestWorker(repository,engine,datasets,properties,transactions).tick();
+            var review=new BacktestReviewService(service,datasets).get(1,10,id);assertEquals(true,review.get("available"));
+            assertEquals(pair,review.get("pair"));assertEquals(market.intervalMillis(),review.get("intervalMillis"));assertEquals("4h".equals(timeframe)?12:48,((List<?>)review.get("candles")).size());
+            assertThrows(IllegalArgumentException.class,()->datasets.load(name,LocalDate.parse(from).minusDays(1),LocalDate.parse(to)));
+        }
+    }
+    @Test void marketMetadataMutationCannotExecuteEvenWithIdenticalCandleHash() throws Exception {
+        String id=service.create(1,10,request("metadata-change"));
+        Path dir=root.resolve("datasets/test");byte[] bytes=Files.readAllBytes(dir.resolve("BTC_USDT-1h.json"));Files.write(dir.resolve("ETH_USDT-1h.json"),bytes);
+        Files.writeString(dir.resolve("manifest.json"),JsonUtils.toJsonString(Map.of("exchange","okx","pair","ETH/USDT","timeframe","1h","tradingMode","spot","sha256",DatasetRegistry.hash(bytes))));
+        var calls=new AtomicInteger();BacktestEngine engine=new BacktestEngine(){public Output run(Input input){calls.incrementAndGet();return null;}public void stop(String id){}};
+        new BacktestWorker(repository,engine,datasets,properties,transactions).tick();
+        assertEquals(0,calls.get());assertEquals("FAILED",service.get(1,10,id).get("status"));
+        assertEquals("TASK_NOT_COMPLETED",new BacktestReviewService(service,datasets).get(1,10,id).get("reason"));
+    }
+    @Test void downloadMarketIsAuditedIdempotentAndRestricted() {
+        var downloads=new DatasetDownloadService(new cn.iocoder.yudao.module.quant.dal.DatasetDownloadRepository(jdbc),properties,transactions);
+        var req=new DatasetDownloadRequest("eth-four","eth-four","2025-02-10","2025-02-12","binance","ETH/USDT","4h");
+        String id=downloads.create(1,10,req);assertEquals(id,downloads.create(1,10,req));
+        var row=downloads.get(1,10,id);assertEquals("ETH/USDT",row.get("pair_name"));assertEquals("4h",row.get("timeframe"));
+        assertThrows(IllegalArgumentException.class,()->downloads.create(1,10,new DatasetDownloadRequest("eth-four","eth-four","2025-02-10","2025-02-12","binance","BTC/USDT","4h")));
+        assertThrows(IllegalArgumentException.class,()->downloads.create(1,10,new DatasetDownloadRequest("bad","bad","2025-02-10","2025-02-12","binance","../ETH","4h")));
+        assertThrows(IllegalArgumentException.class,()->downloads.get(2,10,id));
+    }
+    @Test void extendedHistoricalMarketCannotEnterLegacyPaperAdmission() throws Exception {
+        String second=service.createParameterSet(1,10,new cn.iocoder.yudao.module.quant.api.backtest.ParameterSetRequest(new BigDecimal("1000"),new BigDecimal("200"),new BigDecimal("0.001")));
+        var optimization=new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc),repository,service);
+        String batch=optimization.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest(versionId,"test","2025-01-11","2025-01-18","2025-01-25",List.of(parameterSetId,second)));
+        String task=(String)((List<Map<String,Object>>)optimization.get(1,10,batch).get("members")).getFirst().get("taskId");
+        String original=(String)service.get(1,10,task).get("parametersJson");
+        jdbc.update("UPDATE quant_backtest_task SET request_json=? WHERE id=?",original.replace("BTC/USDT","ETH/USDT"),task);
+        var admission=(Map<String,Object>)optimization.get(1,10,batch).get("paperAdmission");
+        assertEquals(false,admission.get("eligible"));
+        var check=((List<Map<String,Object>>)admission.get("checks")).stream().filter(c->"HISTORICAL_MARKET_ONLY".equals(c.get("id"))).findFirst().orElseThrow();
+        assertEquals(false,check.get("passed"));
+    }
     @Test void historicalReviewIsOwnedAndUsesOriginalData() throws Exception {
         String id=service.create(1,10,request("historical-review"));
         var reviews=new BacktestReviewService(service,datasets);

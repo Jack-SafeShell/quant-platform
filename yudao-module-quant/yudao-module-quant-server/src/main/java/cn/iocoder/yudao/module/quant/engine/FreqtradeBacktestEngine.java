@@ -24,8 +24,9 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
         Files.createDirectories(job.resolve("results"));
         Files.createDirectories(job.resolve("data"));
         Files.writeString(job.resolve("strategies/" + STRATEGY + ".py"), input.strategySource());
-        Files.copy(input.dataset().directory().resolve("BTC_USDT-1h.json"), job.resolve("data/BTC_USDT-1h.json"));
-        if (!DatasetRegistry.hash(Files.readAllBytes(job.resolve("data/BTC_USDT-1h.json"))).equals(input.dataset().sha256()))
+        String filename = input.dataset().market().filename();
+        Files.copy(input.dataset().directory().resolve(filename), job.resolve("data/" + filename));
+        if (!DatasetRegistry.hash(Files.readAllBytes(job.resolve("data/" + filename))).equals(input.dataset().sha256()))
             throw new IllegalStateException("行情在任务创建后发生变更");
         Files.writeString(job.resolve("config.json"), JsonUtils.toJsonString(configuration(input)));
         Process process = new ProcessBuilder(command(input, job)).redirectErrorStream(true)
@@ -44,13 +45,13 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
         List<Path> archives;
         try (var stream = Files.list(job.resolve("results"))) { archives = stream.filter(p -> p.toString().endsWith(".zip")).toList(); }
         if (archives.size() != 1) throw new IllegalStateException("引擎未生成唯一结果归档");
-        return readResult(archives.getFirst(), input.parameters().startDate(), input.parameters().endDate(), readVersion(job.resolve("engine.log")));
+        return readResult(archives.getFirst(), input.parameters().startDate(), input.parameters().endDate(), readVersion(job.resolve("engine.log")), input.dataset().market());
     }
     Map<String, Object> configuration(Input input) {
         Map<String, Object> exchange = new LinkedHashMap<>();
         exchange.put("name", input.dataset().exchange());
         exchange.put("key", ""); exchange.put("secret", ""); exchange.put("password", "");
-        exchange.put("pair_whitelist", List.of("BTC/USDT")); exchange.put("pair_blacklist", List.of());
+        exchange.put("pair_whitelist", List.of(input.dataset().pair())); exchange.put("pair_blacklist", List.of());
         exchange.put("enable_ws", false);
         if (!properties.getExchangeProxy().isBlank()) {
             exchange.put("ccxt_config", Map.of("httpsProxy", properties.getExchangeProxy()));
@@ -60,7 +61,7 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
         config.put("dry_run", true); config.put("trading_mode", "spot"); config.put("max_open_trades", 1);
         config.put("stake_currency", "USDT"); config.put("stake_amount", input.parameters().stakeAmount());
         config.put("dry_run_wallet", input.parameters().startingBalance()); config.put("tradable_balance_ratio", 1.0);
-        config.put("timeframe", "1h"); config.put("exchange", exchange); config.put("dataformat_ohlcv", "json");
+        config.put("timeframe", input.dataset().timeframe()); config.put("exchange", exchange); config.put("dataformat_ohlcv", "json");
         config.put("pairlists", List.of(Map.of("method", "StaticPairList")));
         config.put("entry_pricing", Map.of("price_side", "other", "use_order_book", false));
         config.put("exit_pricing", Map.of("price_side", "other", "use_order_book", false));
@@ -74,7 +75,7 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
                 "--label", "com.quant-platform.purpose=backtest", "--memory", "2g", "--cpus", "2",
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--tmpfs", "/tmp",
                 "--mount", "type=bind,source=" + job + ",target=/freqtrade/user_data", properties.getImage(),
-                "backtesting", "--config", "/freqtrade/user_data/config.json", "--strategy", STRATEGY,
+                "backtesting", "--config", "/freqtrade/user_data/config.json", "--strategy", STRATEGY, "--timeframe", input.dataset().timeframe(),
                 "--strategy-path", "/freqtrade/user_data/strategies", "--datadir", "/freqtrade/user_data/data",
                 "--data-format-ohlcv", "json", "--timerange", input.parameters().startDate().replace("-", "") + "-" + input.parameters().endDate().replace("-", ""),
                 "--fee", input.parameters().fee().toPlainString(), "--cache", "none", "--export", "trades",
@@ -102,6 +103,9 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
         throw new IllegalStateException("无法从本次引擎启动记录确认版本");
     }
     static Output readResult(Path archive, String startDate, String endDate, String version) throws Exception {
+        return readResult(archive,startDate,endDate,version,new HistoricalMarket("BTC/USDT","1h"));
+    }
+    static Output readResult(Path archive, String startDate, String endDate, String version, HistoricalMarket market) throws Exception {
         if (Files.size(archive) > 25_000_000) throw new IllegalStateException("结果归档过大");
         try (ZipFile zip = new ZipFile(archive.toFile())) {
             var entries = zip.stream().filter(e -> e.getName().endsWith(".json") && !e.getName().endsWith(".meta.json")
@@ -117,11 +121,13 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
             }
             if (result == null || !result.path("strategy").has(STRATEGY)) throw new IllegalStateException("缺少策略结果");
             JsonNode summary = result.path("strategy").path(STRATEGY);
+            if ((!market.executionCompatible() || summary.has("timeframe")) && !market.timeframe().equals(summary.path("timeframe").asText()))
+                throw new IllegalStateException("引擎实际周期不符");
             for (String field : List.of("total_trades", "profit_total", "profit_total_abs", "max_drawdown_account", "backtest_start_ts", "backtest_end_ts"))
                 if (!summary.path(field).isNumber() || !Double.isFinite(summary.path(field).asDouble())) throw new IllegalStateException("结果字段缺失或无效: " + field);
             long start = LocalDate.parse(startDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
             long end = LocalDate.parse(endDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-            if (summary.path("backtest_start_ts").asLong() != start || summary.path("backtest_end_ts").asLong() < end - 3600000
+            if (summary.path("backtest_start_ts").asLong() != start || summary.path("backtest_end_ts").asLong() < end - market.intervalMillis()
                     || summary.path("backtest_end_ts").asLong() > end) throw new IllegalStateException("回测实际区间不符");
             if (!summary.path("total_trades").isIntegralNumber() || summary.path("total_trades").asInt() < 0
                     || !summary.path("trades").isArray() || summary.path("trades").size() != summary.path("total_trades").asInt()) throw new IllegalStateException("成交数不一致");
@@ -129,6 +135,7 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
             // The control plane persists our result protocol, not Freqtrade's export schema.
             Map<String, Object> normalized = new LinkedHashMap<>();
             normalized.put("schemaVersion", 1);
+            normalized.put("pair",market.pair()); normalized.put("timeframe",market.timeframe());
             normalized.put("totalTrades", summary.path("total_trades").asInt());
             normalized.put("netProfit", summary.path("profit_total_abs").decimalValue());
             normalized.put("returnRatio", summary.path("profit_total").asDouble());
@@ -138,7 +145,7 @@ public class FreqtradeBacktestEngine implements BacktestEngine {
             List<Map<String, Object>> trades = new ArrayList<>();
             for (JsonNode trade : summary.path("trades")) {
                 if (!trade.path("profit_abs").isNumber() || !Double.isFinite(trade.path("profit_abs").asDouble())
-                        || !"BTC/USDT".equals(trade.path("pair").asText())) throw new IllegalStateException("成交字段无效");
+                        || !market.pair().equals(trade.path("pair").asText())) throw new IllegalStateException("成交字段无效");
                 var row = new LinkedHashMap<String, Object>();
                 row.put("instrument", trade.path("pair").asText()); row.put("openedAt", trade.path("open_date").asText());
                 row.put("closedAt", trade.path("close_date").asText()); row.put("netProfit", trade.path("profit_abs").decimalValue());

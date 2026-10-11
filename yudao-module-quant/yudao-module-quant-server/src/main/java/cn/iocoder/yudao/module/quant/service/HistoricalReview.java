@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.quant.service;
 
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.module.quant.engine.HistoricalMarket;
 import tools.jackson.databind.JsonNode;
 import java.time.*;
 import java.util.*;
@@ -22,17 +23,25 @@ public final class HistoricalReview {
     }
     public static Map<String, Object> calculate(String json, double balance, double fee, long start, long end,
                                                List<List<Number>> candles) {
+        return calculate(json,balance,fee,start,end,candles,new HistoricalMarket("BTC/USDT","1h"));
+    }
+    public static Map<String,Object> calculate(String json,double balance,double fee,long start,long end,
+                                               List<List<Number>> candles,HistoricalMarket market) {
         try {
+            long interval = market.intervalMillis();
             if (!Double.isFinite(balance) || balance <= 0 || !Double.isFinite(fee) || fee < 0 || fee > .01
                     || start >= end || candles.isEmpty() || candles.size() > 8784) throw new IllegalArgumentException();
             var root = JsonUtils.getObjectMapper().readTree(json);
+            if ((!market.executionCompatible() || root.has("pair") || root.has("timeframe"))
+                    && (!market.pair().equals(root.path("pair").asText()) || !market.timeframe().equals(root.path("timeframe").asText())))
+                throw new IllegalArgumentException();
             if (!root.path("trades").isArray() || !root.path("totalTrades").isIntegralNumber()
                     || root.path("totalTrades").asInt() != root.path("trades").size()) throw new IllegalArgumentException();
             List<Trade> trades = new ArrayList<>();
             for (var t : root.path("trades")) {
                 String exit = t.path("exitReason").asText();
                 // Freqtrade marks a final force_exit as is_open even though it provides a closing fill.
-                if (!"BTC/USDT".equals(t.path("instrument").asText()) || !t.path("isShort").isBoolean()
+                if (!market.pair().equals(t.path("instrument").asText()) || !t.path("isShort").isBoolean()
                         || t.path("isShort").asBoolean() || !t.path("isOpen").isBoolean()
                         || (t.path("isOpen").asBoolean() && !"force_exit".equals(exit))) throw new IllegalArgumentException();
                 long opened = timestamp(t, "openedAt"), closed = timestamp(t, "closedAt");
@@ -66,7 +75,7 @@ public final class HistoricalReview {
                         || (i<5 && c.get(i).doubleValue()==0)) throw new IllegalArgumentException();
                 if (c.get(2).doubleValue()<Math.max(c.get(1).doubleValue(),c.get(4).doubleValue())
                         || c.get(3).doubleValue()>Math.min(c.get(1).doubleValue(),c.get(4).doubleValue())) throw new IllegalArgumentException();
-                expected += 3600000;
+                expected += interval;
             }
             if (expected != end) throw new IllegalArgumentException();
             double firstPrice = candles.getFirst().get(1).doubleValue();
@@ -75,7 +84,7 @@ public final class HistoricalReview {
             points.add(new Point(start, balance, balance, 0));
             int next = 0; double realized = 0, peak = balance, maxDrawdown = 0;
             for (var candle : candles) {
-                long time = candle.getFirst().longValue()+3600000;
+                long time = candle.getFirst().longValue()+interval;
                 while (next < ordered.size() && ordered.get(next).closedAt <= time) realized += ordered.get(next++).netProfit;
                 double equity = balance + realized;
                 if (next < ordered.size()) {
@@ -104,8 +113,10 @@ public final class HistoricalReview {
                     "buyHoldNetProfit",last.buyHold-balance,"buyHoldReturnRatio",(last.buyHold-balance)/balance,
                     "excessReturnRatio",total/balance-(last.buyHold-balance)/balance,
                     "hourCloseMaxDrawdownRatio",maxDrawdown,"fee",fee);
-            return Map.of("available",true,"schemaVersion","historical-review/v1","valuation","HOUR_CLOSE_ESTIMATED_LIQUIDATION",
-                    "candles",candles,"points",points,"trades",ordered,"months",monthly,"summary",summary);
+            var review=new LinkedHashMap<String,Object>(Map.of("available",true,"schemaVersion","historical-review/v1","valuation","CANDLE_CLOSE_ESTIMATED_LIQUIDATION",
+                    "candles",candles,"points",points,"trades",ordered,"months",monthly,"summary",summary));
+            review.put("pair",market.pair()); review.put("timeframe",market.timeframe()); review.put("intervalMillis",interval);
+            return review;
         } catch (Exception e) { return BacktestReviewService.unavailable("MISSING_OR_UNSUPPORTED_TRADE_EVIDENCE"); }
     }
 }

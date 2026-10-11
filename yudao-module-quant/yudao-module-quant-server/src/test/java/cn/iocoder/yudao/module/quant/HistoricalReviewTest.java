@@ -8,6 +8,17 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HistoricalReviewTest {
+    @Test void ethFourHourReviewUsesSelectedCloseGridAndRejectsWrongPair() {
+        long from=Instant.parse("2025-01-31T20:00:00Z").toEpochMilli();
+        var market=new cn.iocoder.yudao.module.quant.engine.HistoricalMarket("ETH/USDT","4h");
+        List<List<Number>> candles=List.of(List.of(from,100,110,80,90,10),List.of(from+14400000,90,120,80,110,10));
+        var t=trade(from,from+28800000,"force_exit");t.put("instrument","ETH/USDT");t.put("isShort",false);t.put("isOpen",true);
+        var data=new LinkedHashMap<String,Object>(Map.of("pair","ETH/USDT","timeframe","4h","totalTrades",1,"netProfit",9.79,"returnRatio",.00979,"trades",List.of(t)));
+        var r=HistoricalReview.calculate(JsonUtils.toJsonString(data),1000,.001,from,from+28800000,candles,market);
+        assertEquals(true,r.get("available"));var points=(List<HistoricalReview.Point>)r.get("points");
+        assertEquals(from+14400000,points.get(1).time());assertEquals(989.81,points.get(1).equity(),.00001);assertEquals(1009.79,points.getLast().equity(),.00001);
+        t.put("instrument","BTC/USDT");assertEquals(false,HistoricalReview.calculate(JsonUtils.toJsonString(data),1000,.001,from,from+28800000,candles,market).get("available"));
+    }
     final long start=Instant.parse("2025-01-31T23:00:00Z").toEpochMilli();
     List<List<Number>> candles() { return List.of(List.of(start,100,110,80,90,10),
             List.of(start+3600000,90,120,80,110,10),List.of(start+7200000,110,130,100,120,10)); }

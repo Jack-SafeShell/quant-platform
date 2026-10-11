@@ -1,4 +1,4 @@
-"""Download public OKX/Binance BTC/USDT 1h candles; never load exchange account credentials.
+"""Download allowlisted public OKX/Binance BTC/ETH spot 1h/4h candles; no credentials.
 
 Host Python stdlib only. Example:
   python script/quant/prepare_dataset.py --id okx-btc-202608 --start 2026-08-01 --end 2026-09-01
@@ -29,8 +29,11 @@ def fetch_json(request, attempts=4, opener=None):
             time.sleep(1.5 * (attempt + 1))
 
 
-def download_candles(exchange, first, stop, opener=None):
-    if exchange not in ('okx', 'binance') or first % 3600000 or stop % 3600000 or first >= stop:
+def download_candles(exchange, first, stop, opener=None, pair='BTC/USDT', timeframe='1h'):
+    if pair not in ('BTC/USDT', 'ETH/USDT') or timeframe not in ('1h', '4h'):
+        raise ValueError('Unsupported historical market')
+    interval = 14400000 if timeframe == '4h' else 3600000
+    if exchange not in ('okx', 'binance') or first < 0 or first % interval or stop % interval or first >= stop:
         raise ValueError('Invalid exchange or candle range')
     binance = exchange == 'binance'
     endpoint = ('https://data-api.binance.vision/api/v3/klines' if binance
@@ -38,9 +41,9 @@ def download_candles(exchange, first, stop, opener=None):
     cursor = first if binance else stop
     candles = {}
     while cursor < stop if binance else cursor > first:
-        params = ({'symbol': 'BTCUSDT', 'interval': '1h', 'limit': 1000,
+        params = ({'symbol': pair.replace('/', ''), 'interval': timeframe, 'limit': 1000,
                    'startTime': cursor, 'endTime': stop - 1} if binance else
-                  {'instId': 'BTC-USDT', 'bar': '1H', 'limit': '100', 'after': cursor})
+                  {'instId': pair.replace('/', '-'), 'bar': timeframe.upper(), 'limit': '100', 'after': cursor})
         request = urllib.request.Request(endpoint + '?' + urllib.parse.urlencode(params),
                                          headers={'User-Agent': 'quant-platform/1.0'})
         payload = fetch_json(request, opener=opener)
@@ -53,10 +56,10 @@ def download_candles(exchange, first, stop, opener=None):
                 raise RuntimeError('Incomplete candle')
             timestamp = int(row[0])
             times.append(timestamp)
-            if timestamp % 3600000:
+            if timestamp % interval:
                 raise RuntimeError('Unaligned candle')
             if first <= timestamp < stop:
-                if (binance and int(row[6]) != timestamp + 3600000 - 1) or (not binance and row[8] != '1'):
+                if (binance and int(row[6]) != timestamp + interval - 1) or (not binance and row[8] != '1'):
                     raise RuntimeError('Unconfirmed candle')
                 values = [float(value) for value in row[1:6]]
                 if any(not math.isfinite(value) or value < 0 for value in values):
@@ -68,12 +71,12 @@ def download_candles(exchange, first, stop, opener=None):
                 if timestamp in candles:
                     raise RuntimeError('Duplicate candle')
                 candles[timestamp] = candle
-        next_cursor = max(times) + 3600000 if binance else min(times)
+        next_cursor = max(times) + interval if binance else min(times)
         if (binance and next_cursor <= cursor) or (not binance and next_cursor >= cursor):
             raise RuntimeError('Pagination made no progress')
         cursor = next_cursor
         time.sleep(0.15)
-    if sorted(candles) != list(range(first, stop, 3600000)):
+    if sorted(candles) != list(range(first, stop, interval)):
         raise RuntimeError('Candle gaps; dataset not published')
     return candles, endpoint
 
@@ -81,6 +84,8 @@ def download_candles(exchange, first, stop, opener=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exchange', choices=('okx', 'binance'), default='okx')
+    parser.add_argument('--pair', choices=('BTC/USDT', 'ETH/USDT'), default='BTC/USDT')
+    parser.add_argument('--timeframe', choices=('1h', '4h'), default='1h')
     parser.add_argument('--id', required=True)
     parser.add_argument('--start', required=True)
     parser.add_argument('--end', required=True)
@@ -102,17 +107,18 @@ def main():
     directory = Path(args.workspace).resolve() / 'datasets' / args.id
     if directory.exists():
         parser.error('Dataset ID exists; choose a new ID (no overwrite)')
-    first = int(start.timestamp() * 1000) - 240 * 3600000
+    interval = 14400000 if args.timeframe == '4h' else 3600000
+    first = int(start.timestamp() * 1000) - 240 * interval
     stop = int(end.timestamp() * 1000)
-    candles, endpoint = download_candles(args.exchange, first, stop, opener)
-    expected = list(range(first, stop, 3600000))
+    candles, endpoint = download_candles(args.exchange, first, stop, opener, args.pair, args.timeframe)
+    expected = list(range(first, stop, interval))
     content = json.dumps([candles[ts] for ts in expected], separators=(',', ':')).encode('utf-8')
-    manifest = {'exchange': args.exchange, 'pair': 'BTC/USDT', 'timeframe': '1h', 'tradingMode': 'spot',
+    manifest = {'exchange': args.exchange, 'pair': args.pair, 'timeframe': args.timeframe, 'tradingMode': 'spot',
                 'sha256': hashlib.sha256(content).hexdigest(), 'source': endpoint,
                 'fetchedAt': dt.datetime.now(dt.timezone.utc).isoformat(), 'candles': len(expected),
                 'startDate': args.start, 'endDate': args.end, 'warmupCandles': 240}
     directory.mkdir(parents=True, exist_ok=False)
-    (directory / 'BTC_USDT-1h.json').write_bytes(content)
+    (directory / f'{args.pair.replace("/", "_")}-{args.timeframe}.json').write_bytes(content)
     (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     print('DATASET_OK', args.id, len(expected), manifest['sha256'])
 

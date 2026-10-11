@@ -702,4 +702,27 @@ POST /quant/backtest/strategy-experiment/assessment为只读研究接口（quant
 
 本轮量化Java 160项中157项执行通过、3项烟测跳过，新增6项计算测试及1项H2归属/行情变化测试；单体构建、前端类型检查/本地构建通过。真实只读复盘取得720根/18笔，最终资金与月份合计匹配原结果；隔离浏览器验证三图、第二笔买点点击、表格定位、缺证据清图，页面错误0/实际业务写请求0，不等同完整登录菜单验收。摘要historical-review-real-fixture-20261011.json及historical-review-browser-20261011.json留在.runtime/quant。
 
-默认单体与前端已启动供查看，健康UP，paper/live/automation均false；没有表结构/执行配置变化，没有恢复观察或加载凭据。Maven本地依赖通过 -Dspring-boot.repackage.skip=true -Dmaven.jar.forceCreation=true install 强制恢复普通模块JAR，再单独package单体，避免增量构建复用可执行依赖；未改根版本或仓库POM。唯一下一任务是用现有历史结果复盘与比较，后续扩展须按用户选择安排。
+默认单体与前端已启动供查看，健康UP，paper/live/automation均false；没有表结构/执行配置变化，没有恢复观察或加载凭据。Maven本地依赖通过 -Dspring-boot.repackage.skip=true -Dmaven.jar.forceCreation=true install 强制恢复普通模块JAR，再单独package单体，避免增量构建复用可执行依赖；未改根版本或仓库POM。该阶段下一任务为使用历史复盘；最新扩展与下一建议以下文及HANDOFF为准。
+
+### BTC/ETH 1h/4h 历史回看（2026-10-11）
+
+公开下载支持 OKX/Binance 的 BTC/USDT、ETH/USDT 现货，周期1h、4h；其他交易对/周期拒绝。准备数据表单选择币种和周期，日期仍为已结束UTC日、结束日不含；系统额外下载240根预热，即1h为10天、4h为40天。Python CLI增加 `--pair ETH/USDT --timeframe 4h`，未传时继续BTC/1h；仅调用公开行情，不用凭据。文件名固定推导为 `ETH_USDT-4h.json` 等，manifest必须匹配交易所/现货/市场，摘要、大小、目录边界、UTC网格、连续性和OHLCV均检查。
+
+下载审计复用已有pair_name/timeframe字段。回测请求可选pair/timeframe，省略从所选数据集解析并持久化到原request_json；显式不匹配拒绝。旧9字段请求的JSON/幂等摘要保持兼容；旧任务无市场字段按BTC/1h读取。执行与复盘核对原摘要、交易所、币种及周期，防止仅替换清单元数据。Freqtrade配置和 `--timeframe` 显式使用所选周期，策略源码和版本摘要不改；导出交易对、周期和末根覆盖须一致。研究周期参数指K线根数，不是固定小时数。
+
+复盘按所选网格显示K线、买卖、资金、回撤和月度结算；ETH数量单位和1h/4h标签随原任务变化。资金估值字段标记 `CANDLE_CLOSE_ESTIMATED_LIQUIDATION`；旧API字段hourCloseMaxDrawdownRatio保留兼容，含义为所选K线收盘估值回撤，可能漏掉盘中低点。ETH/4h不能进入既有BTC/1h运行准入，返回HISTORICAL_MARKET_ONLY失败检查；旧BTC/1h准入摘要不变，不扩展模拟/实盘交易范围。
+
+实际公开下载与引擎验收：原EMA20/60，假设本金1000/每笔100 USDT，双侧手续费0.1%；UTC2026-08-01至10-01，Freqtrade2026.8。以下四任务均SUCCEEDED，复盘最终资金、月度合计与引擎净利润一致。
+
+| 交易所/市场 | 任务 | 数据总根数（含预热）/复盘根数 | 成交 | 净利润USDT |
+| --- | --- | --- | --- | --- |
+| Binance ETH/1h | 6f2a9681-4257-4393-b831-2b983ef438e5 | 1704/1464 | 17 | -13.44055132 |
+| Binance BTC/4h | a08d4cf4-5ecb-40fd-a841-6699c838a198 | 606/366 | 3 | +5.80356515 |
+| Binance ETH/4h | 8302173d-2ad9-4994-808d-803f207f7947 | 606/366 | 3 | -0.39218504 |
+| OKX ETH/4h | a9307a86-8a46-4647-a8a5-71f2e5024401 | 606/366 | 3 | -0.39160035 |
+
+以上只验证市场接入与计算一致性；没有寻参、盈利验收或实盘确认。数据集编号为hm-20261011-{binance/okx}-{btc/eth}-{1h/4h}对应四组，已可在前端选择。
+
+量化Java166项中163项执行通过、3项环境烟测跳过；Python7项通过，覆盖两交易所/两币种/两周期分页、闭盘及非法参数。普通模块install、单体package、最终前端类型检查/构建通过。隔离浏览器使用真实ETH/4h结果，验证完整日期留足40天预热、三图、第二笔买点点击、数量单位和下载选择器，错误0/实际业务写请求0；不等同完整登录菜单验收。
+
+默认服务根39436、前端5173根51512保持启动；UP、paper/live/automation全false，无新观察、凭据加载、私有请求或令牌文件。构建与非秘密证据在.runtime/quant/history-market-*20261011*，临时组件验收页面已清理。下一开发建议为RSI历史模板并与既有EMA/突破同条件比较；按用户下一项安排，不自动扩展执行。

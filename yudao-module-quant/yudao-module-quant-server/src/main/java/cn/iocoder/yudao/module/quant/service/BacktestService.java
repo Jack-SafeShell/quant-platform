@@ -51,11 +51,15 @@ public class BacktestService {
         String source = (String) version.get("sourceCode");
         String sourceHash = DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
         if (!sourceHash.equals(version.get("sourceHash"))) throw new IllegalArgumentException("策略版本摘要不符");
+        if ((request.pair()!=null && !request.pair().equals(dataset.pair()))
+                || (request.timeframe()!=null && !request.timeframe().equals(dataset.timeframe())))
+            throw new IllegalArgumentException("请求币种或周期与所选行情不一致");
+        String snapshot = JsonUtils.toJsonString(request.withMarket(dataset.pair(), dataset.timeframe()));
         String id = UUID.randomUUID().toString();
         try {
             transaction.executeWithoutResult(status -> {
                 if (repository.pending(tenant, owner) >= 10) throw new IllegalArgumentException("待处理任务过多，请等待现有任务完成");
-                repository.insert(id, tenant, owner, request.requestKey(), digest, params, request.strategyVersionId(), request.parameterSetId(), dataset, properties.getImage());
+                repository.insert(id, tenant, owner, request.requestKey(), digest, snapshot, request.strategyVersionId(), request.parameterSetId(), dataset, properties.getImage());
             });
             return id;
         } catch (DuplicateKeyException e) {
@@ -132,7 +136,8 @@ public class BacktestService {
         strategy.put("name", task.get("strategyName")); strategy.put("versionId", task.get("strategyVersionId")); strategy.put("sha256", task.get("strategyHash"));
         strategy.put("configuration", task.get("strategyConfiguration"));
         manifest.put("strategy", strategy);
-        manifest.put("dataset", Map.of("id", task.get("datasetId"), "exchange", task.get("exchangeName"), "sha256", task.get("datasetHash"), "source", task.get("datasetSource")));
+        manifest.put("dataset", Map.of("id", task.get("datasetId"), "exchange", task.get("exchangeName"), "sha256", task.get("datasetHash"), "source", task.get("datasetSource"),
+                "pair",request.path("pair").asText("BTC/USDT"),"timeframe",request.path("timeframe").asText("1h")));
         manifest.put("engine", Map.of("image", task.get("engineImage"), "version", task.get("engineVersion"), "artifactSha256", task.get("artifactHash")));
         manifest.put("request", JsonUtils.getObjectMapper().convertValue(request, Map.class));
         manifest.put("metrics", Map.of("totalTrades", metrics.path("totalTrades").asInt(), "netProfit", metrics.path("netProfit").decimalValue(), "returnRatio", metrics.path("returnRatio").decimalValue(), "maxDrawdownRatio", metrics.path("maxDrawdownRatio").decimalValue()));

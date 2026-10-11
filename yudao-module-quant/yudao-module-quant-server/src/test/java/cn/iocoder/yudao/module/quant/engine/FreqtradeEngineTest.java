@@ -48,6 +48,23 @@ class FreqtradeEngineTest {
         Files.writeString(log,"unrelated log");
         assertThrows(IllegalStateException.class,()->FreqtradeBacktestEngine.readVersion(log));
     }
+    @Test void historicalMarketOverridesStrategyTimeframeAndRejectsWrongExport() throws Exception {
+        var props=new QuantProperties();var engine=new FreqtradeBacktestEngine(props);
+        var req=new BacktestRequest("key",UUID.randomUUID().toString(),UUID.randomUUID().toString(),"test","2025-02-10","2025-02-12",new BigDecimal("1000"),new BigDecimal("100"),new BigDecimal("0.001"));
+        var dataset=new DatasetRegistry.Dataset("test","binance","hash","test",root,0,0,300,"ETH/USDT","4h");
+        var input=new BacktestEngine.Input(UUID.randomUUID().toString(),req,dataset,"source","hash");
+        var args=engine.command(input,root);assertEquals("4h",args.get(args.indexOf("--timeframe")+1));
+        assertEquals(List.of("ETH/USDT"),((Map<?,?>)engine.configuration(input).get("exchange")).get("pair_whitelist"));
+        assertEquals(true,engine.configuration(input).get("dry_run"));
+        var summary=new LinkedHashMap<String,Object>(Map.of("total_trades",0,"profit_total",0,"profit_total_abs",0,"max_drawdown_account",0,"trades",List.of(),"timeframe","4h",
+                "backtest_start_ts",Instant.parse("2025-02-10T00:00:00Z").toEpochMilli(),"backtest_end_ts",Instant.parse("2025-02-11T20:00:00Z").toEpochMilli()));
+        Path zip=root.resolve("eth-four.zip");writeZip(zip,summary);var market=new HistoricalMarket("ETH/USDT","4h");
+        var result=JsonUtils.getObjectMapper().readTree(FreqtradeBacktestEngine.readResult(zip,"2025-02-10","2025-02-12","2026.8",market).resultJson());
+        assertEquals("ETH/USDT",result.path("pair").asText());assertEquals("4h",result.path("timeframe").asText());
+        summary.put("timeframe","1h");writeZip(zip,summary);assertThrows(IllegalStateException.class,()->FreqtradeBacktestEngine.readResult(zip,"2025-02-10","2025-02-12","2026.8",market));
+        summary.put("timeframe","4h");summary.put("total_trades",1);summary.put("trades",List.of(Map.of("pair","BTC/USDT","profit_abs",1)));writeZip(zip,summary);
+        assertThrows(IllegalStateException.class,()->FreqtradeBacktestEngine.readResult(zip,"2025-02-10","2025-02-12","2026.8",market));
+    }
     void writeZip(Path path,Map<String,Object> summary) throws Exception {
         try(var zip=new ZipOutputStream(Files.newOutputStream(path))) {
             zip.putNextEntry(new ZipEntry("result.json"));

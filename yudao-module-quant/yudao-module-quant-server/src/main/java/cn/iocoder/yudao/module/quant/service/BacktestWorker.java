@@ -59,7 +59,8 @@ public class BacktestWorker {
             try {
                 BacktestRequest params = JsonUtils.parseObject((String) task.get("parametersJson"), BacktestRequest.class);
                 DatasetRegistry.Dataset dataset = datasets.load(params.datasetId(), LocalDate.parse(params.startDate()), LocalDate.parse(params.endDate()));
-                if (!dataset.sha256().equals(task.get("datasetHash")) || !properties.getImage().equals(task.get("engineImage")))
+                if (!dataset.sha256().equals(task.get("datasetHash")) || !dataset.exchange().equals(task.get("exchangeName")) || !properties.getImage().equals(task.get("engineImage"))
+                        || !dataset.pair().equals(params.pairName()) || !dataset.timeframe().equals(params.candleTimeframe()))
                     throw new IllegalArgumentException("排队期间数据或引擎版本改变，拒绝执行");
                 BacktestEngine.Output output = engine.run(new BacktestEngine.Input(id, params, dataset, (String) task.get("strategySource"), (String) task.get("strategyHash")));
                 transaction.executeWithoutResult(status -> repository.complete(id, output));
