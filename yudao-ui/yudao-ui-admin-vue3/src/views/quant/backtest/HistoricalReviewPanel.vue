@@ -66,7 +66,7 @@ const baseAsset = computed(() => (review.value?.pair || 'BTC/USDT').split('/')[0
 const utc = (time: number) => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
 const money = (value: number) => value.toFixed(4)
 const percent = (value: number) => (value * 100).toFixed(3)
-const exitLabel = (reason: string) => ({ roi: '达到止盈条件', stop_loss: '触发止损', trailing_stop_loss: '触发移动止损', exit_signal: '策略发出卖出信号', force_exit: '历史区间结束结算' } as Record<string, string>)[reason] || reason
+const exitLabel = (reason: string) => ({ roi: '达到止盈条件', stop_loss: '触发止损', trailing_stop_loss: '触发移动止损', exit_signal: '策略发出卖出信号', rsi_upper_exit: 'RSI升破卖出线', force_exit: '历史区间结束结算' } as Record<string, string>)[reason] || reason
 const unavailable = (reason?: string) => ({ TASK_NOT_COMPLETED: '任务尚未完成，请完成后查看复盘。', DATASET_CHANGED: '原行情摘要已变化，不能用新的行情替代这次回看的数据。', HISTORICAL_EVIDENCE_UNAVAILABLE: '原行情或回看证据不可用，暂时无法生成复盘。', MISSING_OR_UNSUPPORTED_TRADE_EVIDENCE: '这份旧结果缺少完整成交证据或口径不支持；保留原结果，不补造曲线。' } as Record<string,string>)[reason || ''] || '暂时无法生成这份结果的历史复盘。'
 const equityOptions = computed<EChartsOption>(() => ({
   animation: false, tooltip: { trigger: 'axis', renderMode: 'richText' }, legend: { top: 0, data: ['策略估值 USDT', '一直持币 USDT'] },

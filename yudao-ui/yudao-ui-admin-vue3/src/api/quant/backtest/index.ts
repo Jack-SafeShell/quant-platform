@@ -71,12 +71,22 @@ export interface BreakoutStrategyConfiguration {
   stopLossRatio: number
   takeProfitRatio: number
 }
-export type StrategyConfiguration = EmaStrategyConfiguration | BreakoutStrategyConfiguration
+export interface RsiStrategyConfiguration {
+  template: 'RSI_REVERSION'
+  rsiPeriod: number
+  entryThreshold: number
+  exitThreshold: number
+  stopLossRatio: number
+  takeProfitRatio: number
+}
+export type StrategyConfiguration = EmaStrategyConfiguration | BreakoutStrategyConfiguration | RsiStrategyConfiguration
+export const createRsiVersion = (data: Omit<RsiStrategyConfiguration, 'template'>): Promise<string> =>
+  request.post({ url: '/quant/backtest/strategy-version/rsi', data })
 export const createBreakoutVersion = (data: Omit<BreakoutStrategyConfiguration, 'template'>): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/breakout', data })
 export function strategyConfigurationLabel(config?: StrategyConfiguration | null): string {
   if (!config) return '配置待加载（以版本摘要为准）'
-  const name = 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
+  const name = 'rsiPeriod' in config ? `RSI${config.rsiPeriod} · 回升越过${config.entryThreshold}买入 / 越过${config.exitThreshold}卖出` : 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
   return `${name} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%`
 }
 export const createStrategyVersion = (data: EmaStrategyConfiguration): Promise<string> =>

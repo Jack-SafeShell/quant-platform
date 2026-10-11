@@ -336,6 +336,27 @@ class QuantBacktestTest {
         assertEquals("QuantEmaBaseline", task.get("strategyName"));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM quant_strategy_version", Integer.class));
     }
+    @Test void rsiHistoryVersionIsImmutableOwnedAndCannotEnterExecutionAdmission() throws Exception {
+        String rsi=service.createRsiVersion(1,10,RsiStrategyTemplate.defaults());
+        assertEquals(rsi,service.createRsiVersion(1,10,RsiStrategyTemplate.defaults()));
+        assertNotEquals(rsi,service.createRsiVersion(1,10,new cn.iocoder.yudao.module.quant.api.backtest.RsiStrategyRequest(14,25,65,new BigDecimal("0.03"),new BigDecimal("0.06"))));
+        assertNull(repository.findVersion(2,10,rsi));assertNull(repository.findVersion(1,11,rsi));
+        var base=request("rsi-backtest");
+        String task=service.create(1,10,new BacktestRequest(base.requestKey(),rsi,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee()));
+        assertTrue(repository.claim(task));
+        repository.complete(task,new BacktestEngine.Output("test","{\"totalTrades\":14,\"netProfit\":1,\"returnRatio\":0.001,\"maxDrawdownRatio\":0.01}","rsi-artifact"));
+        assertEquals("RSI_REVERSION",((Map<?,?>)service.get(1,10,task).get("strategyConfiguration")).get("template"));
+        var report=JsonUtils.getObjectMapper().readTree(new String(service.exportReport(1,10,task,"json").content(),java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(14,report.path("strategy").path("configuration").path("rsiPeriod").asInt());
+        assertThrows(IllegalArgumentException.class,()->new LiveAdmissionService(new cn.iocoder.yudao.module.quant.dal.LiveAdmissionRepository(jdbc)).create(1,10,task));
+        var optimization=new OptimizationService(new cn.iocoder.yudao.module.quant.dal.OptimizationRepository(jdbc),repository,service);
+        String batch=optimization.createSingleParameter(1,10,new cn.iocoder.yudao.module.quant.api.backtest.OptimizationRequest(rsi,"test","2025-01-11","2025-01-18","2025-01-25",List.of(parameterSetId)));
+        var admission=(Map<String,Object>)optimization.get(1,10,batch).get("paperAdmission");
+        var check=((List<Map<String,Object>>)admission.get("checks")).stream().filter(c->"HISTORICAL_STRATEGY_ONLY".equals(c.get("id"))).findFirst().orElseThrow();
+        assertEquals(false,check.get("passed"));assertEquals(false,admission.get("eligible"));
+        assertThrows(IllegalArgumentException.class,()->optimization.get(1,11,batch));
+        assertThrows(IllegalArgumentException.class,()->service.create(1,11,new BacktestRequest("foreign-rsi",rsi,base.parameterSetId(),base.datasetId(),base.startDate(),base.endDate(),base.startingBalance(),base.stakeAmount(),base.fee())));
+    }
     @Test void breakoutVersionIsIsolatedAndFlowsIntoTaskReport() throws Exception {
         var config = new cn.iocoder.yudao.module.quant.api.backtest.BreakoutStrategyRequest(20, 10, new BigDecimal("0.03"), new BigDecimal("0.06"));
         String breakout = service.createBreakoutVersion(1, 10, config);

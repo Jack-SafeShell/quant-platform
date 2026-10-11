@@ -131,6 +131,7 @@ public class LiveAdmissionService {
         String source=String.valueOf(snapshot.get("sourceCode")),hash=DatasetRegistry.hash(source.getBytes(StandardCharsets.UTF_8));
         var configuration=StrategyTemplates.readConfiguration(source);
         if(configuration==null||!hash.equals(snapshot.get("sourceHash")))throw new IllegalArgumentException("Only an intact server-owned strategy template is supported");
+        if("RSI_REVERSION".equals(configuration.get("template")))throw new IllegalArgumentException("RSI strategy is supported for historical research only");
         return new TreeMap<>(Map.of("strategyVersionId",version,"sourceHash",hash,"configuration",configuration));
     }
 
