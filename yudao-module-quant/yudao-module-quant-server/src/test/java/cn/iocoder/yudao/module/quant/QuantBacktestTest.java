@@ -59,6 +59,7 @@ class QuantBacktestTest {
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/027_live_portfolio.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/028_exchange_accounts.sql")).execute(ds);
         new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/029_historical_segments.sql")).execute(ds);
+        new ResourceDatabasePopulator(new FileSystemResource("../../sql/quant/030_parameter_stability.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds); transactions = new DataSourceTransactionManager(ds);
         repository = new BacktestRepository(jdbc); datasets = new DatasetRegistry(properties);
         service = new BacktestService(repository, datasets, properties, transactions);
@@ -72,6 +73,94 @@ class QuantBacktestTest {
     }
     HistoricalSegmentsService segments() {
         return new HistoricalSegmentsService(new cn.iocoder.yudao.module.quant.dal.HistoricalSegmentsRepository(jdbc),repository,service,datasets,transactions);
+    }
+    ParameterStabilityService stability() {
+        return new ParameterStabilityService(new cn.iocoder.yudao.module.quant.dal.ParameterStabilityRepository(jdbc),repository,service,segments(),transactions);
+    }
+    cn.iocoder.yudao.module.quant.api.backtest.ParameterStabilityRequest stabilityRequest(String key) {
+        return new cn.iocoder.yudao.module.quant.api.backtest.ParameterStabilityRequest(key,versionId,parameterSetId,"test","2025-01-11","2025-02-03","fastPeriod",2);
+    }
+    @SuppressWarnings("unchecked")
+    @Test void stabilityChangesOnlySelectedParameterForAllTemplatesAndNeverClips() throws Exception {
+        for(String source:List.of(EmaStrategyTemplate.render(EmaStrategyTemplate.defaults()),BreakoutStrategyTemplate.render(new cn.iocoder.yudao.module.quant.api.backtest.BreakoutStrategyRequest(20,10,new BigDecimal("0.03"),new BigDecimal("0.06"))),RsiStrategyTemplate.render(RsiStrategyTemplate.defaults()))) {
+            var config=StrategyTemplates.readConfiguration(source);String key=config.containsKey("rsiPeriod")?"rsiPeriod":config.containsKey("entryPeriod")?"entryPeriod":"fastPeriod";
+            var neighbours=ParameterStabilityService.neighbours(source,key,2);
+            assertEquals(List.of("LOWER","BASE","UPPER"),neighbours.stream().map(v->v.get("role")).toList());
+            for(int i=0;i<3;i++) {
+                var expected=new TreeMap<>(config);expected.put(key,((Number)config.get(key)).intValue()+(i-1)*2);
+                assertEquals(expected,neighbours.get(i).get("configuration"));
+            }
+            assertEquals(DatasetRegistry.hash(source.getBytes(java.nio.charset.StandardCharsets.UTF_8)),neighbours.get(1).get("strategyHash"));
+            assertThrows(IllegalArgumentException.class,()->ParameterStabilityService.neighbours(source,"stopLossRatio",2));
+        }
+        String boundary=EmaStrategyTemplate.render(new cn.iocoder.yudao.module.quant.api.backtest.EmaStrategyRequest(2,3,new BigDecimal("0.02"),new BigDecimal("0.04")));
+        assertThrows(IllegalArgumentException.class,()->ParameterStabilityService.neighbours(boundary,"fastPeriod",1));
+        String rsi=RsiStrategyTemplate.render(new cn.iocoder.yudao.module.quant.api.backtest.RsiStrategyRequest(14,30,31,new BigDecimal("0.03"),new BigDecimal("0.06")));
+        assertThrows(IllegalArgumentException.class,()->ParameterStabilityService.neighbours(rsi,"entryThreshold",2));
+        assertThrows(IllegalArgumentException.class,()->ParameterStabilityService.neighbours(rsi,"rsiPeriod",0));
+        assertThrows(IllegalArgumentException.class,()->ParameterStabilityService.neighbours("arbitrary Python","rsiPeriod",2));
+    }
+    @Test void stabilityPreviewDoesNotRegisterVersionsAndCreationIsIdempotentAndScoped() throws Exception {
+        var s=stability();int before=service.listStrategyVersions(1,10).size();var preview=s.preview(1,10,stabilityRequest("preview"));
+        assertEquals(before,service.listStrategyVersions(1,10).size());assertEquals(0,repository.pending(1,10));assertEquals(3,((List<?>)preview.get("variants")).size());
+        String id=s.create(1,10,stabilityRequest("check"));assertEquals(id,s.create(1,10,stabilityRequest("check")));assertEquals(3,repository.pending(1,10));
+        assertEquals(before+2,service.listStrategyVersions(1,10).size());assertTrue(s.list(2,10).isEmpty());assertTrue(s.list(1,11).isEmpty());
+        assertThrows(IllegalArgumentException.class,()->s.get(2,10,id));assertThrows(IllegalArgumentException.class,()->s.get(1,11,id));
+        assertThrows(IllegalArgumentException.class,()->s.preview(2,10,stabilityRequest("foreign")));
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.ParameterStabilityRequest("check",versionId,parameterSetId,"test","2025-01-11","2025-02-03","fastPeriod",3)));
+        assertFalse(s.get(1,10,id).containsKey("summary"));assertEquals(false,s.get(1,10,id).get("terminal"));
+    }
+    @Test void stabilityRollbackIncludesNewVersionsAndAllEnqueuedTasks() throws Exception {
+        int before=service.listStrategyVersions(1,10).size();BacktestService failing=new BacktestService(repository,datasets,properties,transactions){
+            int count;
+            @Override public String create(long tenant,long owner,BacktestRequest r)throws Exception {String task=super.create(tenant,owner,r);if(++count==2)throw new IllegalArgumentException("fixture failure");return task;}
+        };
+        var s=new ParameterStabilityService(new cn.iocoder.yudao.module.quant.dal.ParameterStabilityRepository(jdbc),repository,failing,segments(),transactions);
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,stabilityRequest("rollback")));
+        assertEquals(0,repository.pending(1,10));assertEquals(before,service.listStrategyVersions(1,10).size());assertTrue(s.list(1,10).isEmpty());
+    }
+    @Test void stabilityRejectsCapacityOrMissingHistoryBeforeVersionRegistration() throws Exception {
+        var s=stability();int before=service.listStrategyVersions(1,10).size();for(int i=0;i<8;i++)service.create(1,10,request("busy-"+i));
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,stabilityRequest("capacity")));
+        assertThrows(IllegalArgumentException.class,()->s.create(1,10,new cn.iocoder.yudao.module.quant.api.backtest.ParameterStabilityRequest("missing",versionId,parameterSetId,"missing","2025-01-11","2025-02-03","fastPeriod",2)));
+        assertEquals(before,service.listStrategyVersions(1,10).size());assertEquals(8,repository.pending(1,10));assertTrue(s.list(1,10).isEmpty());
+    }
+    @SuppressWarnings("unchecked")
+    @Test void stabilityReturnDifferencesUseOriginalBaselineAndDetectDirectionChange() throws Exception {
+        var s=stability();String id=s.create(1,10,stabilityRequest("returns"));var rows=(List<Map<String,Object>>)s.get(1,10,id).get("rows");
+        double[] returns={-0.02,0.01,0.03};
+        for(int i=0;i<3;i++){String task=(String)rows.get(i).get("taskId");repository.claim(task);repository.complete(task,new BacktestEngine.Output("fixture",JsonUtils.toJsonString(Map.of("totalTrades",6,"returnRatio",returns[i],"netProfit",returns[i]*1000,"maxDrawdownRatio",0.04)),"artifact-"+i));}
+        var result=s.get(1,10,id);var summary=(Map<String,Object>)result.get("summary");var finished=(List<Map<String,Object>>)result.get("rows");
+        assertEquals("DIRECTION_CHANGED",summary.get("finding"));assertEquals(0,new BigDecimal("0.05").compareTo((BigDecimal)summary.get("returnSpread")));
+        assertEquals(0,new BigDecimal("-0.03").compareTo((BigDecimal)finished.getFirst().get("returnDelta")));assertEquals(0,((BigDecimal)finished.get(1).get("returnDelta")).signum());
+        assertEquals(result.get("evidenceHash"),s.get(1,10,id).get("evidenceHash"));assertEquals(false,result.get("autoApplied"));assertEquals(false,result.get("executionAllowed"));
+        jdbc.update("UPDATE quant_backtest_task SET dataset_hash='changed' WHERE id=?",rows.getFirst().get("taskId"));var changed=s.get(1,10,id);
+        assertFalse(changed.containsKey("summary"));assertNotEquals(result.get("evidenceHash"),changed.get("evidenceHash"));
+        assertEquals("EVIDENCE_MISMATCH",((List<Map<String,Object>>)changed.get("rows")).getFirst().get("status"));
+    }
+    @Test void stabilitySampleRulesNeverCallZeroFillsStableOrRankParameters() {
+        var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<3;i++)rows.add(new TreeMap<>(Map.of("returnRatio",new BigDecimal("0.01"),"maxDrawdownRatio",new BigDecimal("0.02"),"totalTrades",5,"noFills",false)));
+        assertEquals("ALL_POSITIVE_THIS_WINDOW",ParameterStabilityService.summary(rows).get("finding"));
+        rows.getFirst().put("totalTrades",0);rows.getFirst().put("noFills",true);rows.getFirst().put("returnRatio",BigDecimal.ZERO);
+        assertEquals("INSUFFICIENT_TRADES",ParameterStabilityService.summary(rows).get("finding"));assertEquals(1L,ParameterStabilityService.summary(rows).get("noFillVariants"));
+        for(var row:rows){row.put("totalTrades",5);row.put("returnRatio",BigDecimal.ZERO);}assertEquals("ALL_NON_POSITIVE",ParameterStabilityService.summary(rows).get("finding"));
+        assertFalse(ParameterStabilityService.summary(rows).containsKey("rank"));
+    }
+    @Test void historicalEvidenceIgnoresAllMapInsertionOrdersButPreservesOrderedRowsAndMetrics() {
+        var first=new LinkedHashMap<String,Object>();first.put("z",1);first.put("a",2);
+        var second=new LinkedHashMap<String,Object>();second.put("a",2);second.put("z",1);
+        var x=new LinkedHashMap<String,Object>();x.put("rows",List.of(first,Map.of("returnRatio",new BigDecimal("0.01"))));x.put("summary",first);
+        var y=new LinkedHashMap<String,Object>();y.put("summary",second);y.put("rows",List.of(second,Map.of("returnRatio",new BigDecimal("0.01"))));
+        assertEquals(HistoricalEvidence.hash(x),HistoricalEvidence.hash(y));
+        y.put("rows",List.of(Map.of("returnRatio",new BigDecimal("0.01")),second));assertNotEquals(HistoricalEvidence.hash(x),HistoricalEvidence.hash(y));
+        y.put("rows",List.of(second,Map.of("returnRatio",new BigDecimal("0.02"))));assertNotEquals(HistoricalEvidence.hash(x),HistoricalEvidence.hash(y));
+    }
+    @SuppressWarnings("unchecked")
+    @Test void stabilityFailedOrMalformedResultsDoNotProduceZeroMetrics() throws Exception {
+        var s=stability();String id=s.create(1,10,stabilityRequest("failure"));var rows=(List<Map<String,Object>>)s.get(1,10,id).get("rows");
+        for(int i=0;i<3;i++){String task=(String)rows.get(i).get("taskId");repository.claim(task);if(i==0)repository.fail(task,"fixture failure");else repository.complete(task,new BacktestEngine.Output("fixture",i==1?"{}":"broken JSON","artifact"));}
+        var result=s.get(1,10,id);assertEquals(true,result.get("terminal"));assertEquals("INCOMPLETE",result.get("status"));assertFalse(result.containsKey("summary"));
+        assertTrue(((List<Map<String,Object>>)result.get("rows")).stream().noneMatch(row->row.containsKey("returnRatio") || row.containsKey("returnDelta")));
     }
     cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest segmentsRequest(String key) {
         return new cn.iocoder.yudao.module.quant.api.backtest.HistoricalSegmentsRequest(key,versionId,parameterSetId,"test","2025-01-11","2025-02-03",3);

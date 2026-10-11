@@ -89,7 +89,7 @@ public class HistoricalSegmentsService {
     private static String reuse(Map<String,Object> previous,String hash) {
         if(!hash.equals(previous.get("requestHash"))) throw new IllegalArgumentException("同一请求标识已用于不同分段条件");return (String)previous.get("id");
     }
-    private static boolean bound(Map<String,Object> task,Map<String,Object> plan,Map<String,Object> window) {
+    static boolean bound(Map<String,Object> task,Map<String,Object> plan,Map<String,Object> window) {
         if(task==null || !(task.get("strategySource") instanceof String)) return false;
         var r=JsonUtils.getObjectMapper().readTree((String)task.get("parametersJson"));
         var p=JsonUtils.getObjectMapper().readTree((String)plan.get("parametersJson"));
@@ -146,6 +146,6 @@ public class HistoricalSegmentsService {
         }
         result.put("limitations",List.of("各段使用同一固定策略，独立重置本金，不相加或复利合并收益。", "按UTC日期等天数切分，每段至少7天；各段结束日不含，段末持仓由历史引擎结束回测规则处理。", "预热240根K线，不计入各段交易；回撤使用原历史引擎口径。", "无成交不代表策略稳定；已用于研究的数据不是未见样本。结果不自动选策略、改参数或启动交易。"));
         result.put("autoApplied",false);result.put("executionAllowed",false);
-        result.put("evidenceHash",DatasetRegistry.hash(JsonUtils.toJsonByte(result)));return result;
+        result.put("evidenceHashVersion","SORTED_JSON_V1");result.put("evidenceHash",HistoricalEvidence.hash(result));return result;
     }
 }

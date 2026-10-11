@@ -1,6 +1,9 @@
 <template>
   <HistoryGuide />
-  <SegmentedHistoryPanel :versions="versions" :parameters="parameters" :datasets="datasets" :enabled="enabled" />
+  <el-tabs v-model="historyCheckTab">
+    <el-tab-pane label="换几段历史检查" name="segments"><SegmentedHistoryPanel :versions="versions" :parameters="parameters" :datasets="datasets" :enabled="enabled" /></el-tab-pane>
+    <el-tab-pane label="参数小幅变化检查" name="stability" lazy><ParameterStabilityPanel :versions="versions" :parameters="parameters" :datasets="datasets" :enabled="enabled" /></el-tab-pane>
+  </el-tabs>
   <ContentWrap title="用同一段历史比较多个策略">
     <p>用相同资金、费率和数据比较候选方案，查看历史赚亏与买卖记录。收益、回撤和执行表现共同决定后续选择。</p>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />
@@ -124,6 +127,7 @@
 import HistoryGuide from '../HistoryGuide.vue'
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import SegmentedHistoryPanel from './SegmentedHistoryPanel.vue'
+import ParameterStabilityPanel from './ParameterStabilityPanel.vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Echart } from '@/components/Echart'
@@ -134,6 +138,7 @@ import { getCapabilities, listStrategyVersions, listParameterSets, listDatasets,
 
 defineOptions({ name: 'QuantExperiments' })
 const router = useRouter()
+const historyCheckTab = ref('segments')
 const form = reactive({ strategyVersionIds: [] as string[], parameterSetId: '', datasetId: '', validationEnd: '' })
 const trainDates = ref<string[]>([])
 const versions = ref<StrategyVersion[]>([]), parameters = ref<ParameterSet[]>([]), datasets = ref<DatasetQuality[]>([])
