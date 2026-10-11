@@ -6,12 +6,15 @@
       <p v-if="form.template === 'RSI_REVERSION'">RSI 是0～100的涨跌强弱指标。例如从30以下回升到30以上时买入，升到70以上时卖出。若一次跳过两条线，不买入；持续下跌时也可能继续亏损。RSI模板当前仅用于历史回看。</p>
       <p v-if="form.template === 'BOLLINGER_RSI'">布林带用平均价格和波动大小画出上、中、下三条线。前一根收盘在下轨外或线上，当前收盘回到下轨上方且仍低于中轨，同时RSI比前一根上升、未超过买入上限时买入；价格回到中轨或上方时卖出。不是跌到下轨就买，持续下跌仍可能亏损。此模板仅用于历史回看。</p>
       <p v-if="form.template === 'EMA_ADX'">ADX是0～100的趋势强度刻度，不代表上涨方向或收益百分比。最低强度越高，买入机会通常越少；若交叉当根强度不足就跳过，不等强度变高后补买。卖出不要求ADX达标。此模板仅用于历史回看。</p>
+      <p v-if="form.template === 'BREAKOUT_ATR'">ATR表示近期价格波动的大小。买入时止损距离为ATR×倍数，并受最大止损比例限制；持仓后按最近已收盘价格和ATR计算，只向上收紧、不向下放宽。倍数不是百分比，倍数越大通常留出越宽空间。跳空和费用可能使实际亏损超过上限；此模板仅用于历史回看。</p>
       <el-form :inline="true" @submit.prevent="save">
-        <el-form-item label="买卖规则"><el-select v-model="form.template" style="width: 320px"><el-option label="均线交叉（EMA）" value="EMA" /><el-option label="均线＋趋势强度（EMA＋ADX）" value="EMA_ADX" /><el-option label="价格突破" value="CHANNEL_BREAKOUT" /><el-option label="低位回升（RSI）" value="RSI_REVERSION" /><el-option label="布林带＋RSI回升" value="BOLLINGER_RSI" /></el-select></el-form-item>
-        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="买入参考K线数"><el-input-number v-model="form.entryPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
-        <el-form-item v-if="form.template === 'CHANNEL_BREAKOUT'" label="卖出参考K线数"><el-input-number v-model="form.exitPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
+        <el-form-item label="买卖规则"><el-select v-model="form.template" style="width: 320px"><el-option label="均线交叉（EMA）" value="EMA" /><el-option label="均线＋趋势强度（EMA＋ADX）" value="EMA_ADX" /><el-option label="价格突破" value="CHANNEL_BREAKOUT" /><el-option label="突破＋波动止损（ATR）" value="BREAKOUT_ATR" /><el-option label="低位回升（RSI）" value="RSI_REVERSION" /><el-option label="布林带＋RSI回升" value="BOLLINGER_RSI" /></el-select></el-form-item>
+        <el-form-item v-if="['CHANNEL_BREAKOUT', 'BREAKOUT_ATR'].includes(form.template)" label="买入参考K线数"><el-input-number v-model="form.entryPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
+        <el-form-item v-if="['CHANNEL_BREAKOUT', 'BREAKOUT_ATR'].includes(form.template)" label="卖出参考K线数"><el-input-number v-model="form.exitPeriod" :min="2" :max="120" :precision="0" /></el-form-item>
         <el-form-item v-if="['EMA', 'EMA_ADX'].includes(form.template)" label="短期均线K线数"><el-input-number v-model="form.fastPeriod" :min="2" :max="119" :precision="0" /></el-form-item>
         <el-form-item v-if="['EMA', 'EMA_ADX'].includes(form.template)" label="长期均线K线数"><el-input-number v-model="form.slowPeriod" :min="3" :max="120" :precision="0" /></el-form-item>
+        <el-form-item v-if="form.template === 'BREAKOUT_ATR'" label="ATR参考K线数"><el-input-number v-model="form.atrPeriod" :min="2" :max="50" :precision="0" /></el-form-item>
+        <el-form-item v-if="form.template === 'BREAKOUT_ATR'" label="ATR止损距离（倍数）"><el-input-number v-model="form.atrMultiplier" :min="1" :max="5" :step="0.1" :precision="2" /></el-form-item>
         <el-form-item v-if="form.template === 'EMA_ADX'" label="ADX参考K线数"><el-input-number v-model="form.adxPeriod" :min="2" :max="50" :precision="0" /></el-form-item>
         <el-form-item v-if="form.template === 'EMA_ADX'" label="最低趋势强度（刻度）"><el-input-number v-model="form.adxThreshold" :min="10" :max="60" :precision="0" /></el-form-item>
         <el-form-item v-if="form.template === 'BOLLINGER_RSI'" label="布林参考K线数"><el-input-number v-model="form.bandPeriod" :min="5" :max="100" :precision="0" /></el-form-item>
@@ -20,7 +23,7 @@
         <el-form-item v-if="form.template === 'BOLLINGER_RSI'" label="RSI买入上限（刻度）"><el-input-number v-model="form.rsiCeiling" :min="10" :max="70" :precision="0" /></el-form-item>
         <el-form-item v-if="form.template === 'RSI_REVERSION'" label="买入线（向上越过）"><el-input-number v-model="form.entryThreshold" :min="1" :max="98" :precision="0" /></el-form-item>
         <el-form-item v-if="form.template === 'RSI_REVERSION'" label="卖出线（向上越过）"><el-input-number v-model="form.exitThreshold" :min="2" :max="99" :precision="0" /></el-form-item>
-        <el-form-item label="止损 %"><el-input-number v-model="form.stopLossPercent" :min="0.1" :max="20" :step="0.1" :precision="4" /></el-form-item>
+        <el-form-item :label="form.template === 'BREAKOUT_ATR' ? '最大止损 %' : '止损 %'"><el-input-number v-model="form.stopLossPercent" :min="0.1" :max="20" :step="0.1" :precision="4" /></el-form-item>
         <el-form-item label="止盈 %"><el-input-number v-model="form.takeProfitPercent" :min="0.1" :max="50" :step="0.1" :precision="4" /></el-form-item>
         <el-form-item><el-button v-hasPermi="['quant:backtest:create']" type="primary" :loading="saving" @click="save">保存为新策略并选中</el-button></el-form-item>
       </el-form>
@@ -32,13 +35,14 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createStrategyVersion, createBreakoutVersion, createRsiVersion, createBollingerRsiVersion, createEmaAdxVersion, type StrategyVersion } from '@/api/quant/backtest'
+import { createStrategyVersion, createBreakoutVersion, createRsiVersion, createBollingerRsiVersion, createEmaAdxVersion, createBreakoutAtrVersion, type StrategyVersion } from '@/api/quant/backtest'
 
 const props = defineProps<{ versions: StrategyVersion[]; selectedVersionId: string }>()
 const emit = defineEmits<{ created: [id: string] }>()
 const saving = ref(false)
-const form = reactive({ template: 'EMA', adxPeriod: 14, adxThreshold: 25, entryPeriod: 20, exitPeriod: 10, fastPeriod: 20, slowPeriod: 60, rsiPeriod: 14, entryThreshold: 30, exitThreshold: 70, bandPeriod: 20, bandDeviation: 2, rsiCeiling: 50, stopLossPercent: 2, takeProfitPercent: 4 })
+const form = reactive({ template: 'EMA', atrPeriod: 14, atrMultiplier: 2, adxPeriod: 14, adxThreshold: 25, entryPeriod: 20, exitPeriod: 10, fastPeriod: 20, slowPeriod: 60, rsiPeriod: 14, entryThreshold: 30, exitThreshold: 70, bandPeriod: 20, bandDeviation: 2, rsiCeiling: 50, stopLossPercent: 2, takeProfitPercent: 4 })
 const explanations: Record<string, string> = {
+  BREAKOUT_ATR: '突破＋波动止损：突破此前高点时买入，跌破此前低点或触及ATR止损时退出。',
   EMA_ADX: '均线＋趋势强度：均线向上交叉时，ADX达到最低强度才买入；向下交叉时卖出。',
   EMA: '均线交叉：短期平均价格向上穿过长期平均价格时买入，向下穿过时卖出。',
   CHANNEL_BREAKOUT: '价格突破：价格突破此前参考K线的高点时买入，跌破参考低点时卖出。',
@@ -48,14 +52,16 @@ const explanations: Record<string, string> = {
 watch(() => props.versions.find((v) => v.id === props.selectedVersionId), (version) => {
   const config = version?.configuration
   if (config) Object.assign(form, {
-    ...('adxPeriod' in config ? { template: 'EMA_ADX', fastPeriod: config.fastPeriod, slowPeriod: config.slowPeriod, adxPeriod: config.adxPeriod, adxThreshold: config.adxThreshold } : 'bandPeriod' in config ? { template: 'BOLLINGER_RSI', bandPeriod: config.bandPeriod, bandDeviation: config.bandDeviation, rsiPeriod: config.rsiPeriod, rsiCeiling: config.rsiCeiling } : 'rsiPeriod' in config ? { template: 'RSI_REVERSION', rsiPeriod: config.rsiPeriod, entryThreshold: config.entryThreshold, exitThreshold: config.exitThreshold } : 'entryPeriod' in config ? { template: 'CHANNEL_BREAKOUT', entryPeriod: config.entryPeriod, exitPeriod: config.exitPeriod } : { template: 'EMA', fastPeriod: config.fastPeriod, slowPeriod: config.slowPeriod }),
+    ...('atrPeriod' in config ? { template: 'BREAKOUT_ATR', entryPeriod: config.entryPeriod, exitPeriod: config.exitPeriod, atrPeriod: config.atrPeriod, atrMultiplier: config.atrMultiplier } : 'adxPeriod' in config ? { template: 'EMA_ADX', fastPeriod: config.fastPeriod, slowPeriod: config.slowPeriod, adxPeriod: config.adxPeriod, adxThreshold: config.adxThreshold } : 'bandPeriod' in config ? { template: 'BOLLINGER_RSI', bandPeriod: config.bandPeriod, bandDeviation: config.bandDeviation, rsiPeriod: config.rsiPeriod, rsiCeiling: config.rsiCeiling } : 'rsiPeriod' in config ? { template: 'RSI_REVERSION', rsiPeriod: config.rsiPeriod, entryThreshold: config.entryThreshold, exitThreshold: config.exitThreshold } : 'entryPeriod' in config ? { template: 'CHANNEL_BREAKOUT', entryPeriod: config.entryPeriod, exitPeriod: config.exitPeriod } : { template: 'EMA', fastPeriod: config.fastPeriod, slowPeriod: config.slowPeriod }),
     stopLossPercent: Number((config.stopLossRatio * 100).toFixed(4)),
     takeProfitPercent: Number((config.takeProfitRatio * 100).toFixed(4))
   })
 }, { immediate: true })
 
 async function save() {
-  const validPeriods = form.template === 'EMA_ADX'
+  const validPeriods = form.template === 'BREAKOUT_ATR'
+    ? [form.entryPeriod, form.exitPeriod].every(v => Number.isInteger(v) && v >= 2 && v <= 120) && Number.isInteger(form.atrPeriod) && form.atrPeriod >= 2 && form.atrPeriod <= 50 && form.atrMultiplier >= 1 && form.atrMultiplier <= 5
+    : form.template === 'EMA_ADX'
     ? Number.isInteger(form.fastPeriod) && Number.isInteger(form.slowPeriod) && form.fastPeriod >= 2 && form.slowPeriod <= 120 && form.fastPeriod < form.slowPeriod && Number.isInteger(form.adxPeriod) && form.adxPeriod >= 2 && form.adxPeriod <= 50 && Number.isInteger(form.adxThreshold) && form.adxThreshold >= 10 && form.adxThreshold <= 60
     : form.template === 'EMA'
     ? Number.isInteger(form.fastPeriod) && Number.isInteger(form.slowPeriod) && form.fastPeriod >= 2 && form.slowPeriod <= 120 && form.fastPeriod < form.slowPeriod
@@ -68,7 +74,7 @@ async function save() {
   if (!validPeriods
     || !(form.stopLossPercent >= 0.1 && form.stopLossPercent <= 20)
     || !(form.takeProfitPercent >= 0.1 && form.takeProfitPercent <= 50)) {
-    ElMessage.warning(form.template === 'EMA_ADX' ? '请检查均线先后关系、ADX周期2～50根、强度10～60刻度及止损止盈范围' : form.template === 'BOLLINGER_RSI' ? '请检查布林周期、轨道宽度、RSI周期、买入上限及止损止盈范围' : '请填写有效参数；EMA短期须小于长期，RSI买入线须低于卖出线')
+    ElMessage.warning(form.template === 'BREAKOUT_ATR' ? '请检查突破周期2～120根、ATR周期2～50根、距离1～5倍及风险比例范围' : form.template === 'EMA_ADX' ? '请检查均线先后关系、ADX周期2～50根、强度10～60刻度及止损止盈范围' : form.template === 'BOLLINGER_RSI' ? '请检查布林周期、轨道宽度、RSI周期、买入上限及止损止盈范围' : '请填写有效参数；EMA短期须小于长期，RSI买入线须低于卖出线')
     return
   }
   saving.value = true
@@ -77,7 +83,9 @@ async function save() {
       stopLossRatio: Number((form.stopLossPercent / 100).toFixed(6)),
       takeProfitRatio: Number((form.takeProfitPercent / 100).toFixed(6))
     }
-    const id = form.template === 'EMA_ADX'
+    const id = form.template === 'BREAKOUT_ATR'
+      ? await createBreakoutAtrVersion({ entryPeriod: form.entryPeriod, exitPeriod: form.exitPeriod, atrPeriod: form.atrPeriod, atrMultiplier: form.atrMultiplier, ...risk })
+      : form.template === 'EMA_ADX'
       ? await createEmaAdxVersion({ fastPeriod: form.fastPeriod, slowPeriod: form.slowPeriod, adxPeriod: form.adxPeriod, adxThreshold: form.adxThreshold, ...risk })
       : form.template === 'EMA'
       ? await createStrategyVersion({ fastPeriod: form.fastPeriod, slowPeriod: form.slowPeriod, ...risk })

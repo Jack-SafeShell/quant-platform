@@ -10,6 +10,8 @@ public final class StrategyTemplates {
         var rsi=RsiStrategyTemplate.readConfiguration(source);
         if(rsi!=null)return rsi;
         var bollinger=BollingerRsiStrategyTemplate.readConfiguration(source);
-        return bollinger!=null?bollinger:EmaAdxStrategyTemplate.readConfiguration(source);
+        if(bollinger!=null)return bollinger;
+        var emaAdx=EmaAdxStrategyTemplate.readConfiguration(source);
+        return emaAdx!=null?emaAdx:BreakoutAtrStrategyTemplate.readConfiguration(source);
     }
 }

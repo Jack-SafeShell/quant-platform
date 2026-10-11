@@ -18,7 +18,7 @@
         <el-select v-model="form.parameterSetId" class="w-100%" placeholder="所有方案共用一个资金参数集"><el-option v-for="p in parameters" :key="p.id" :value="p.id" :label="parameterLabel(p)" /></el-select>
       </el-form-item>
       <el-form-item label="行情数据"><el-select v-model="form.datasetId" class="w-100%"><el-option v-for="d in datasets.filter(d => d.status === 'VALID')" :key="d.id" :value="d.id" :label="`${d.exchange.toUpperCase()} · ${d.pair} · ${d.timeframe === '4h' ? '4小时' : '1小时'} · ${new Date(d.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(d.lastTimestamp).toISOString().slice(0, 10)}`" /></el-select></el-form-item>
-      <p class="text-gray-500">可比较均线、突破、RSI、布林带及趋势过滤规则；每组使用同一币种与周期，策略周期按K线根数计算。预热240根：1小时10天、4小时40天。</p>
+      <p class="text-gray-500">可比较均线、突破、RSI、布林带、趋势过滤及ATR波动止损规则；每组使用同一币种与周期，策略周期按K线根数计算。预热240根：1小时10天、4小时40天。</p>
       <p class="text-gray-500">前一段用于比较方案；后一段从切分日开始，用来检查换一段行情后是否还能保持表现。两段各至少 7 天，结束日不计入。</p>
       <el-form-item label="前一段历史"><el-date-picker v-model="trainDates" type="daterange" value-format="YYYY-MM-DD" start-placeholder="UTC 开始日" end-placeholder="切分日（不含）" /></el-form-item>
       <el-form-item label="后一段结束日"><el-date-picker v-model="form.validationEnd" value-format="YYYY-MM-DD" placeholder="从训练切分日开始验证，结束日不含" /></el-form-item>

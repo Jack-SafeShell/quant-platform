@@ -86,6 +86,9 @@ public class BacktestController {
     @PostMapping("/strategy-version/ema-adx")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> createEmaAdxVersion(@Valid @RequestBody cn.iocoder.yudao.module.quant.api.backtest.EmaAdxStrategyRequest request)throws Exception{return success(service.createEmaAdxVersion(tenant(),owner(),request));}
+    @PostMapping("/strategy-version/breakout-atr")
+    @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
+    public CommonResult<String> createBreakoutAtrVersion(@Valid @RequestBody cn.iocoder.yudao.module.quant.api.backtest.BreakoutAtrStrategyRequest request)throws Exception{return success(service.createBreakoutAtrVersion(tenant(),owner(),request));}
     @PostMapping("/strategy-version/rsi")
     @PreAuthorize("@ss.hasPermission('quant:backtest:create')")
     public CommonResult<String> createRsiVersion(@Valid @RequestBody cn.iocoder.yudao.module.quant.api.backtest.RsiStrategyRequest request)throws Exception{return success(service.createRsiVersion(tenant(),owner(),request));}

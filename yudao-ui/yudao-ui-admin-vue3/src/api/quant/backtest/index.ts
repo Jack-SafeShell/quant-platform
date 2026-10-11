@@ -87,7 +87,10 @@ export interface BollingerRsiStrategyConfiguration {
 export interface EmaAdxStrategyConfiguration extends EmaStrategyConfiguration { template: 'EMA_ADX'; adxPeriod: number; adxThreshold: number }
 export const createEmaAdxVersion = (data: Omit<EmaAdxStrategyConfiguration, 'template'>): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/ema-adx', data })
-export type StrategyConfiguration = EmaAdxStrategyConfiguration | EmaStrategyConfiguration | BreakoutStrategyConfiguration | RsiStrategyConfiguration | BollingerRsiStrategyConfiguration
+export interface BreakoutAtrStrategyConfiguration extends Omit<BreakoutStrategyConfiguration, 'template'> { template: 'BREAKOUT_ATR'; atrPeriod: number; atrMultiplier: number }
+export const createBreakoutAtrVersion = (data: Omit<BreakoutAtrStrategyConfiguration, 'template'>): Promise<string> =>
+  request.post({ url: '/quant/backtest/strategy-version/breakout-atr', data })
+export type StrategyConfiguration = BreakoutAtrStrategyConfiguration | EmaAdxStrategyConfiguration | EmaStrategyConfiguration | BreakoutStrategyConfiguration | RsiStrategyConfiguration | BollingerRsiStrategyConfiguration
 export const createBollingerRsiVersion = (data: Omit<BollingerRsiStrategyConfiguration, 'template'>): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/bollinger-rsi', data })
 export const createRsiVersion = (data: Omit<RsiStrategyConfiguration, 'template'>): Promise<string> =>
@@ -96,8 +99,8 @@ export const createBreakoutVersion = (data: Omit<BreakoutStrategyConfiguration, 
   request.post({ url: '/quant/backtest/strategy-version/breakout', data })
 export function strategyConfigurationLabel(config?: StrategyConfiguration | null): string {
   if (!config) return '配置待加载（以版本摘要为准）'
-  const name = 'adxPeriod' in config ? `EMA${config.fastPeriod}/${config.slowPeriod} · ADX${config.adxPeriod}根/最低${config.adxThreshold}刻度` : 'bandPeriod' in config ? `布林${config.bandPeriod}根/${config.bandDeviation}倍 · RSI${config.rsiPeriod}回升且≤${config.rsiCeiling} · 回到中轨卖出` : 'rsiPeriod' in config ? `RSI${config.rsiPeriod} · 回升越过${config.entryThreshold}买入 / 越过${config.exitThreshold}卖出` : 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
-  return `${name} · 止损 ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%`
+  const name = 'atrPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod} · ATR${config.atrPeriod}根/${config.atrMultiplier}倍 · 止损只收紧` : 'adxPeriod' in config ? `EMA${config.fastPeriod}/${config.slowPeriod} · ADX${config.adxPeriod}根/最低${config.adxThreshold}刻度` : 'bandPeriod' in config ? `布林${config.bandPeriod}根/${config.bandDeviation}倍 · RSI${config.rsiPeriod}回升且≤${config.rsiCeiling} · 回到中轨卖出` : 'rsiPeriod' in config ? `RSI${config.rsiPeriod} · 回升越过${config.entryThreshold}买入 / 越过${config.exitThreshold}卖出` : 'entryPeriod' in config ? `突破${config.entryPeriod}/${config.exitPeriod}` : `EMA${config.fastPeriod}/${config.slowPeriod}`
+  return `${name} · ${'atrPeriod' in config ? '最大止损' : '止损'} ${(config.stopLossRatio * 100).toFixed(2)}% · 止盈 ${(config.takeProfitRatio * 100).toFixed(2)}%`
 }
 export const createStrategyVersion = (data: EmaStrategyConfiguration): Promise<string> =>
   request.post({ url: '/quant/backtest/strategy-version/create', data })
