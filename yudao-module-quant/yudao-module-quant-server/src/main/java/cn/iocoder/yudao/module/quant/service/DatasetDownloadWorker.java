@@ -22,7 +22,12 @@ public class DatasetDownloadWorker {
     private ScheduledExecutorService executor; private volatile Process active;
     public DatasetDownloadWorker(DatasetDownloadRepository repository,DatasetRegistry datasets,QuantProperties properties,PlatformTransactionManager manager){this.repository=repository;this.datasets=datasets;this.properties=properties;this.tx=new TransactionTemplate(manager);}
     @EventListener(ApplicationReadyEvent.class) public void start(){if(!properties.isEnabled())return;repository.runningIds().forEach(id->repository.fail(id,"应用重启中断；未自动重试，请使用新请求标识重新提交"));executor=Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"quant-dataset-download");t.setDaemon(true);return t;});executor.scheduleWithFixedDelay(this::tick,1,3,TimeUnit.SECONDS);}
-    public void tick(){Map<String,Object> task=repository.next();if(task==null||!repository.claim((String)task.get("id")))return;String id=(String)task.get("id");try{
+    public void tick(){
+        // An uncaught database exception cancels subsequent scheduled polls.
+        try{consumeNext();}
+        catch(Exception e){log.warn("Dataset download queue unavailable ({})",e.getClass().getSimpleName());}
+    }
+    private void consumeNext(){Map<String,Object> task=repository.next();if(task==null||!repository.claim((String)task.get("id")))return;String id=(String)task.get("id");try{
         var market=new cn.iocoder.yudao.module.quant.engine.HistoricalMarket((String)task.get("pair_name"),(String)task.get("timeframe"));
         ProcessBuilder builder=new ProcessBuilder(properties.getPythonExecutable(),properties.getDatasetScript(),"--exchange",(String)task.get("exchange_name"),"--pair",market.pair(),"--timeframe",market.timeframe(),"--id",(String)task.get("dataset_id"),"--start",(String)task.get("start_date"),"--end",(String)task.get("end_date"),"--workspace",Path.of(properties.getWorkspace()).toAbsolutePath().toString());
         if(properties.getDatasetHttpProxy()!=null&&!properties.getDatasetHttpProxy().isBlank()){builder.command().add("--proxy");builder.command().add(properties.getDatasetHttpProxy());}
