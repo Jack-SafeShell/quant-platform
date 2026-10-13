@@ -1,55 +1,60 @@
 <template>
   <div class="operations-page">
-    <HistoryGuide />
     <ContentWrap>
       <div class="page-head">
         <div>
-          <div class="eyebrow">QUANT OPERATIONS</div>
-          <h1>量化工具：从历史回看开始</h1>
-          <p>先看过去的赚亏和买卖过程。交易与运行历史可在下方按需展开。</p>
+          <div class="eyebrow">量化工作台</div>
+          <h1>量化交易工作台</h1>
+          <p>查看运行状态和历史交易，或进入历史研究、实盘管理。</p>
         </div>
         <div class="head-actions">
           <span class="updated">更新于 {{ formatTime(lastUpdated) }}</span>
           <el-switch v-model="autoRefresh" active-text="自动刷新" />
           <el-button :loading="loading" @click="refresh">刷新</el-button>
-          <el-button type="primary" @click="openResearch">开始历史回看</el-button>
         </div>
       </div>
     </ContentWrap>
-    <el-collapse><el-collapse-item title="交易与运行历史（仅需要时展开）" name="operations">
+    <nav class="workspace-nav" aria-label="量化功能入口">
+      <button @click="openResearch"><Icon icon="ep:data-analysis" /><strong>历史回看</strong><span>选策略，查看过去的赚亏与买卖</span><b>进入历史回看 →</b></button>
+      <button @click="router.push('/quant/experiments')"><Icon icon="ep:trend-charts" /><strong>策略比较</strong><span>同条件比较，检查费用和不同时间段</span><b>进入策略比较 →</b></button>
+      <button class="live-entry" @click="openLiveManagement"><Icon icon="ep:setting" /><strong>实盘管理</strong><span>账户、准入报告、金额限制与运行控制</span><b>查看实盘准备 →</b></button>
+    </nav>
     <ContentWrap>
-      <el-alert
-        :title="switchSummary"
-        :type="capabilities?.liveExecutionEnabled && capabilities?.liveAutomationEnabled ? 'warning' : 'info'"
-        :closable="false"
-        show-icon
-      />
+      <div class="readiness-head"><div><h2>{{ executionTitle }}</h2><p>{{ switchSummary }}</p></div><el-tag :type="refreshError ? 'danger' : capabilities?.liveExecutionEnabled ? 'warning' : 'info'">{{ refreshError ? '状态待核对' : capabilities?.liveExecutionEnabled ? '真实订单开关已开' : capabilities ? '真实订单开关已关' : '读取中' }}</el-tag></div>
+      <div class="readiness-grid">
+        <div><span>执行账户</span><strong>{{ refreshError ? '待核对' : tradingAccount ? `${tradingAccount.exchange.toUpperCase()} · ${tradingAccount.id}` : '读取中' }}</strong><small>下方选择只切换查看范围</small></div>
+        <div><span>交易密钥</span><strong>{{ refreshError ? '待核对' : currentExecutionPolicy?.credentialProvider ? currentExecutionPolicy.credentialProvider === 'UNCONFIGURED' ? '未配置' : '已配置' : '暂无账户配置证据' }}</strong><small>配置密钥不等于可启动交易</small></div>
+        <div><span>自动策略</span><strong>{{ refreshError ? '待核对' : capabilities ? capabilities.liveAutomationEnabled ? '开关开启' : '开关关闭' : '读取中' }}</strong><small>启动仍需对应报告、门禁与金额检查</small></div>
+      </div>
+    </ContentWrap>
+    <ContentWrap>
+      <h2>查看交易与运行记录</h2>
       <el-alert v-if="refreshError" class="mt-3" :title="refreshError" type="error" :closable="false" show-icon />
       <p class="evidence-note">当前执行账户：{{ tradingAccount?.exchange || '-' }} · {{ tradingAccount?.id || '-' }}。下方账户选择仅筛选历史证据，不切换密钥或执行账户。</p>
       <div class="session-picker mt-3">
-        <span>查看账户</span>
+        <span>记录所属账户</span>
         <el-select v-model="viewAccountId" :disabled="loading || !!repairingOrderId" @change="changeAccount">
           <el-option v-for="account in accountOptions" :key="account.id" :value="account.id" :label="`${account.exchange} · ${account.id}`" />
         </el-select>
-        <span>查看会话</span>
+        <span>策略运行记录</span>
         <el-select v-model="selectedSessionId" :disabled="loading || !!repairingOrderId" placeholder="暂无实盘会话" @change="refresh">
           <el-option v-for="session in sessions" :key="session.id" :value="session.id"
-            :label="`${formatTime(session.startedAt)} · ${session.status} · ${session.id.slice(0, 8)}`" />
+            :label="`${formatTime(session.startedAt)} · ${statusLabel(session.status)} · ${session.id.slice(0, 8)}`" />
         </el-select>
-        <el-tag v-if="activeSession" :type="sessionTag(activeSession.status)">{{ activeSession.status }}</el-tag>
+        <el-tag v-if="activeSession" :type="sessionTag(activeSession.status)">{{ statusLabel(activeSession.status) }}</el-tag>
       </div>
+      <p class="snapshot-note">{{ snapshotSummary }}{{ refreshError ? ' · 刷新失败，下方旧记录仅供参考' : '' }}</p>
       <div class="metric-grid">
-        <div class="metric-card"><span>策略版本</span><strong>{{ strategyVersions.length }}</strong><small>{{ strategyCount }} 个策略</small></div>
-        <div class="metric-card"><span>运行环境</span><strong>{{ runningCount }}</strong><small>实盘与模拟盘</small></div>
-        <div class="metric-card"><span>账户权益</span><strong>{{ money(latestReconciliation?.totalEquity) }}</strong><small>USDT</small></div>
-        <div class="metric-card"><span>BTC 敞口</span><strong>{{ money(latestReconciliation?.btcExposure) }}</strong><small>USDT</small></div>
-        <div class="metric-card" :class="{ danger: openAlerts > 0 }"><span>未处理告警</span><strong>{{ openAlerts }}</strong><small>{{ refreshError ? '数据待更新' : activeSession ? (openAlerts ? '需要处理' : '所选会话无 OPEN 告警') : '暂无会话数据' }}</small></div>
+        <div class="metric-card"><span>本次运行净收益</span><strong>{{ refreshError || performanceError ? '—' : performanceMoney(performance?.netContribution) }}</strong><small>USDT · 扣已知费用后的贡献</small></div>
+        <div class="metric-card"><span>本次剩余持仓估值</span><strong>{{ refreshError || performanceError ? '—' : performanceMoney(performance?.markedPositionValue) }}</strong><small>USDT · 不是已结利润</small></div>
+        <div class="metric-card"><span>活动挂单</span><strong>{{ refreshError || !latestReconciliation ? '—' : `${latestReconciliation.exchangeOpenOrders} / ${latestReconciliation.platformOpenOrders}` }}</strong><small>交易所 / 平台 · 最近对账</small></div>
+        <div class="metric-card" :class="{ danger: openAlerts > 0 }"><span>未处理告警</span><strong>{{ refreshError || !activeSession ? '—' : openAlerts }}</strong><small>{{ refreshError ? '数据待更新' : activeSession ? '所选运行记录' : '暂无运行记录' }}</small></div>
       </div>
     </ContentWrap>
 
     <el-row :gutter="16">
       <el-col :xs="24" :xl="16">
-        <ContentWrap title="所选自动实盘会话">
+        <ContentWrap title="所选策略运行">
           <template #header>
             <div class="section-head">
               <el-tag :type="sessionTag(activeSession?.status)">{{ statusLabel(activeSession?.status) }}</el-tag>
@@ -94,7 +99,7 @@
           <el-empty v-if="!activePolicy" description="暂无实盘门禁" />
           <template v-else>
             <div class="gate-state">
-              <el-tag :type="activePolicy.status === 'ARMED_OFFLINE' ? 'warning' : 'info'" size="large">{{ activePolicy.status }}</el-tag>
+              <el-tag :type="activePolicy.status === 'ARMED_OFFLINE' ? 'warning' : 'info'" size="large">{{ statusLabel(activePolicy.status) }}</el-tag>
               <span>{{ activePolicy.exchangeName }} · {{ activePolicy.pairSymbol }} · {{ activePolicy.tradingMode }}</span>
             </div>
             <el-descriptions :column="1" border class="mt-3">
@@ -246,6 +251,7 @@
       <p class="evidence-note">信号及对账各显示最近 100 条，完整验收以数据库留存证据为准。</p>
     </ContentWrap>
 
+    <el-collapse class="technical-records"><el-collapse-item title="技术记录：策略版本、参数与旧模拟执行（按需展开）" name="technical">
     <ContentWrap title="策略版本（最近 100 条回测统计）">
       <el-table :data="strategyRows" v-loading="loading">
         <el-table-column prop="strategyName" label="策略" min-width="180" />
@@ -281,6 +287,7 @@
       </el-col>
     </el-row>
 
+    </el-collapse-item></el-collapse>
     <ContentWrap title="真实订单账本">
       <template #header>
         <el-switch v-model="sessionOrdersOnly" active-text="仅所选会话" />
@@ -298,7 +305,7 @@
         <el-table-column prop="clientOrderId" label="客户端订单" min-width="220" show-overflow-tooltip />
       </el-table>
     </ContentWrap>
-    </el-collapse-item></el-collapse>
+    <el-collapse><el-collapse-item title="新手帮助：历史回看怎么用、常见词是什么意思" name="help"><HistoryGuide /></el-collapse-item></el-collapse>
   </div>
 </template>
 
@@ -408,12 +415,15 @@ const latestReconciliation = computed(() => activeSession.value?.reconciliations
 const latestSignal = computed(() => activeSession.value?.signals?.[0])
 const openAlerts = computed(() => activeSession.value?.alerts?.filter((item) => item.status === 'OPEN').length || 0)
 const equityChange = computed(() => Number(activeSession.value?.lastEquity || 0) - Number(activeSession.value?.startEquity || 0))
-const runningCount = computed(() => sessions.value.filter((item) => item.status === 'RUNNING').length + paperExecutions.value.filter((item) => item.status === 'RUNNING').length)
-const strategyCount = computed(() => new Set(strategyVersions.value.map((item) => item.strategyId)).size)
+const currentExecutionPolicy = computed(() => policies.value.find(item => item.selectedAccount && item.accountId === tradingAccount.value?.id))
+const executionTitle = computed(() => refreshError.value ? '运行状态暂时无法核对' : !capabilities.value ? '正在读取运行状态' : capabilities.value.liveExecutionEnabled ? '真实交易执行已启用' : '实盘执行关闭，可查看历史记录')
+const snapshotSummary = computed(() => !activeSession.value ? '暂无运行记录，金额不按零收益显示' : `${activeSession.value.status === 'RUNNING' ? '运行中 · 最近对账' : '历史记录 · 停止后的估值不是当前账户余额'} · ${formatTime(latestReconciliation.value?.reconciledAt)}`)
 const switchSummary = computed(() => {
+  if (refreshError.value) return '请刷新后核对状态；不能依据上一次读取判断当前是否可操作。'
+  if (!capabilities.value) return '请稍候，正在读取账户和执行状态。'
   if (!capabilities.value?.enabled) return '量化模块未启用。'
   if (capabilities.value.liveExecutionEnabled && capabilities.value.liveAutomationEnabled) return '真实执行与自动策略开关已开启；请持续关注会话、挂单和告警。'
-  return '量化模块已启用，真实执行或自动策略开关当前关闭。'
+  return capabilities.value.liveExecutionEnabled ? '真实订单开关开启，自动策略开关关闭；能否操作还需核对账户、报告与门禁。' : '可以查看历史结果、订单和收益；启动交易需先进入实盘管理完成准备。'
 })
 const strategyRows = computed(() => strategyVersions.value.map((version) => {
   const related = backtests.value.filter((task) => task.strategyVersionId === version.id)
@@ -545,11 +555,12 @@ async function stopCurrentSession() {
 }
 
 function openResearch() { router.push('/quant/backtest') }
+function openLiveManagement() { router.push({ path: '/quant/backtest', query: { view: 'live' } }) }
 function shortHash(value?: string) { return value ? `${value.slice(0, 12)}…${value.slice(-6)}` : '-' }
 function money(value?: number) { return value === undefined || value === null ? '-' : Number(value).toFixed(4) }
 function signedMoney(value: number) { return `${value >= 0 ? '+' : ''}${value.toFixed(4)}` }
 function formatTime(value?: number) { return value ? new Date(value).toLocaleString() : '-' }
-function statusLabel(value?: string) { return value || '暂无' }
+function statusLabel(value?: string) { return ({ RUNNING: '运行中', STOPPED: '已停止', RISK_STOPPED: '风控停止', FAILED: '运行失败', STARTING: '启动中', STOP_REQUESTED: '正在停止', HALTED: '已停用', ARMED_OFFLINE: '门禁已准备', SUCCEEDED: '已完成' } as Record<string, string>)[value || ''] || value || '暂无' }
 function sessionTag(value?: string): TagType {
   if (value === 'RUNNING' || value === 'SUCCEEDED') return 'success'
   if (value === 'RISK_STOPPED' || value === 'FAILED') return 'danger'
@@ -577,7 +588,22 @@ onBeforeUnmount(() => { disposed = true; if (timer) window.clearInterval(timer) 
 .head-actions, .section-head, .gate-state { display: flex; align-items: center; gap: 12px; }
 .section-head { justify-content: space-between; width: 100%; }
 .head-actions { flex-wrap: wrap; justify-content: flex-end; }
-.metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.workspace-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+.workspace-nav button { display: grid; gap: 9px; text-align: left; border: 1px solid var(--el-border-color-light); border-radius: 12px; background: var(--el-bg-color); padding: 20px; cursor: pointer; color: var(--el-text-color-primary); transition: border-color .15s; }
+.workspace-nav button:hover, .workspace-nav button:focus-visible { border-color: var(--el-color-primary); outline: 2px solid var(--el-color-primary-light-7); outline-offset: 2px; }
+.workspace-nav strong { font-size: 20px; }
+.workspace-nav span, .readiness-head p, .snapshot-note { color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.workspace-nav b { color: var(--el-color-primary); font-size: 13px; }
+.workspace-nav .live-entry { background: var(--el-color-primary-light-9); }
+.readiness-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+h2 { margin: 0 0 8px; font-size: 20px; }
+.readiness-head p { margin: 0; }
+.readiness-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.readiness-grid div { border-top: 1px solid var(--el-border-color-lighter); padding-top: 12px; }
+.readiness-grid span, .readiness-grid small { display: block; color: var(--el-text-color-secondary); font-size: 12px; }
+.readiness-grid strong { display: block; margin: 8px 0; overflow-wrap: anywhere; }
+.technical-records { margin-bottom: 18px; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .metric-card { min-height: 104px; padding: 18px; border: 1px solid #e7ebf2; border-radius: 12px; background: linear-gradient(145deg, #fff, #f7f9fc); }
 .metric-card span, .metric-card small { display: block; color: var(--muted); }
 .metric-card strong { display: block; margin: 8px 0 4px; color: var(--ink); font-size: 26px; line-height: 1; }
@@ -595,5 +621,7 @@ code { color: #334155; font-size: 12px; }
   .page-head { align-items: flex-start; flex-direction: column; }
   .head-actions { justify-content: flex-start; }
   .metric-grid, .session-strip { grid-template-columns: 1fr 1fr; }
+  .workspace-nav, .readiness-grid { grid-template-columns: 1fr; }
+  .readiness-head { align-items: flex-start; flex-direction: column; }
 }
 </style>

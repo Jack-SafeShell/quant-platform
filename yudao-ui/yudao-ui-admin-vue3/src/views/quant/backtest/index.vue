@@ -1,4 +1,10 @@
 <template>
+  <ContentWrap>
+    <div class="context-nav"><div><h2>{{ liveManagementMode ? '实盘管理：准备与运行控制' : '历史研究：回看与复盘' }}</h2><p>{{ liveManagementMode ? '按账户、准入报告、金额限制的顺序准备；当前状态以服务端检查为准。' : '使用历史行情比较策略，不需要交易所密钥。' }}</p></div><div class="context-actions"><el-button @click="router.push('/quant/operations')">返回工作台</el-button><el-button v-if="!liveManagementMode" @click="router.push({ path: '/quant/backtest', query: { view: 'live' } })">进入实盘管理</el-button><el-button v-else @click="router.push('/quant/backtest')">返回历史回看</el-button></div></div>
+    <div v-if="liveManagementMode" class="live-steps" aria-label="实盘准备步骤"><span>① 核对执行账户</span><span>② 复核准入报告</span><span>③ 设置金额与风险上限</span><span>④ 查看门禁与运行控制</span></div>
+    <el-alert v-if="liveManagementMode" class="mt-3" title="进入此页不会打开实盘开关或提交订单。未就绪时请查看检查项；已有历史研究结论不等于交易授权。" type="info" :closable="false" />
+  </ContentWrap>
+  <template v-if="!liveManagementMode">
   <HistoryGuide />
   <ContentWrap title="设置一次历史回看">
     <el-alert title="数字货币策略历史回看 · BTC、ETH现货 · 1小时 / 4小时 · 可在下方修改买卖规则" type="info" :closable="false" />
@@ -43,8 +49,10 @@
     <el-table :data="datasets"><el-table-column prop="id" label="数据集" /><el-table-column prop="exchange" label="交易所" width="90" /><el-table-column prop="pair" label="币种" width="120" /><el-table-column prop="timeframe" label="周期" width="70" /><el-table-column label="状态" width="90"><template #default="s"><el-tag :type="s.row.status === 'VALID' ? 'success' : 'danger'">{{ s.row.status === 'VALID' ? '有效' : '无效' }}</el-tag></template></el-table-column><el-table-column prop="candles" label="K 线数" width="90" /><el-table-column label="覆盖区间" min-width="300"><template #default="s">{{ s.row.firstTimestamp ? new Date(s.row.firstTimestamp).toISOString() : '-' }} ～ {{ s.row.lastTimestamp ? new Date(s.row.lastTimestamp).toISOString() : '-' }}</template></el-table-column><el-table-column prop="gaps" label="缺口" width="70" /><el-table-column prop="error" label="问题" min-width="180" /></el-table>
   </ContentWrap>
   </el-collapse-item></el-collapse>
-  <el-collapse v-model="legacyPanels" @change="refresh"><el-collapse-item title="其他管理与历史执行记录（历史回看无需使用）" name="execution">
+  </template>
+  <el-collapse v-model="legacyPanels" @change="refresh"><el-collapse-item :title="liveManagementMode ? '账户、准入与运行设置' : '高级管理与旧执行记录（按需展开）'" name="execution">
   <ExchangeMarketPanel v-if="legacyPanels.includes('execution')" />
+  <template v-if="!liveManagementMode">
   <ContentWrap title="受控参数优化批次">
     <el-alert title="选择 2 至 5 个参数集；训练区间与验证区间完全分离，各至少 7 天。" type="info" :closable="false" />
     <el-form :inline="true" class="mt-4"><el-form-item label="参数集"><el-select v-model="optimization.parameterSetIds" multiple class="w-300px"><el-option v-for="item in parameterSets" :key="item.id" :label="parameterLabel(item)" :value="item.id" /></el-select></el-form-item><el-form-item label="训练/切分/验证"><el-date-picker v-model="optimizationDates" type="dates" value-format="YYYY-MM-DD" /></el-form-item><el-button type="primary" :disabled="!enabled" @click="submitOptimization">提交批次</el-button></el-form>
@@ -54,20 +62,23 @@
   <el-dialog v-model="commandPreviewVisible" title="dry-run 安全命令预览" width="70%" @closed="clearStartToken"><template v-if="commandPreview"><el-alert title="该命令清单尚未执行，不包含交易所凭据。" type="warning" :closable="false" /><p><b>清单摘要：</b>{{ commandPreview.previewHash }}</p><p><b>隔离目录：</b>{{ commandPreview.workDirectory }}</p><el-input :model-value="commandPreview.previewJson" type="textarea" :rows="12" readonly /><h3>启动前二次确认</h3><el-input v-model="startTokenComment" maxlength="500" placeholder="填写确认意见" /><el-input v-model="startTokenConfirmation" class="mt-2" placeholder="输入 CONFIRM_DRY_RUN_START" /><el-button class="mt-2" type="warning" @click="issueStartToken">签发一次性启动令牌（不启动）</el-button><el-alert v-if="issuedStartToken" class="mt-3" title="令牌仅显示一次，请在到期前妥善保存。" type="warning" :closable="false" /><template v-if="issuedStartToken"><p><b>到期时间：</b>{{ new Date(issuedStartToken.expiresAt).toLocaleString() }}</p><el-input :model-value="issuedStartToken.token" readonly /><el-button class="mt-2" type="danger" :disabled="!previewExecutionEnabled" @click="startDryRun">启动 dry-run</el-button><span v-if="!previewExecutionEnabled" class="ml-2 text-gray-500">单体执行总开关关闭</span></template></template></el-dialog>
   <el-dialog v-model="observationVisible" title="模拟盘状态、运行遥测与日志" width="75%"><template v-if="executionObservation"><el-alert :title="executionObservation.runtime.currentHealthy ? 'dry-run 正在健康运行。' : executionObservation.runtime.soakPassed ? '稳定性验收已通过。' : executionObservation.preflightPassed ? '启动前结构检查通过；执行总开关保持关闭。' : '检查未通过，请核对失败项。'" :type="executionObservation.runtime.currentHealthy || executionObservation.runtime.soakPassed || executionObservation.preflightPassed ? 'success' : 'warning'" :closable="false" /><el-descriptions class="mt-3" :column="2" border><el-descriptions-item label="运行状态">{{ executionObservation.status }}</el-descriptions-item><el-descriptions-item label="执行总开关">{{ executionObservation.executionEnabled ? '已开启' : '关闭' }}</el-descriptions-item><el-descriptions-item label="容器标识">{{ executionObservation.containerName }}</el-descriptions-item><el-descriptions-item label="观测时间">{{ new Date(executionObservation.observedAt).toLocaleString() }}</el-descriptions-item></el-descriptions><el-table :data="executionObservation.checks" class="mt-3"><el-table-column prop="id" label="检查项" min-width="220" /><el-table-column label="结果" width="90"><template #default="s"><el-tag :type="s.row.passed ? 'success' : 'danger'">{{ s.row.passed ? '通过' : '失败' }}</el-tag></template></el-table-column><el-table-column prop="evidence" label="证据" min-width="300" /></el-table><h3>运行与模拟资产遥测</h3><el-descriptions :column="3" border><el-descriptions-item label="稳定运行">{{ executionObservation.runtime.soakPassed ? '通过' : '未通过' }}</el-descriptions-item><el-descriptions-item label="运行时长">{{ executionObservation.runtime.soakSeconds }} 秒</el-descriptions-item><el-descriptions-item label="错误计数">网络 {{ executionObservation.runtime.networkErrorCount }} / 致命 {{ executionObservation.runtime.fatalErrorCount }}</el-descriptions-item><el-descriptions-item label="最后心跳">{{ executionObservation.runtime.lastHeartbeatAt ? new Date(executionObservation.runtime.lastHeartbeatAt).toLocaleString() : '-' }}</el-descriptions-item><el-descriptions-item label="最后行情活动">{{ executionObservation.runtime.lastMarketDataAt ? new Date(executionObservation.runtime.lastMarketDataAt).toLocaleString() : '-' }}</el-descriptions-item><el-descriptions-item label="数据库">{{ executionObservation.portfolio.available ? '可读' : '尚未生成' }}</el-descriptions-item><el-descriptions-item label="估算可用余额">{{ executionObservation.portfolio.estimatedAvailableBalance }} USDT</el-descriptions-item><el-descriptions-item label="持仓 / 已结交易">{{ executionObservation.portfolio.openPositions }} / {{ executionObservation.portfolio.closedTrades }}</el-descriptions-item><el-descriptions-item label="挂单 / 全部订单">{{ executionObservation.portfolio.openOrders }} / {{ executionObservation.portfolio.totalOrders }}</el-descriptions-item><el-descriptions-item label="已实现收益">{{ executionObservation.portfolio.realizedProfit }} USDT</el-descriptions-item><el-descriptions-item label="持仓占用">{{ executionObservation.portfolio.investedStake }} USDT</el-descriptions-item><el-descriptions-item label="最近钱包快照">{{ executionObservation.portfolio.latestWalletAt || '-' }}</el-descriptions-item></el-descriptions><h3>周期快照与告警</h3><el-table :data="paperAlerts" max-height="240"><el-table-column prop="alertType" label="类型" min-width="150" /><el-table-column prop="severity" label="级别" width="80" /><el-table-column prop="status" label="状态" width="120" /><el-table-column prop="evidence" label="证据" min-width="240" /><el-table-column label="处置" width="180"><template #default="s"><el-button v-if="s.row.status==='OPEN'" link type="primary" @click="handleAlert(s.row,'ACKNOWLEDGE')">确认</el-button><el-button v-if="s.row.status!=='RESOLVED'" link type="success" @click="handleAlert(s.row,'RESOLVE')">解决</el-button></template></el-table-column></el-table><el-table :data="paperAlertActions" max-height="180" class="mt-2"><el-table-column prop="actionType" label="处置动作" width="110" /><el-table-column prop="comment" label="处置说明" /><el-table-column label="处置时间" width="180"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column></el-table><h3>分钟级快照</h3><el-table :data="observationSnapshots" max-height="240"><el-table-column label="观测时间" width="180"><template #default="s">{{ new Date(s.row.observedAt).toLocaleString() }}</template></el-table-column><el-table-column prop="executionStatus" label="状态" width="110" /><el-table-column prop="heartbeatAgeSeconds" label="心跳龄(秒)" width="110" /><el-table-column prop="estimatedAvailableBalance" label="可用余额" /><el-table-column prop="openPositions" label="持仓" width="80" /></el-table><h3>独立模拟订单账本</h3><el-table :data="paperOrders" max-height="240"><el-table-column prop="sourceOrderId" label="来源订单" min-width="150" /><el-table-column prop="pairSymbol" label="交易对" width="110" /><el-table-column prop="orderSide" label="方向" width="80" /><el-table-column prop="orderStatus" label="状态" width="100" /><el-table-column prop="filled" label="已成交" width="100" /><el-table-column prop="cost" label="金额" width="100" /><el-table-column prop="reconciliationStatus" label="对账" width="100" /></el-table><h3>最近对账</h3><el-table :data="paperOrderReconciliations" max-height="180"><el-table-column label="时间" width="180"><template #default="s">{{ new Date(s.row.reconciledAt).toLocaleString() }}</template></el-table-column><el-table-column prop="reconciliationStatus" label="结果" width="100" /><el-table-column prop="sourceOrderCount" label="来源" width="80" /><el-table-column prop="ledgerOrderCount" label="账本" width="80" /><el-table-column prop="unknownOrderCount" label="未知" width="80" /><el-table-column prop="errorMessage" label="异常" /></el-table><h3>运行日志（只读，最多 200 行 / 64 KiB）</h3><el-alert v-if="!executionObservation.logExists" title="运行日志尚未生成。" type="info" :closable="false" /><el-input v-else :model-value="executionObservation.logTail" type="textarea" :rows="14" readonly /><el-button class="mt-2" @click="refreshExecutionObservation">刷新状态与日志</el-button></template></el-dialog>
   </ContentWrap>
-  <ContentWrap title="实盘前只读准入评估">
+  </template>
+  <ContentWrap title="② 实盘前只读准入评估">
     <el-alert title="这里只固化证据与密钥边界，不读取私有凭据，不开放实盘下单。双确认也不会改变 liveTradingAllowed=false。" type="warning" :closable="false" />
     <el-select v-model="liveBacktestId" clearable filterable placeholder="选择成功回测；留空使用最近成功任务" class="mt-3" style="width: 520px"><el-option v-for="task in tasks.filter(t=>t.status==='SUCCEEDED')" :key="task.id" :label="task.id" :value="task.id" /></el-select>
     <el-button v-hasPermi="['quant:backtest:create']" class="mt-3" type="primary" @click="generateLiveAdmission">生成不可变准入报告</el-button>
     <el-table :data="liveAdmissions" class="mt-3"><el-table-column prop="reportHash" label="报告 SHA-256" min-width="360" /><el-table-column prop="confirmationState" label="确认状态" width="180" /><el-table-column label="生成时间" width="180"><template #default="s">{{ new Date(s.row.createdAt).toLocaleString() }}</template></el-table-column><el-table-column label="操作" width="180"><template #default="s"><el-button link type="primary" @click="showLiveAdmission(s.row.id)">查看与确认</el-button><el-button link @click="downloadLiveAdmission(s.row.id)">导出</el-button></template></el-table-column></el-table>
   </ContentWrap>
-  <ContentWrap title="策略运行配置与资金预算">
+  <ContentWrap title="③ 策略运行配置与资金预算">
     <el-select v-model="runPlanReportId" filterable placeholder="选择准入报告查看准备缺口" style="width: 100%"><el-option v-for="r in liveAdmissions" :key="r.id" :value="r.id" :label="`${r.id} / ${r.confirmationState}`" /></el-select>
     <LiveRunPlanEditor :report-id="runPlanReportId" />
   </ContentWrap>
+  <el-collapse><el-collapse-item title="多策略资金分配（进阶，可选）" name="portfolio">
   <ContentWrap title="多策略资金分配规划">
     <PortfolioBudgetEditor :reports="liveAdmissions" />
   </ContentWrap>
-  <ContentWrap title="受控实盘与固定策略自动执行">
+  </el-collapse-item></el-collapse>
+  <ContentWrap title="④ 受控实盘与固定策略自动执行">
     <el-alert title="真实执行由后端双开关控制；默认关闭。自动会话使用准入报告绑定的 EMA 或突破配置版本，限定当前已配置的 OKX / Binance BTC/USDT 现货；止损止盈按已收盘 1h K 线毛收益判断，不等同于回测盘中成交。" type="warning" :closable="false" />
     <el-table :data="liveAdmissions.filter(x=>x.confirmationState==='DOUBLE_CONFIRMED')" class="mt-3"><el-table-column prop="reportHash" label="已双确认报告" min-width="360" /><el-table-column label="操作" width="180"><template #default="s"><el-button type="primary" link @click="generateLiveControl(s.row.id)">创建/查看门禁</el-button></template></el-table-column></el-table>
     <el-table :data="liveControls" class="mt-3"><el-table-column prop="policyVersion" label="策略" /><el-table-column prop="exchangeName" label="交易所" /><el-table-column prop="pairSymbol" label="交易对" /><el-table-column prop="status" label="状态" /><el-table-column label="单笔/单日/总仓位" min-width="220"><template #default="s">{{ s.row.maxOrderNotional }} / {{ s.row.maxDailyNotional }} / {{ s.row.maxTotalExposure }} USDT</template></el-table-column><el-table-column label="操作"><template #default="s"><el-button link type="primary" @click="showLiveControl(s.row.id)">管理与查看证据</el-button></template></el-table-column></el-table>
@@ -196,7 +207,8 @@ import LiveRunPlanEditor from './LiveRunPlanEditor.vue'
 import PortfolioBudgetEditor from './PortfolioBudgetEditor.vue'
 import type { LiveRunBudget } from '@/api/quant/backtest'
 
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import StrategyConfigEditor from './StrategyConfigEditor.vue'
 import { strategyConfigurationLabel } from '@/api/quant/backtest'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -204,6 +216,8 @@ import { createBacktest, listBacktests, getBacktest, getCapabilities, listStrate
 import type { BacktestTask, StrategyVersion, ParameterSet, BacktestComparison, DatasetQuality, DatasetDownloadTask, OptimizationBatch, OptimizationResult, PaperSession, PaperReadinessSnapshot, PaperExecution, PaperCommandPreview, PaperStartToken, PaperExecutionObservation, PaperObservationSnapshot, PaperAlert, PaperAlertAction, PaperOrder, PaperOrderReconciliation, LiveAdmissionSummary, LiveAdmissionReport, LiveControlPolicy, LiveAutomationSession } from '@/api/quant/backtest'
 
 defineOptions({ name: 'QuantBacktest' })
+const route = useRoute(), router = useRouter()
+const liveManagementMode = computed(() => route.query.view === 'live')
 interface Result {
   totalTrades: number
   netProfit: number
@@ -278,7 +292,7 @@ const liveAutomationPhrase=ref('')
 const okxReadComment=ref('')
 const okxReadPhrase=ref('')
 const liveOrderForm=reactive({clientOrderId:`offline-${Date.now()}`,side:'BUY' as 'BUY'|'SELL',orderType:'LIMIT' as const,price:100,amount:0.05,currentExposure:0,dailyExecutedNotional:0,openOrders:0})
-const legacyPanels = ref<string[]>([])
+const legacyPanels = ref<string[]>(liveManagementMode.value ? ['execution'] : [])
 const feePercent = computed({ get: () => Number((form.fee * 100).toFixed(4)), set: value => { form.fee = Number((value / 100).toFixed(6)) } })
 const taskMarket = (json: string) => { try { const p = JSON.parse(json); return `${p.pair || 'BTC/USDT'} · ${p.timeframe || '1h'}` } catch { return '未记录' } }
 const datasetLabel = (item: DatasetQuality) => `${item.exchange.toUpperCase()} · ${item.pair} · ${item.timeframe === '4h' ? '4小时' : '1小时'} · ${new Date(item.firstTimestamp).toISOString().slice(0, 10)} 至 ${new Date(item.lastTimestamp).toISOString().slice(0, 10)} · ${item.candles} 根`
@@ -426,6 +440,10 @@ function applyParameterSet(id: string) { const item = parameterSets.value.find(v
 async function saveParameterSet() { form.parameterSetId = await createParameterSet({ startingBalance: form.startingBalance, stakeAmount: form.stakeAmount, fee: form.fee }); parameterSets.value = await listParameterSets(); ElMessage.success('参数集已保存') }
 async function compare() { comparisons.value = await compareBacktests(selectedIds.value); compareVisible.value = true }
 let timer: ReturnType<typeof setInterval> | undefined
+watch(liveManagementMode, (live) => {
+  legacyPanels.value = live ? ['execution'] : []
+  void refresh().catch(() => { ElMessage.error('页面数据读取失败，请刷新后重试') })
+})
 onMounted(async () => {
   const capabilities = await getCapabilities()
   enabled.value = capabilities.enabled
@@ -443,8 +461,16 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>
+.context-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.context-nav h2 { margin: 0 0 8px; font-size: 22px; }
+.context-nav p { margin: 0; color: var(--el-text-color-secondary); }
+.context-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.live-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.live-steps span { padding: 12px; border-radius: 8px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 13px; }
 :deep(.el-date-editor--daterange) { max-width: 100%; }
 @media (max-width: 768px) {
+  .context-nav { align-items: flex-start; flex-direction: column; }
+  .live-steps { grid-template-columns: 1fr 1fr; }
   :deep(.el-form-item) { flex-direction: column; align-items: stretch; }
   :deep(.el-form-item__label) { justify-content: flex-start; }
   :deep(.el-form-item__content) { min-width: 0; gap: 8px; }
